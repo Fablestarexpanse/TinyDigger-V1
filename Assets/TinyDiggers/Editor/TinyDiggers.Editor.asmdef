@@ -1,0 +1,20 @@
+{
+    "name": "TinyDiggers.Editor",
+    "rootNamespace": "TinyDiggers.EditorTools",
+    "references": [
+        "TinyDiggers.Terrain",
+        "UnityEditor.TestRunner",
+        "UnityEngine.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

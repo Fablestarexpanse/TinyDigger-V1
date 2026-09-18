@@ -1,0 +1,14 @@
+{
+    "name": "TinyDiggers.Terrain",
+    "rootNamespace": "TinyDiggers.Terrain",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
