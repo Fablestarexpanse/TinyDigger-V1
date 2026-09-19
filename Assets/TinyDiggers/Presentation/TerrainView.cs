@@ -17,11 +17,20 @@ namespace TinyDiggers.Presentation
         [SerializeField] int _seed = 1;
         [SerializeField] Material _material;
 
+        /// <summary>
+        /// Cells within this many cells of the clicked one are dug or filled; 0 is the clicked
+        /// cell alone. Read by the edit tool on every click, so it can be tuned in play mode.
+        /// </summary>
+        [Min(0)] public int BrushRadius = 2;
+
         ChunkedMeshTerrainRenderer _renderer;
 
         public TerrainGrid Grid { get; private set; }
 
         public ITerrainRenderer Renderer => _renderer;
+
+        /// <summary>Triangles across all chunks as last built.</summary>
+        public long TriangleCount => _renderer?.TriangleCount ?? 0;
 
         void Awake()
         {
@@ -35,8 +44,8 @@ namespace TinyDiggers.Presentation
             var built = stopwatch.Elapsed.TotalMilliseconds;
 
             Debug.Log(
-                $"TerrainView: {_width}x{_height} cells, {_renderer.ChunkCountX * _renderer.ChunkCountZ} chunks. " +
-                $"Generated in {generated:0} ms, meshed in {built:0} ms.");
+                $"TerrainView: {_width}x{_height} cells, {_renderer.ChunkCountX * _renderer.ChunkCountZ} chunks, " +
+                $"{_renderer.TriangleCount:N0} triangles. Generated in {generated:0} ms, meshed in {built:0} ms.");
         }
 
         void LateUpdate()

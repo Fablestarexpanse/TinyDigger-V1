@@ -11,10 +11,10 @@ namespace TinyDiggers.Presentation
     /// Draws a <see cref="TerrainGrid"/> as one mesh per square chunk of cells, rebuilding only
     /// the chunks whose cells changed.
     ///
-    /// Heights live at cell corners: each corner is the average surface height of the up to four
-    /// cells that touch it, so the surface is continuous. Each cell is its own quad with its own
-    /// four vertices, which lets it carry its top material's colour and a flat normal without
-    /// bleeding into its neighbours — the low-poly look.
+    /// Every column is drawn as it is stored: a flat top at its true surface height, coloured by
+    /// its top material, and vertical walls wherever it stands above a neighbour or the edge of
+    /// the world. Walls are banded by the layers they cut through, so a cut through topsoil into
+    /// rock shows a brown band over a grey one.
     ///
     /// Plain C#, not a MonoBehaviour: the owner calls <see cref="Rebuild"/> once a frame and
     /// <see cref="Dispose"/> when done.
@@ -23,8 +23,11 @@ namespace TinyDiggers.Presentation
     {
         public const int DefaultChunkSize = 32;
 
-        /// <summary>Four vertices per cell must fit a 16-bit index buffer.</summary>
+        /// <summary>A sanity bound: much larger and a single chunk rebuild is long enough to hitch.</summary>
         public const int MaxChunkSize = 127;
+
+        /// <summary>Wall bands thinner than this are not worth two triangles.</summary>
+        const float MinWallHeight = 1e-4f;
 
         static readonly Color32 MissingMaterialColor = new Color32(255, 0, 255, 255);
 
@@ -35,13 +38,14 @@ namespace TinyDiggers.Presentation
         readonly List<int> _dirtyChunks = new List<int>();
         readonly Color32[] _palette;
 
-        // Scratch buffers sized for a full chunk and reused by every build, so rebuilding
-        // allocates nothing on the managed heap.
-        readonly float[] _cornerHeights;
-        readonly Vector3[] _vertices;
-        readonly Vector3[] _normals;
-        readonly Color32[] _colors;
-        readonly ushort[] _indices;
+        // Scratch lists reused by every build: they keep their capacity, so after the first few
+        // builds rebuilding allocates nothing on the managed heap.
+        readonly List<Vector3> _vertices;
+        readonly List<Vector3> _normals;
+        readonly List<Color32> _colors;
+        readonly List<int> _triangles;
+        float _minY;
+        float _maxY;
 
         bool _disposed;
 
@@ -64,12 +68,12 @@ namespace TinyDiggers.Presentation
                     : MissingMaterialColor;
             }
 
-            var cellsPerChunk = chunkSize * chunkSize;
-            _cornerHeights = new float[(chunkSize + 1) * (chunkSize + 1)];
-            _vertices = new Vector3[cellsPerChunk * 4];
-            _normals = new Vector3[cellsPerChunk * 4];
-            _colors = new Color32[cellsPerChunk * 4];
-            _indices = new ushort[cellsPerChunk * 6];
+            // Sized for a typical chunk: a top and a wall band on each owned edge per cell.
+            var typicalVertices = chunkSize * chunkSize * 12;
+            _vertices = new List<Vector3>(typicalVertices);
+            _normals = new List<Vector3>(typicalVertices);
+            _colors = new List<Color32>(typicalVertices);
+            _triangles = new List<int>(typicalVertices / 4 * 6);
 
             _chunks = new Chunk[ChunkCountX * ChunkCountZ];
             _dirty = new bool[_chunks.Length];
@@ -96,21 +100,31 @@ namespace TinyDiggers.Presentation
         /// <summary>Chunks flagged since the last <see cref="Rebuild"/>.</summary>
         public int PendingChunkCount => _dirtyChunks.Count;
 
+        /// <summary>Triangles across all chunks as last built. For perf reporting.</summary>
+        public long TriangleCount
+        {
+            get
+            {
+                long total = 0;
+                foreach (var chunk in _chunks)
+                    total += chunk.TriangleCount;
+                return total;
+            }
+        }
+
         /// <summary>The mesh for one chunk. For tests and debugging.</summary>
         public Mesh GetChunkMesh(int chunkX, int chunkZ) => _chunks[chunkZ * ChunkCountX + chunkX].Mesh;
 
         public void MarkDirty(int x, int z)
         {
-            // A cell sets the four corners around it, and those corners are shared with its eight
-            // neighbours, any of which may sit in the next chunk over.
-            var minChunkX = Math.Max(x - 1, 0) / _chunkSize;
-            var maxChunkX = Math.Min(x + 1, _grid.Width - 1) / _chunkSize;
-            var minChunkZ = Math.Max(z - 1, 0) / _chunkSize;
-            var maxChunkZ = Math.Min(z + 1, _grid.Height - 1) / _chunkSize;
-
-            for (var cz = minChunkZ; cz <= maxChunkZ; cz++)
-                for (var cx = minChunkX; cx <= maxChunkX; cx++)
-                    MarkChunkDirty(cz * ChunkCountX + cx);
+            // A cell draws its own top plus the walls on its +x and +z edges. Its -x and -z edges
+            // are drawn by the neighbours on those sides, whose walls take their height and
+            // colours from this cell — so those neighbours' chunks must rebuild too.
+            MarkCellsChunkDirty(x, z);
+            if (x > 0)
+                MarkCellsChunkDirty(x - 1, z);
+            if (z > 0)
+                MarkCellsChunkDirty(x, z - 1);
         }
 
         public void Rebuild()
@@ -138,6 +152,8 @@ namespace TinyDiggers.Presentation
                 chunk.Destroy();
         }
 
+        void MarkCellsChunkDirty(int x, int z) => MarkChunkDirty(z / _chunkSize * ChunkCountX + x / _chunkSize);
+
         void MarkChunkDirty(int index)
         {
             if (_dirty[index])
@@ -153,96 +169,126 @@ namespace TinyDiggers.Presentation
             var width = Math.Min(_chunkSize, _grid.Width - originX);
             var depth = Math.Min(_chunkSize, _grid.Height - originZ);
 
-            var cornersPerRow = width + 1;
-            for (var j = 0; j <= depth; j++)
-                for (var i = 0; i <= width; i++)
-                    _cornerHeights[j * cornersPerRow + i] = CornerHeight(originX + i, originZ + j);
+            _vertices.Clear();
+            _normals.Clear();
+            _colors.Clear();
+            _triangles.Clear();
+            _minY = float.MaxValue;
+            _maxY = float.MinValue;
 
-            var minHeight = float.MaxValue;
-            var maxHeight = float.MinValue;
-            var vertex = 0;
             for (var j = 0; j < depth; j++)
             {
                 for (var i = 0; i < width; i++)
                 {
-                    var h00 = _cornerHeights[j * cornersPerRow + i];
-                    var h10 = _cornerHeights[j * cornersPerRow + i + 1];
-                    var h01 = _cornerHeights[(j + 1) * cornersPerRow + i];
-                    var h11 = _cornerHeights[(j + 1) * cornersPerRow + i + 1];
+                    var x = originX + i;
+                    var z = originZ + j;
+                    var height = _grid.GetSurfaceHeight(x, z);
 
-                    // Cross of the two diagonals: flat per quad, whatever the corners do.
-                    var rise = h11 - h00;
-                    var fall = h01 - h10;
-                    var normal = new Vector3(fall - rise, 2f, -(rise + fall)).normalized;
-                    var color = _palette[_grid.GetTopMaterial(originX + i, originZ + j).Value];
+                    AddQuad(
+                        new Vector3(i, height, j),
+                        new Vector3(i, height, j + 1),
+                        new Vector3(i + 1, height, j + 1),
+                        new Vector3(i + 1, height, j),
+                        Vector3.up,
+                        _palette[_grid.GetTopMaterial(x, z).Value]);
 
-                    _vertices[vertex] = new Vector3(i, h00, j);
-                    _vertices[vertex + 1] = new Vector3(i, h01, j + 1);
-                    _vertices[vertex + 2] = new Vector3(i + 1, h11, j + 1);
-                    _vertices[vertex + 3] = new Vector3(i + 1, h10, j);
-                    for (var k = 0; k < 4; k++)
-                    {
-                        _normals[vertex + k] = normal;
-                        _colors[vertex + k] = color;
-                    }
+                    // The +x edge. Past the far border the world drops to zero, so the whole
+                    // layer cake shows along the edge of the map.
+                    var eastHeight = _grid.InBounds(x + 1, z) ? _grid.GetSurfaceHeight(x + 1, z) : 0f;
+                    if (height > eastHeight)
+                        AddWall(x, z, eastHeight, height, i + 1, j, i + 1, j + 1, Vector3.right);
+                    else if (eastHeight > height)
+                        AddWall(x + 1, z, height, eastHeight, i + 1, j + 1, i + 1, j, Vector3.left);
 
-                    minHeight = Math.Min(minHeight, Math.Min(Math.Min(h00, h01), Math.Min(h10, h11)));
-                    maxHeight = Math.Max(maxHeight, Math.Max(Math.Max(h00, h01), Math.Max(h10, h11)));
-                    vertex += 4;
+                    // The +z edge.
+                    var northHeight = _grid.InBounds(x, z + 1) ? _grid.GetSurfaceHeight(x, z + 1) : 0f;
+                    if (height > northHeight)
+                        AddWall(x, z, northHeight, height, i + 1, j + 1, i, j + 1, Vector3.forward);
+                    else if (northHeight > height)
+                        AddWall(x, z + 1, height, northHeight, i, j + 1, i + 1, j + 1, Vector3.back);
+
+                    // The near borders have no neighbour to own them, so the edge cell does.
+                    if (x == 0)
+                        AddWall(x, z, 0f, height, i, j + 1, i, j, Vector3.left);
+                    if (z == 0)
+                        AddWall(x, z, 0f, height, i, j, i + 1, j, Vector3.back);
                 }
             }
 
             var mesh = chunk.Mesh;
-            var topologyChanged = mesh.vertexCount != vertex;
-            if (topologyChanged)
-                mesh.Clear();
+            mesh.Clear();
+            mesh.indexFormat = _vertices.Count > ushort.MaxValue ? IndexFormat.UInt32 : IndexFormat.UInt16;
+            mesh.SetVertices(_vertices);
+            mesh.SetNormals(_normals);
+            mesh.SetColors(_colors);
+            mesh.SetTriangles(_triangles, 0, false);
 
-            mesh.SetVertices(_vertices, 0, vertex);
-            mesh.SetNormals(_normals, 0, vertex);
-            mesh.SetColors(_colors, 0, vertex);
-
-            // Every cell is a quad in a fixed order, so the index buffer depends only on the
-            // chunk's size and is written once.
-            if (topologyChanged)
+            if (_vertices.Count > 0)
             {
-                var index = 0;
-                for (var quad = 0; quad < vertex; quad += 4)
-                {
-                    _indices[index++] = (ushort)quad;
-                    _indices[index++] = (ushort)(quad + 1);
-                    _indices[index++] = (ushort)(quad + 2);
-                    _indices[index++] = (ushort)quad;
-                    _indices[index++] = (ushort)(quad + 2);
-                    _indices[index++] = (ushort)(quad + 3);
-                }
-
-                mesh.SetIndexBufferParams(index, IndexFormat.UInt16);
-                mesh.SetIndexBufferData(_indices, 0, 0, index, MeshUpdateFlags.DontRecalculateBounds);
-                mesh.subMeshCount = 1;
-                mesh.SetSubMesh(0, new SubMeshDescriptor(0, index), MeshUpdateFlags.DontRecalculateBounds);
+                var centre = new Vector3(width * 0.5f, (_minY + _maxY) * 0.5f, depth * 0.5f);
+                mesh.bounds = new Bounds(centre, new Vector3(width, _maxY - _minY, depth));
             }
 
-            var centre = new Vector3(width * 0.5f, (minHeight + maxHeight) * 0.5f, depth * 0.5f);
-            var size = new Vector3(width, maxHeight - minHeight, depth);
-            mesh.bounds = new Bounds(centre, size);
+            chunk.TriangleCount = _triangles.Count / 3;
         }
 
-        float CornerHeight(int cornerX, int cornerZ)
+        /// <summary>
+        /// Adds the face of column (<paramref name="columnX"/>, <paramref name="columnZ"/>) between
+        /// heights <paramref name="low"/> and <paramref name="high"/>, one band per layer it
+        /// crosses. (ax, az) and (bx, bz) are the bottom edge's ends, left then right as seen
+        /// from the side the wall faces.
+        /// </summary>
+        void AddWall(int columnX, int columnZ, float low, float high, float ax, float az, float bx, float bz, Vector3 normal)
         {
-            var sum = 0f;
-            var count = 0;
-            for (var z = cornerZ - 1; z <= cornerZ; z++)
+            if (high - low <= MinWallHeight)
+                return;
+
+            var layerCount = _grid.GetLayerCount(columnX, columnZ);
+            var layerBase = 0f;
+            for (var k = 0; k < layerCount && layerBase < high; k++)
             {
-                for (var x = cornerX - 1; x <= cornerX; x++)
+                var layer = _grid.GetLayer(columnX, columnZ, k);
+                var layerTop = layerBase + layer.Thickness;
+                var bandBottom = Math.Max(layerBase, low);
+                var bandTop = Math.Min(layerTop, high);
+                if (bandTop - bandBottom > MinWallHeight)
                 {
-                    if (!_grid.InBounds(x, z))
-                        continue;
-                    sum += _grid.GetSurfaceHeight(x, z);
-                    count++;
+                    AddQuad(
+                        new Vector3(ax, bandBottom, az),
+                        new Vector3(ax, bandTop, az),
+                        new Vector3(bx, bandTop, bz),
+                        new Vector3(bx, bandBottom, bz),
+                        normal,
+                        _palette[layer.Material.Value]);
                 }
+
+                layerBase = layerTop;
+            }
+        }
+
+        /// <summary>Corners in clockwise order as seen from the front, which is Unity's front face.</summary>
+        void AddQuad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal, Color32 color)
+        {
+            var first = _vertices.Count;
+            _vertices.Add(a);
+            _vertices.Add(b);
+            _vertices.Add(c);
+            _vertices.Add(d);
+            for (var k = 0; k < 4; k++)
+            {
+                _normals.Add(normal);
+                _colors.Add(color);
             }
 
-            return sum / count;
+            _triangles.Add(first);
+            _triangles.Add(first + 1);
+            _triangles.Add(first + 2);
+            _triangles.Add(first);
+            _triangles.Add(first + 2);
+            _triangles.Add(first + 3);
+
+            _minY = Math.Min(_minY, Math.Min(a.y, b.y));
+            _maxY = Math.Max(_maxY, Math.Max(b.y, c.y));
         }
 
         sealed class Chunk
@@ -271,6 +317,8 @@ namespace TinyDiggers.Presentation
             public int Z { get; }
 
             public Mesh Mesh { get; }
+
+            public int TriangleCount { get; set; }
 
             public void Destroy()
             {

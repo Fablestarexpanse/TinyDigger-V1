@@ -14,13 +14,25 @@ namespace TinyDiggers.EditorTools
     {
         public const string ResultPrefix = "TESTS";
 
+        static ConsoleTestCallbacks s_callbacks;
+
         [MenuItem("TinyDiggers/Run EditMode Tests")]
         public static void Run()
         {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                Debug.LogError($"{ResultPrefix} NOT RUN: leave play mode first.");
+                return;
+            }
+
             var api = ScriptableObject.CreateInstance<TestRunnerApi>();
-            // The callbacks object is a ScriptableObject so that it survives the domain reload
-            // that a test run can trigger.
-            api.RegisterCallbacks(ScriptableObject.CreateInstance<ConsoleTestCallbacks>());
+            // Callbacks are registered globally, so a run that never finished would otherwise
+            // leave its listener behind and every later run would report twice.
+            if (s_callbacks != null)
+                api.UnregisterCallbacks(s_callbacks);
+            // A ScriptableObject so that it survives the domain reload a test run can trigger.
+            s_callbacks = ScriptableObject.CreateInstance<ConsoleTestCallbacks>();
+            api.RegisterCallbacks(s_callbacks);
             api.Execute(new ExecutionSettings(new Filter { testMode = TestMode.EditMode }));
         }
     }

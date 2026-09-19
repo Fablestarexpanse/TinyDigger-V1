@@ -5,10 +5,10 @@ this records why.
 
 ---
 
-**NEXT:** Data model, generator and chunked renderer are done and green (44/44), and
-`Assets/TinyDiggers/Scenes/TerrainSandbox.unity` shows the terrain in play mode. Nothing is in
-flight. Next step: RTS camera (WASD / scroll / Q-E), click-to-dig/fill with a brush, and the
-hovered-cell debug readout.
+**NEXT:** Vertical Slice 0 is feature-complete and green (80/80): column-stack grid, flat-topped
+walled renderer, RTS camera, brush dig/fill, hover readout, all in
+`Assets/TinyDiggers/Scenes/TerrainSandbox.unity`. Nothing is in flight. Still owed: a frame-time
+check on a mid-range GPU (the readout's top line shows it), then Ronan's call on what comes next.
 
 Run the suite with the menu item **TinyDiggers > Run EditMode Tests**; it prints a single
 `TESTS PASS ...` / `TESTS FAIL ...` line to the console, with one line per failure.
@@ -141,3 +141,83 @@ The Unity MCP camera-capture tool only grabs the Scene View, so game-camera scre
 taken by rendering `Camera.main` into a RenderTexture from `Unity_RunCommand`. The
 RunCommand compiler does not reference `System.dll`, so `System.Diagnostics.Stopwatch` is
 unavailable there; use `Time.realtimeSinceStartupAsDouble` instead.
+
+## 2026-09-19 — Renderer switched to walled columns; camera, brush and readout
+
+### Ruling from Ronan: flat-topped columns with vertical walls
+
+Corner averaging made a one-cell edit render as a quarter-depth dimple (see the previous
+entry). Ronan ruled that edits must render at their true height, so the renderer now draws each
+column as it is stored:
+
+- **A flat top at the cell's surface height**, coloured by its top material.
+- **A vertical wall wherever a column stands above its neighbour**, and down to zero along the
+  world border so the layer cake shows at the map edge.
+- **Walls banded by layer.** Each wall is split at the layer boundaries of the taller column, and
+  each band takes its layer's colour: the top band is the top material, and the bands below are
+  whatever the column holds at that height. A cut through the soil into rock shows dirt over
+  grey rock. The topsoil band is green, because the palette colours topsoil green. That is a
+  palette choice, not a rule.
+- **Each cell builds the walls on its +x and +z edges**, taking colours from whichever side is
+  taller. The grid border's -x and -z edges belong to the edge cells. So editing a cell dirties
+  its own chunk plus the chunks of its -x and -z neighbours, not the 3x3 set that corner averaging
+  needed.
+- Vertex counts now vary with the terrain, so the index buffer switches to 32-bit when a chunk
+  passes 65,535 vertices, and `MaxChunkSize` is only a sanity bound.
+
+### Triangle count and performance, measured 2026-09-19 (RTX 4090, editor play mode)
+
+| | Corner-averaged | Walled columns |
+|---|---|---|
+| Triangles, 512x512 test map | ~524,000 | 1,608,896 |
+| Initial meshing | 52 ms | 157 ms |
+| Local edit rebuild (pit plus mound, 2–3 chunks) | 0.49 ms | 1.47 ms |
+| Camera render, 2560x1440, isolated and GPU-synced | not measured | 0.54 ms (0.48 ms with terrain hidden) |
+| Frame time shown by the in-game readout | — | 1.3 ms (~754 fps) |
+
+The generated map's gentle noise puts a thin wall between almost every pair of cells, so about
+two thirds of the triangles are slivers only centimetres tall. That is the cost of honest heights.
+On this GPU it costs about 0.05 ms, so nothing needs doing now. If a mid-range GPU struggles, the
+first lever is merging coplanar tops and runs of same-coloured wall bands. Distant slivers also
+shimmer (aliasing), which MSAA would fix. Neither is in scope for this slice.
+
+### Camera, brush, readout
+
+All three follow the thin-MonoBehaviour rule. The logic lives in plain C# with tests:
+
+- **`TerrainPicker`** (Terrain assembly) walks the ray cell by cell against flat-topped columns,
+  so the picked cell is exactly the one drawn under the cursor. It uses no colliders.
+- **`TerrainBrush`** digs or fills a disc of cells (radius 0 is one cell; 2 is 13 cells).
+  Dig totals come back per material id in a caller-owned `Span<float>`, so it does not allocate.
+- **`TerrainCellReport`** formats the hovered cell. It is called only when the hovered cell or
+  its contents change.
+- **`RtsCameraRig`** holds the pivot, yaw, fixed pitch and distance. Pan speed scales with
+  distance so panning feels the same at every zoom. Zoom is multiplicative. The pivot height eases
+  toward the ground so the camera rides over hills. Digging under the pivot therefore lowers the
+  camera slightly, which is intended.
+- **`TerrainView.BrushRadius`** is a public field, per Ronan, so it can be tuned in the
+  inspector during play. Volume per click (1 m per cell) is a serialised field on
+  `TerrainEditTool`. Clicks act once per press, and holding the button does not repeat.
+- The camera uses perspective with a 30° field of view and 55° pitch. That is the
+  "orthographic-ish" look, while keeping depth cues on walls.
+- Input reads `Keyboard.current` and `Mouse.current` directly (the project is Input System only).
+  Scroll zooms one step per frame of scrolling, because scroll units differ between Input System
+  versions (±1 or ±120 per notch).
+- The readout is IMGUI with a monospaced font, and its text is rebuilt only on change.
+
+### Findings from driving play mode over MCP
+
+- **Play mode freezes when Unity is not the foreground app**, because the project's
+  `runInBackground` is false. Only two game frames ran in about 30 seconds. The earlier "85 ms
+  frames" were the editor idling, not the terrain. For scripted verification, set
+  `Application.runInBackground = true` at runtime; the project setting was left unchanged.
+- **With the Input System's default `PointersAndKeyboardsRespectGameViewFocus`, simulated
+  keyboard input does not reach the game** while the Game view is unfocused. For scripted runs,
+  switch the in-memory `InputSystem.settings.editorInputBehaviorInPlayMode` to
+  `AllDeviceInputAlwaysGoesToGameView`, then restore it. It is not a saved asset in this project.
+- Input events queued from `EditorApplication.update` step by step, one step per game frame,
+  work for multi-frame sessions. The real OS mouse still moves the hover when it is over the
+  Game view.
+- `Unity_RunCommand` blocks `System.Reflection`.
+- The test runner menu now refuses to run in play mode, and unregisters the previous run's
+  callbacks. An aborted run no longer makes every later run report twice.

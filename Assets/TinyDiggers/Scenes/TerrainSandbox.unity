@@ -153,6 +153,7 @@ MonoBehaviour:
   _chunkSize: 32
   _seed: 1
   _material: {fileID: 2100000, guid: 4fd8fa78ded655542ae757b61b907654, type: 2}
+  BrushRadius: 2
 --- !u!4 &551060600
 Transform:
   m_ObjectHideFlags: 0
@@ -306,6 +307,7 @@ GameObject:
   - component: {fileID: 907044675}
   - component: {fileID: 907044674}
   - component: {fileID: 907044673}
+  - component: {fileID: 907044676}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -387,6 +389,89 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &907044676
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 907044672}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3339c7ff7b1f162499dd27b6b59159c9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: TinyDiggers.Interaction::TinyDiggers.Interaction.RtsCameraController
+  _terrain: {fileID: 551060599}
+  _fieldOfView: 30
+  _pitch: 55
+  _minDistance: 15
+  _maxDistance: 700
+  _startDistance: 350
+  _panSpeed: 0.8
+  _rotateSpeed: 90
+  _zoomStep: 0.12
+--- !u!1 &2023474830
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2023474833}
+  - component: {fileID: 2023474832}
+  - component: {fileID: 2023474831}
+  m_Layer: 0
+  m_Name: Terrain Tools
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2023474831
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2023474830}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b63e9f3680ecbe54cb005faf2b6a60e6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: TinyDiggers.Interaction::TinyDiggers.Interaction.TerrainDebugReadout
+  _terrain: {fileID: 551060599}
+  _tool: {fileID: 2023474832}
+--- !u!114 &2023474832
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2023474830}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4e0aee174da434408783ea5d17d19b0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: TinyDiggers.Interaction::TinyDiggers.Interaction.TerrainEditTool
+  _terrain: {fileID: 551060599}
+  _camera: {fileID: 907044674}
+  _volumePerCell: 1
+--- !u!4 &2023474833
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2023474830}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -394,3 +479,4 @@ SceneRoots:
   - {fileID: 907044675}
   - {fileID: 730936065}
   - {fileID: 551060600}
+  - {fileID: 2023474833}
