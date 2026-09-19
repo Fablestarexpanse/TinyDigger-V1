@@ -38,6 +38,11 @@ namespace TinyDiggers.Terrain
 
         public int Count { get; }
 
+        /// <summary>The largest id in the table, so callers can size lookup arrays indexed by id.</summary>
+        public int MaxId => _byId.Length - 1;
+
+        public bool Contains(MaterialId id) => id.Value < _byId.Length && _byId[id.Value] != null;
+
         public MaterialDefinition Get(MaterialId id)
         {
             if (id.Value >= _byId.Length || _byId[id.Value] == null)
