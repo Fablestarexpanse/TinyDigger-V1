@@ -71,7 +71,7 @@ namespace TinyDiggers.Terrain.Tests
 
             Assert.That(added, Is.EqualTo(1.5f).Within(Tolerance));
             Assert.That(_grid.GetSurfaceHeight(0, 0), Is.EqualTo(1.5f).Within(Tolerance));
-            Assert.That(_grid.GetTopMaterial(0, 0), Is.EqualTo(MaterialTable.Dirt));
+            Assert.That(_grid.GetTopMaterial(0, 0), Is.EqualTo(MaterialTable.DirtLoose), "tipped dirt lands loose");
             Assert.That(_grid.GetLayerCount(0, 0), Is.EqualTo(1));
         }
 
@@ -93,7 +93,7 @@ namespace TinyDiggers.Terrain.Tests
 
             Assert.That(_grid.GetLayerCount(0, 0), Is.EqualTo(2));
             Assert.That(_grid.GetTopMaterial(0, 0), Is.EqualTo(MaterialTable.Sand));
-            Assert.That(_grid.GetLayer(0, 0, 0).Material, Is.EqualTo(MaterialTable.Dirt));
+            Assert.That(_grid.GetLayer(0, 0, 0).Material, Is.EqualTo(MaterialTable.DirtLoose));
             Assert.That(_grid.GetSurfaceHeight(0, 0), Is.EqualTo(3f).Within(Tolerance));
         }
 
@@ -147,7 +147,7 @@ namespace TinyDiggers.Terrain.Tests
             var count = _grid.Remove(0, 0, 0.25f, removed);
 
             Assert.That(count, Is.EqualTo(1));
-            Assert.That(removed[0].Material, Is.EqualTo(MaterialTable.Topsoil));
+            Assert.That(removed[0].Material, Is.EqualTo(MaterialTable.Dirt), "dug topsoil comes out as its disturbed form, dirt");
             Assert.That(removed[0].Volume, Is.EqualTo(0.25f).Within(Tolerance));
             Assert.That(_grid.GetSurfaceHeight(0, 0), Is.EqualTo(14.25f).Within(Tolerance));
             Assert.That(_grid.GetLayerCount(0, 0), Is.EqualTo(4), "a partly dug layer stays on the stack");
@@ -162,9 +162,9 @@ namespace TinyDiggers.Terrain.Tests
             var count = _grid.Remove(0, 0, 1.5f, removed);
 
             Assert.That(count, Is.EqualTo(2));
-            Assert.That(removed[0].Material, Is.EqualTo(MaterialTable.Topsoil));
+            Assert.That(removed[0].Material, Is.EqualTo(MaterialTable.Dirt));
             Assert.That(removed[0].Volume, Is.EqualTo(0.5f).Within(Tolerance));
-            Assert.That(removed[1].Material, Is.EqualTo(MaterialTable.Rock));
+            Assert.That(removed[1].Material, Is.EqualTo(MaterialTable.RockLoose));
             Assert.That(removed[1].Volume, Is.EqualTo(1f).Within(Tolerance));
             Assert.That(_grid.GetSurfaceHeight(0, 0), Is.EqualTo(13f).Within(Tolerance));
             // The 1m of rock was exactly consumed, so the granite beneath it is now the surface.
@@ -262,7 +262,7 @@ namespace TinyDiggers.Terrain.Tests
             var count = _grid.Remove(0, 0, 2f, removed);
 
             Assert.That(count, Is.EqualTo(1));
-            Assert.That(removed[0].Material, Is.EqualTo(MaterialTable.Dirt));
+            Assert.That(removed[0].Material, Is.EqualTo(MaterialTable.DirtLoose));
             Assert.That(removed[0].Volume, Is.EqualTo(2f).Within(Tolerance));
         }
 
@@ -275,7 +275,7 @@ namespace TinyDiggers.Terrain.Tests
             var count = _grid.Remove(0, 0, 10f, tooSmall);
 
             Assert.That(count, Is.EqualTo(1));
-            Assert.That(tooSmall[0].Material, Is.EqualTo(MaterialTable.Topsoil));
+            Assert.That(tooSmall[0].Material, Is.EqualTo(MaterialTable.Dirt));
             // Only topsoil went; the rock below is untouched rather than dug and dropped.
             Assert.That(_grid.GetSurfaceHeight(0, 0), Is.EqualTo(14f).Within(Tolerance));
             Assert.That(_grid.GetTopMaterial(0, 0), Is.EqualTo(MaterialTable.Rock));
@@ -375,6 +375,90 @@ namespace TinyDiggers.Terrain.Tests
             _grid.Remove(0, 0, 3f, removed); // bedrock refuses to be dug
 
             Assert.That(raised, Is.EqualTo(0));
+        }
+
+        // --- disturbed materials -------------------------------------------------------------
+
+        [TestCase(7, 5)] // Topsoil -> Dirt
+        [TestCase(5, 9)] // Dirt -> DirtLoose
+        [TestCase(3, 8)] // Rock -> RockLoose
+        [TestCase(9, 9)] // DirtLoose stays loose
+        [TestCase(6, 6)] // Sand has no disturbed form
+        public void RemoveReportsTheDisturbedForm(int dug, int expected)
+        {
+            SetColumn(_grid, 0, 0, new Layer(MaterialTable.Bedrock, 1f), new Layer(new MaterialId((byte)dug), 2f));
+            var removed = new List<MaterialVolume>();
+
+            _grid.Remove(0, 0, 1f, removed);
+
+            Assert.That(removed[0].Material, Is.EqualTo(new MaterialId((byte)expected)));
+            Assert.That(_grid.GetTopMaterial(0, 0), Is.EqualTo(new MaterialId((byte)dug)), "what stays in the ground is undisturbed");
+        }
+
+        [Test]
+        public void AddPlacesTheDisturbedFormAndMergesWithIt()
+        {
+            _grid.Add(0, 0, MaterialTable.Rock, 1f);
+            _grid.Add(0, 0, MaterialTable.RockLoose, 1f);
+
+            Assert.That(_grid.GetLayerCount(0, 0), Is.EqualTo(1));
+            Assert.That(_grid.GetTopMaterial(0, 0), Is.EqualTo(MaterialTable.RockLoose));
+        }
+
+        [Test]
+        public void LooseVariantsSlumpAtShallowerAnglesThanTheGroundTheyCameFrom()
+        {
+            var table = MaterialTable.CreateDefault();
+
+            Assert.That(table.Get(MaterialTable.RockLoose).AngleOfRepose, Is.LessThan(table.Get(MaterialTable.Rock).AngleOfRepose));
+            Assert.That(table.Get(MaterialTable.DirtLoose).AngleOfRepose, Is.LessThan(table.Get(MaterialTable.Dirt).AngleOfRepose));
+        }
+
+        [Test]
+        public void ATableThatDisturbsIntoAMissingMaterialIsRejected()
+        {
+            Assert.Throws<ArgumentException>(() => new MaterialTable(
+                new MaterialDefinition(new MaterialId(1), "A", default, 0f, 45f, disturbed: new MaterialId(2))));
+        }
+
+        // --- height step ------------------------------------------------------------------------
+
+        [Test]
+        public void WithAHeightStepEditsMoveWholeSteps()
+        {
+            var grid = new TerrainGrid(2, 2, MaterialTable.CreateDefault(), heightStep: 1f);
+            SetColumn(grid, 0, 0, new Layer(MaterialTable.Bedrock, 1f), new Layer(MaterialTable.Dirt, 5f));
+            var removed = new List<MaterialVolume>();
+
+            Assert.That(grid.Add(0, 0, MaterialTable.Dirt, 0.4f), Is.EqualTo(0f), "under half a step rounds to nothing");
+            Assert.That(grid.Add(0, 0, MaterialTable.Dirt, 1.6f), Is.EqualTo(2f).Within(Tolerance));
+            grid.Remove(0, 0, 1.4f, removed);
+
+            Assert.That(removed[0].Volume, Is.EqualTo(1f).Within(Tolerance));
+            Assert.That(grid.GetSurfaceHeight(0, 0), Is.EqualTo(7f).Within(Tolerance));
+        }
+
+        [Test]
+        public void WithoutAHeightStepVolumesAreUsedAsGiven()
+        {
+            Assert.That(_grid.HeightStep, Is.EqualTo(0f));
+            Assert.That(_grid.Quantize(0.37f), Is.EqualTo(0.37f));
+        }
+
+        // --- material at height ---------------------------------------------------------------
+
+        [Test]
+        public void GetMaterialAtFindsTheLayerAtThatHeight()
+        {
+            SetTestColumn(0, 0);
+
+            Assert.That(_grid.GetMaterialAt(0, 0, -3f), Is.EqualTo(MaterialTable.Bedrock));
+            Assert.That(_grid.GetMaterialAt(0, 0, 5f), Is.EqualTo(MaterialTable.Bedrock));
+            Assert.That(_grid.GetMaterialAt(0, 0, 11f), Is.EqualTo(MaterialTable.Granite));
+            Assert.That(_grid.GetMaterialAt(0, 0, 13.5f), Is.EqualTo(MaterialTable.Rock));
+            Assert.That(_grid.GetMaterialAt(0, 0, 14.2f), Is.EqualTo(MaterialTable.Topsoil));
+            Assert.That(_grid.GetMaterialAt(0, 0, 99f), Is.EqualTo(MaterialTable.Topsoil));
+            Assert.That(_grid.GetMaterialAt(1, 1, 0f), Is.EqualTo(MaterialId.None));
         }
 
         // --- helpers ----------------------------------------------------------------------------

@@ -10,6 +10,15 @@ namespace TinyDiggers.Terrain
     ///
     /// Cells are 1x1 metres, so one unit of volume equals one metre of thickness.
     ///
+    /// Digging and tipping deal in disturbed material: <see cref="Remove"/> reports what came out
+    /// as its disturbed form (rock comes out as loose rock), and <see cref="Add"/> places the
+    /// disturbed form of whatever it is given. Only <see cref="SetColumn"/> writes undisturbed
+    /// ground, which is what generation uses.
+    ///
+    /// With a <see cref="HeightStep"/>, every volume passed to <see cref="Add"/> and
+    /// <see cref="Remove"/> is rounded to a whole number of steps, so surfaces that start on the
+    /// step grid stay on it.
+    ///
     /// Layers live in one flat array rather than per-cell lists: mutation allocates nothing, and
     /// a chunk rebuild walks contiguous memory.
     /// </summary>
@@ -24,16 +33,19 @@ namespace TinyDiggers.Terrain
         readonly byte[] _layerCounts;
         readonly float[] _surfaceHeights;
 
-        public TerrainGrid(int width, int height, MaterialTable materials)
+        public TerrainGrid(int width, int height, MaterialTable materials, float heightStep = 0f)
         {
             if (width <= 0)
                 throw new ArgumentOutOfRangeException(nameof(width));
             if (height <= 0)
                 throw new ArgumentOutOfRangeException(nameof(height));
+            if (!(heightStep >= 0f))
+                throw new ArgumentOutOfRangeException(nameof(heightStep));
 
             Width = width;
             Height = height;
             Materials = materials ?? throw new ArgumentNullException(nameof(materials));
+            HeightStep = heightStep;
 
             var cellCount = width * height;
             _layers = new Layer[cellCount * MaxLayersPerCell];
@@ -46,6 +58,23 @@ namespace TinyDiggers.Terrain
         public int Height { get; }
 
         public MaterialTable Materials { get; }
+
+        /// <summary>
+        /// Metres. Edits move material in whole multiples of this; 0 means volumes are used as
+        /// given. Generation also snaps surfaces to it.
+        /// </summary>
+        public float HeightStep { get; }
+
+        /// <summary>
+        /// Rounds <paramref name="volume"/> to the nearest whole number of height steps, or returns
+        /// it unchanged when there is no step.
+        /// </summary>
+        public float Quantize(float volume)
+        {
+            if (HeightStep <= 0f)
+                return volume;
+            return (float)Math.Round(volume / HeightStep) * HeightStep;
+        }
 
         /// <summary>Raised after a cell's stack changes, with its x and z. Renderers subscribe to this.</summary>
         public event Action<int, int> CellChanged;
@@ -75,6 +104,30 @@ namespace TinyDiggers.Terrain
         }
 
         /// <summary>
+        /// The material of the layer at <paramref name="height"/> in this column: what a cut face
+        /// shows at that height. Below zero it is the bottom layer, at or above the surface the
+        /// top one. <see cref="MaterialId.None"/> for an empty column.
+        /// </summary>
+        public MaterialId GetMaterialAt(int x, int z, float height)
+        {
+            var cell = RequireIndex(x, z);
+            int count = _layerCounts[cell];
+            if (count == 0)
+                return MaterialId.None;
+
+            var layerBase = cell * MaxLayersPerCell;
+            var top = 0f;
+            for (var i = 0; i < count - 1; i++)
+            {
+                top += _layers[layerBase + i].Thickness;
+                if (height < top)
+                    return _layers[layerBase + i].Material;
+            }
+
+            return _layers[layerBase + count - 1].Material;
+        }
+
+        /// <summary>
         /// Copies the column into <paramref name="destination"/> top first, which is the order the
         /// debug readout wants. Returns the number of layers written.
         /// </summary>
@@ -94,10 +147,10 @@ namespace TinyDiggers.Terrain
         }
 
         /// <summary>
-        /// Digs <paramref name="volume"/> off the top of the column, writing what came out into
-        /// <paramref name="removed"/> and returning how many entries were written. Consecutive
-        /// layers of the same material are merged into one entry, so <see cref="MaxLayersPerCell"/>
-        /// entries always suffice.
+        /// Digs <paramref name="volume"/> (rounded to the height step) off the top of the column,
+        /// writing what came out into <paramref name="removed"/> as disturbed material and
+        /// returning how many entries were written. Consecutive layers that come out as the same
+        /// material merge into one entry, so <see cref="MaxLayersPerCell"/> entries always suffice.
         ///
         /// Stops early, having removed less than asked, when the column runs out or when the next
         /// layer down is not diggable. Bedrock is not diggable, so the world has a floor.
@@ -105,6 +158,7 @@ namespace TinyDiggers.Terrain
         public int Remove(int x, int z, float volume, Span<MaterialVolume> removed)
         {
             var cell = RequireIndex(x, z);
+            volume = Quantize(volume);
             if (volume <= Epsilon)
                 return 0;
 
@@ -120,8 +174,10 @@ namespace TinyDiggers.Terrain
                 if (!Materials.IsDiggable(layer.Material))
                     break;
 
+                var comesOutAs = Materials.GetDisturbed(layer.Material);
+
                 // Refuse to remove material we have nowhere to report, rather than lose it silently.
-                var merges = written > 0 && removed[written - 1].Material == layer.Material;
+                var merges = written > 0 && removed[written - 1].Material == comesOutAs;
                 if (!merges && written == removed.Length)
                     break;
 
@@ -139,9 +195,9 @@ namespace TinyDiggers.Terrain
 
                 remaining -= taken;
                 if (merges)
-                    removed[written - 1] = new MaterialVolume(layer.Material, removed[written - 1].Volume + taken);
+                    removed[written - 1] = new MaterialVolume(comesOutAs, removed[written - 1].Volume + taken);
                 else
-                    removed[written++] = new MaterialVolume(layer.Material, taken);
+                    removed[written++] = new MaterialVolume(comesOutAs, taken);
             }
 
             if (written > 0)
@@ -172,16 +228,18 @@ namespace TinyDiggers.Terrain
         }
 
         /// <summary>
-        /// Tips <paramref name="volume"/> of material onto the top of the column, merging into the
-        /// current top layer when the material matches. Returns the volume actually added, which
-        /// is zero when the stack is full and the top is a different material.
+        /// Tips <paramref name="volume"/> (rounded to the height step) of the disturbed form of
+        /// <paramref name="material"/> onto the top of the column, merging into the current top
+        /// layer when that matches. Returns the volume actually added, which is zero when the
+        /// stack is full and the top is a different material.
         /// </summary>
         public float Add(int x, int z, MaterialId material, float volume)
         {
             var cell = RequireIndex(x, z);
             if (material.IsNone)
                 throw new ArgumentException("Cannot add MaterialId.None.", nameof(material));
-            Materials.Get(material); // throws if the id is not in the table
+            material = Materials.GetDisturbed(material); // also throws if the id is not in the table
+            volume = Quantize(volume);
             if (volume <= Epsilon)
                 return 0f;
 

@@ -8,7 +8,9 @@ namespace TinyDiggers.Terrain
     /// granite in the hill cores, then rock, then a dirt and topsoil cap. The soil thins out over
     /// the hills so that digging there reaches rock within a click or two.
     ///
-    /// Deterministic for a given seed and grid size.
+    /// Deterministic for a given seed and grid size. Surfaces land on the grid's
+    /// <see cref="TerrainGrid.HeightStep"/> when it has one; layer boundaries inside a column
+    /// do not.
     /// </summary>
     public static class TerrainGenerator
     {
@@ -79,12 +81,25 @@ namespace TinyDiggers.Terrain
                     var rolling = (Mathf.PerlinNoise(offsetX + x * 0.02f, offsetZ + z * 0.02f) - 0.5f) * 3f;
                     var detail = (Mathf.PerlinNoise(offsetZ + x * 0.09f, offsetX + z * 0.09f) - 0.5f) * 0.6f;
                     var surface = BedrockThickness + BaseRockDepth + rolling + detail + hill;
+                    // Snap to the grid's height step; the rock layer absorbs the difference, so
+                    // the soil thicknesses stay as designed and only the surface moves.
+                    if (grid.HeightStep > 0f)
+                        surface = (float)Math.Round(surface / grid.HeightStep) * grid.HeightStep;
 
                     var hilliness = Math.Min(hill / FullyHillyAt, 1f);
                     var soil = Lerp(SoilOnPlains, SoilOnHilltops, hilliness);
                     var dirt = soil - TopsoilThickness;
                     var granite = hill * GraniteShareOfHill;
+                    if (granite < MinLayerThickness)
+                        granite = 0f;
                     var rock = surface - soil - BedrockThickness - granite;
+                    // A band too thin to keep goes into the dirt above it rather than vanishing;
+                    // dropping it would pull the surface off the height step.
+                    if (rock < MinLayerThickness)
+                    {
+                        dirt += rock;
+                        rock = 0f;
+                    }
 
                     var count = 0;
                     column[count++] = new Layer(MaterialTable.Bedrock, BedrockThickness);

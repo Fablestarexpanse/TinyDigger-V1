@@ -1,11 +1,17 @@
-// Flat low-poly terrain: colour comes from the mesh's vertex colours, lit by the main light's
-// N.L plus ambient from spherical harmonics. No textures, no shadows — placeholder lighting for
-// the terrain slice, not final art.
+// Flat low-poly terrain lit by the main light's N.L plus ambient from spherical harmonics. No
+// textures, no shadows — placeholder lighting for the terrain slice, not final art.
+//
+// Colour: the vertex colour is the top material, and UV1 carries the colour of the layer a
+// steep face cuts through. Faces steeper than about 45 degrees blend from the first to the
+// second, so a cut shows what is under the topsoil. A cheap stand-in for the triplanar blend a
+// textured version would do.
 Shader "TinyDiggers/Terrain Vertex Color"
 {
     Properties
     {
         _Tint ("Tint", Color) = (1, 1, 1, 1)
+        _SteepStart ("Steep blend starts (degrees)", Range(0, 90)) = 40
+        _SteepEnd ("Steep blend complete (degrees)", Range(0, 90)) = 50
     }
 
     SubShader
@@ -22,6 +28,8 @@ Shader "TinyDiggers/Terrain Vertex Color"
 
         CBUFFER_START(UnityPerMaterial)
             half4 _Tint;
+            half _SteepStart;
+            half _SteepEnd;
         CBUFFER_END
         ENDHLSL
 
@@ -41,38 +49,50 @@ Shader "TinyDiggers/Terrain Vertex Color"
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
                 half4 color : COLOR;
+                half4 exposed : TEXCOORD1;
             };
 
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
                 half3 normalWS : TEXCOORD0;
-                half4 color : COLOR;
+                half3 color : TEXCOORD1;
+                half3 exposed : TEXCOORD2;
             };
+
+            half3 ToWorkingSpace(half3 srgb)
+            {
+                // Material colours are authored in sRGB, but vertex data reaches the shader
+                // unconverted, so a linear-space project would otherwise wash them out.
+                #if !defined(UNITY_COLORSPACE_GAMMA)
+                return SRGBToLinear(srgb);
+                #else
+                return srgb;
+                #endif
+            }
 
             Varyings Vert(Attributes input)
             {
                 Varyings output;
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
-
-                half3 color = input.color.rgb;
-                // Material colours are authored in sRGB, but vertex colours reach the shader
-                // unconverted, so a linear-space project would otherwise wash them out.
-                #if !defined(UNITY_COLORSPACE_GAMMA)
-                color = SRGBToLinear(color);
-                #endif
-                output.color = half4(color, 1) * _Tint;
+                output.color = ToWorkingSpace(input.color.rgb) * _Tint.rgb;
+                output.exposed = ToWorkingSpace(input.exposed.rgb) * _Tint.rgb;
                 return output;
             }
 
             half4 Frag(Varyings input) : SV_Target
             {
                 half3 normalWS = normalize(input.normalWS);
+
+                // normal.y is the cosine of the slope angle: 1 flat, 0 vertical.
+                half steepness = 1.0h - smoothstep(cos(radians(_SteepEnd)), cos(radians(_SteepStart)), normalWS.y);
+                half3 albedo = lerp(input.color, input.exposed, steepness);
+
                 Light mainLight = GetMainLight();
                 half diffuse = saturate(dot(normalWS, mainLight.direction));
                 half3 lighting = mainLight.color * diffuse + SampleSH(normalWS);
-                return half4(input.color.rgb * lighting, 1);
+                return half4(albedo * lighting, 1);
             }
             ENDHLSL
         }

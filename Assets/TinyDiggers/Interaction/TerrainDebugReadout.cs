@@ -62,7 +62,8 @@ namespace TinyDiggers.Interaction
             if (_frameTimeAccumulated >= FrameTimeWindow)
             {
                 var milliseconds = _frameTimeAccumulated / _framesCounted * 1000f;
-                _frameTime = $"{milliseconds:0.0} ms/frame ({1000f / milliseconds:0} fps), {_terrain.TriangleCount:N0} triangles";
+                _frameTime = $"{milliseconds:0.0} ms/frame ({1000f / milliseconds:0} fps), {_terrain.TriangleCount:N0} triangles, " +
+                    $"slump queue {_terrain.SlumpPending}";
                 _frameTimeAccumulated = 0f;
                 _framesCounted = 0;
                 _panelChanged = true;

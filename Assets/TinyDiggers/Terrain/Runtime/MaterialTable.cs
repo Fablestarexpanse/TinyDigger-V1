@@ -33,6 +33,12 @@ namespace TinyDiggers.Terrain
                 _byId[definition.Id.Value] = definition;
             }
 
+            foreach (var definition in definitions)
+                if (!definition.Disturbed.IsNone && !Contains(definition.Disturbed))
+                    throw new ArgumentException(
+                        $"{definition.DisplayName} is disturbed into id {definition.Disturbed}, which is not in the table.",
+                        nameof(definitions));
+
             Count = definitions.Length;
         }
 
@@ -52,6 +58,13 @@ namespace TinyDiggers.Terrain
 
         public bool IsDiggable(MaterialId id) => !id.IsNone && Get(id).IsDiggable;
 
+        /// <summary>What <paramref name="id"/> becomes once dug or tipped; itself if it has no disturbed form.</summary>
+        public MaterialId GetDisturbed(MaterialId id)
+        {
+            var disturbed = Get(id).Disturbed;
+            return disturbed.IsNone ? id : disturbed;
+        }
+
         // Ids are fixed so that generation, tests and saved data all agree on them.
         public static readonly MaterialId Bedrock = new MaterialId(1);
         public static readonly MaterialId Granite = new MaterialId(2);
@@ -60,18 +73,27 @@ namespace TinyDiggers.Terrain
         public static readonly MaterialId Dirt = new MaterialId(5);
         public static readonly MaterialId Sand = new MaterialId(6);
         public static readonly MaterialId Topsoil = new MaterialId(7);
+        public static readonly MaterialId RockLoose = new MaterialId(8);
+        public static readonly MaterialId DirtLoose = new MaterialId(9);
 
-        /// <summary>The seed material set for the terrain slice, bottom of the world upwards.</summary>
+        /// <summary>
+        /// The seed material set. Undisturbed ground stands steep; once dug it becomes a loose
+        /// variant with a lower angle of repose, so spoil heaps slump where cut faces hold.
+        /// Undisturbed angles sit above the ~63 degrees that a 1 m step over one cell makes, so
+        /// natural ground does not slide on its own at the default height step.
+        /// </summary>
         public static MaterialTable CreateDefault()
         {
             return new MaterialTable(
                 new MaterialDefinition(Bedrock, "Bedrock", new Color32(52, 52, 58, 255), 1.00f, 90f, isDiggable: false),
-                new MaterialDefinition(Granite, "Granite", new Color32(128, 122, 124, 255), 0.85f, 90f),
-                new MaterialDefinition(Rock, "Rock", new Color32(150, 148, 142, 255), 0.60f, 45f),
-                new MaterialDefinition(Clay, "Clay", new Color32(166, 106, 72, 255), 0.35f, 40f),
-                new MaterialDefinition(Dirt, "Dirt", new Color32(122, 88, 60, 255), 0.20f, 35f),
-                new MaterialDefinition(Sand, "Sand", new Color32(214, 195, 140, 255), 0.15f, 32f),
-                new MaterialDefinition(Topsoil, "Topsoil", new Color32(86, 106, 58, 255), 0.10f, 35f));
+                new MaterialDefinition(Granite, "Granite", new Color32(128, 122, 124, 255), 0.85f, 90f, disturbed: RockLoose),
+                new MaterialDefinition(Rock, "Rock", new Color32(150, 148, 142, 255), 0.60f, 80f, disturbed: RockLoose),
+                new MaterialDefinition(Clay, "Clay", new Color32(166, 106, 72, 255), 0.35f, 60f),
+                new MaterialDefinition(Dirt, "Dirt", new Color32(122, 88, 60, 255), 0.20f, 50f, disturbed: DirtLoose),
+                new MaterialDefinition(Sand, "Sand", new Color32(214, 195, 140, 255), 0.15f, 34f),
+                new MaterialDefinition(Topsoil, "Topsoil", new Color32(86, 106, 58, 255), 0.10f, 50f, disturbed: Dirt),
+                new MaterialDefinition(RockLoose, "Loose rock", new Color32(172, 166, 156, 255), 0.30f, 38f),
+                new MaterialDefinition(DirtLoose, "Loose dirt", new Color32(148, 110, 76, 255), 0.10f, 32f));
         }
     }
 }

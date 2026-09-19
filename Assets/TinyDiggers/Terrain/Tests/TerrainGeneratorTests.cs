@@ -88,6 +88,22 @@ namespace TinyDiggers.Terrain.Tests
         }
 
         [Test]
+        public void WithAHeightStepEverySurfaceLandsOnTheStepGrid()
+        {
+            var grid = new TerrainGrid(64, 64, MaterialTable.CreateDefault(), heightStep: 1f);
+            TerrainGenerator.Generate(grid, 4);
+
+            for (var z = 0; z < grid.Height; z++)
+            {
+                for (var x = 0; x < grid.Width; x++)
+                {
+                    var height = grid.GetSurfaceHeight(x, z);
+                    Assert.That(height, Is.EqualTo(Mathf.Round(height)).Within(1e-3f), $"cell ({x}, {z})");
+                }
+            }
+        }
+
+        [Test]
         public void GeneratedHeightsEqualTheSumOfTheirLayers()
         {
             var grid = Generate(9, 32);

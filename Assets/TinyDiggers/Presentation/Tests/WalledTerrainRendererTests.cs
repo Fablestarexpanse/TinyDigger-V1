@@ -5,14 +5,14 @@ using UnityEngine;
 
 namespace TinyDiggers.Presentation.Tests
 {
-    public class ChunkedMeshTerrainRendererTests
+    public class WalledTerrainRendererTests
     {
         const float Tolerance = 1e-4f;
         const int ChunkSize = 32;
 
         GameObject _root;
         TerrainGrid _grid;
-        ChunkedMeshTerrainRenderer _renderer;
+        WalledTerrainRenderer _renderer;
 
         [SetUp]
         public void SetUp()
@@ -23,8 +23,8 @@ namespace TinyDiggers.Presentation.Tests
             _grid = new TerrainGrid(70, 40, MaterialTable.CreateDefault());
             for (var z = 0; z < _grid.Height; z++)
                 for (var x = 0; x < _grid.Width; x++)
-                    _grid.Add(x, z, MaterialTable.Dirt, 2f);
-            _renderer = new ChunkedMeshTerrainRenderer(_grid, _root.transform, null, ChunkSize);
+                    _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Dirt, 2f) });
+            _renderer = new WalledTerrainRenderer(_grid, _root.transform, null, ChunkSize);
         }
 
         [TearDown]
@@ -156,8 +156,12 @@ namespace TinyDiggers.Presentation.Tests
         public void WallsAreBandedByTheLayersTheyCut()
         {
             // Dirt 0-2, sand 2-3, topsoil 3-4, standing 2m proud of its dirt neighbours.
-            _grid.Add(5, 5, MaterialTable.Sand, 1f);
-            _grid.Add(5, 5, MaterialTable.Topsoil, 1f);
+            _grid.SetColumn(5, 5, new[]
+            {
+                new Layer(MaterialTable.Dirt, 2f),
+                new Layer(MaterialTable.Sand, 1f),
+                new Layer(MaterialTable.Topsoil, 1f),
+            });
 
             _renderer.Rebuild();
 
@@ -180,7 +184,7 @@ namespace TinyDiggers.Presentation.Tests
         public void APitShowsTheLayersOfTheCellsAroundIt()
         {
             // Cap the east neighbour with topsoil, then dig the pit cell down 1.5m into the dirt.
-            _grid.Add(11, 10, MaterialTable.Topsoil, 0.5f);
+            _grid.SetColumn(11, 10, new[] { new Layer(MaterialTable.Dirt, 2f), new Layer(MaterialTable.Topsoil, 0.5f) });
             var removed = new List<MaterialVolume>();
             _grid.Remove(10, 10, 1.5f, removed);
 

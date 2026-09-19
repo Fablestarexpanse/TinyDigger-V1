@@ -5,10 +5,11 @@ this records why.
 
 ---
 
-**NEXT:** Vertical Slice 0 is feature-complete and green (80/80): column-stack grid, flat-topped
-walled renderer, RTS camera, brush dig/fill, hover readout, all in
-`Assets/TinyDiggers/Scenes/TerrainSandbox.unity`. Nothing is in flight. Still owed: a frame-time
-check on a mid-range GPU (the readout's top line shows it), then Ronan's call on what comes next.
+**NEXT:** Course-corrected after CoI diary #35 and green (117/117): smoothed heightfield with
+steep-face layer colouring as the default renderer (walls kept, not selected), 1 m height step,
+disturbed/loose materials, and a budgeted 8-neighbour slump simulator. Nothing is in flight.
+Still owed: a frame-time check on a mid-range GPU (the readout's top line shows it), then
+Ronan's call on what comes next.
 
 Run the suite with the menu item **TinyDiggers > Run EditMode Tests**; it prints a single
 `TESTS PASS ...` / `TESTS FAIL ...` line to the console, with one line per failure.
@@ -221,3 +222,103 @@ All three follow the thin-MonoBehaviour rule. The logic lives in plain C# with t
 - `Unity_RunCommand` blocks `System.Reflection`.
 - The test runner menu now refuses to run in play mode, and unregisters the previous run's
   callbacks. An aborted run no longer makes every later run report twice.
+
+## 2026-09-19 — Course correction after Captain of Industry diary #35
+
+Source: [Captain's diary #35: Terrain revamp & more](https://coigame.com/post/cd-35) (the old
+captain-of-industry.com/post/cd-35 URL redirects there).
+
+Ronan compared our terrain with the diary. **The data model matches theirs**: one flat array per
+property over a rectangular map, with materials as layers per tile. **The rendering did not.**
+They render a displaced heightfield with steep faces, textured triplanar-style, not vertical
+walls. This reverses the walls ruling from earlier today. The rulings:
+
+### 1. Smoothed heightfield is the default renderer again
+
+- `SmoothedTerrainRenderer` (corner-averaged heights, one flat-shaded quad per cell) is the
+  default. `WalledTerrainRenderer` stays in the repo behind the same `ITerrainRenderer`, selected
+  by `TerrainView`'s renderer field. It is useful for inspecting what the grid really holds.
+- Both now share `ChunkedTerrainRenderer` (chunks, dirty set, palette, upload) and
+  `TerrainMeshBuilder`, and differ only in which chunks an edit dirties and what geometry a chunk
+  gets.
+- **Steep faces show the layer they cut.** Each quad carries its top material as the vertex
+  colour and an "exposed" colour in UV1. The shader blends from the first to the second as the
+  face goes from 40° to 50°, a cheap stand-in for triplanar, with no textures yet. The exposed
+  layer is read from the tallest column in the cell's 3x3 neighbourhood (the one the face is cut
+  into), at the height of the quad's centre, via the new `TerrainGrid.GetMaterialAt`. The walls
+  renderer puts the same colour in both channels, because its walls already show their layer.
+- Because the exposed colour reads neighbours' layers, the smoothed renderer's 3x3 dirty
+  neighbourhood also covers recolouring, and a test covers it.
+- The renderer-agnostic lesson from the walls episode still stands. The grid holds the true
+  heights, and a single-cell edit renders at a quarter of its depth. Brush digs, which are what
+  the game does, render correctly inside.
+
+### 2. Height step, 1.0 m
+
+Ronan asked to "keep" `HeightStep` quantisation. **It did not exist before this change**; heights
+were continuous floats. It is now `TerrainGrid.HeightStep`, set to 1.0 m by
+`TerrainView.HeightStep`, and:
+- generation snaps each surface to the step, and the rock layer absorbs the difference;
+- `Add` and `Remove` round every volume to whole steps, so surfaces that start on the grid stay
+  on it;
+- slumps move one step at a time.
+With heights on a 1 m grid, the smoothed mesh shows terraces as intended.
+
+A bug that came up here: the generator used to drop layers thinner than 5 cm, which knocked the
+snapped surface off the grid (one cell landed at 14.9989 m). Thin granite is now omitted before
+the rock is computed, and thin rock is folded into the dirt above it.
+
+### 3. Disturbed materials
+
+cd-35 says the normal and disrupted variants are separate layers with their own properties.
+Following that, each `MaterialDefinition` has a `Disturbed` counterpart:
+Rock → RockLoose, Dirt → DirtLoose, Topsoil → Dirt (as specified), and Granite → RockLoose
+(my addition, since granite is also rock). Clay and sand have none.
+- `Remove` reports what comes out in its disturbed form. The ground left behind stays
+  undisturbed.
+- `Add` places the disturbed form of whatever it is given. Only `SetColumn`, which generation
+  uses, writes undisturbed ground.
+- Consequence: dug topsoil is reported as Dirt, but tipping Dirt back places DirtLoose. The
+  mapping is applied on each hop, not composed once.
+- Angles of repose: loose variants are shallower (RockLoose 38°, DirtLoose 32°, Sand 34°).
+  Undisturbed ground is steep (Rock 80°, Clay 60°, Dirt and Topsoil 50°, Granite and Bedrock
+  never slump). Undisturbed angles sit at or above what a 1 m step over one cell can produce, so
+  generated terrain does not slide on its own.
+
+### 4. Slump: `AngleOfReposeSimulator`
+
+- **8-neighbour, not lowest-neighbour-only**, as in cd-35: each examined cell ranks all eight
+  neighbours by slope (diagonals at √2 distance) and sheds one height step to each, steepest
+  first, while the drop still exceeds its effective angle.
+- **Budgeted.** Only cells near edits are examined: each `CellChanged` queues the cell and its 8
+  neighbours. `Tick()` examines at most `MaxTilesPerTick` (public, default 1000; exposed as
+  `TerrainView.SlumpTilesPerTick`) and carries the rest over to the next tick. The readout shows
+  the queue length.
+- **Thickness bias**, as in cd-35: a top layer thinner than `ThinLayerDepth` (2 m) has its
+  collapse angle raised towards vertical in proportion to how thin it is. A 0.5 m skin of loose
+  dirt clings to a 3 m drop that 3 m of loose dirt slides down.
+- **Never inverts a slope.** Moving one step lowers the source and raises the target by a step
+  each, so it only moves when the drop is at least two steps. As a result, 1 m-per-cell slopes
+  (45° along the axes) are always stable at the 1 m step, whatever the material angle says.
+  Material angles only matter for drops of 2 m or more.
+- **Never loses material.** Before moving, it checks that the target's layer stack has room for
+  everything the step would turn into, and skips that neighbour if not. Tests cover conservation
+  of total height.
+- **Deterministic**: FIFO queue, fixed neighbour order. The fixed order breaks ties in the same
+  direction every time. A pile is therefore slightly lopsided: 8 m of loose dirt spreads over 8
+  of its 9 cells, and the missing corner is always the same one. Tipped piles grow short
+  "fingers" along the tie-break directions. Rotating the start of the neighbour order per cell
+  would even this out if it bothers anyone.
+
+### Measured, 2026-09-19 (RTX 4090, editor play mode)
+
+| | Walls (previous default) | Smoothed (default again) |
+|---|---|---|
+| Triangles, 512x512 | 1,608,896 | 524,288 |
+| Initial meshing | 157 ms | 109 ms (52 ms before steep-face colours) |
+| Camera render, 2560x1440 isolated | 0.54 ms (0.48 without terrain) | 0.51–0.53 ms (0.45 without terrain) |
+
+A scripted run on the highest peak dug a radius-5 pit 6 m deep: 454 m³ of loose rock, 24 m³ of
+dirt (from topsoil) and 8 m³ of loose dirt came out. Its steep faces show grey rock under a
+brown band of dirt. Tipping 50 m³ of dirt as an 11 m column on the plain slumped within a
+couple of frames into a mound about 3 m high, topped with loose dirt.

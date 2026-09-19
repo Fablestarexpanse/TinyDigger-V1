@@ -32,7 +32,7 @@ namespace TinyDiggers.Terrain
                 var definition = grid.Materials.Get(_layers[i].Material);
                 _builder.AppendLine()
                     .Append("  ")
-                    .Append(definition.DisplayName.PadRight(8))
+                    .Append(definition.DisplayName.PadRight(11))
                     .Append(_layers[i].Thickness.ToString("0.00").PadLeft(7))
                     .Append(" m");
             }

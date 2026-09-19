@@ -100,8 +100,10 @@ namespace TinyDiggers.Interaction
         void Fill(TerrainGrid grid, int x, int z)
         {
             var added = TerrainBrush.Fill(grid, x, z, _terrain.BrushRadius, MaterialTable.Dirt, _volumePerCell);
+            // The grid places the disturbed form, so name what actually landed.
+            var landed = grid.Materials.Get(grid.Materials.GetDisturbed(MaterialTable.Dirt)).DisplayName;
             LastAction = added > 0f
-                ? $"Tipped {added:0.0} m3 of Dirt"
+                ? $"Tipped {added:0.0} m3 of {landed}"
                 : "Tipped nothing: layer stacks full";
         }
     }

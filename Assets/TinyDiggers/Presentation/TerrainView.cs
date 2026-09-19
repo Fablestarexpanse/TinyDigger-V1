@@ -5,17 +5,34 @@ using Debug = UnityEngine.Debug;
 
 namespace TinyDiggers.Presentation
 {
+    /// <summary>Which <see cref="ITerrainRenderer"/> a <see cref="TerrainView"/> builds.</summary>
+    public enum TerrainRendererKind
+    {
+        /// <summary>Corner-averaged heightfield with steep-face layer colouring. The game look.</summary>
+        Smoothed,
+
+        /// <summary>Flat-topped columns with layer-banded vertical walls. For inspecting the raw grid.</summary>
+        Walled,
+    }
+
     /// <summary>
-    /// Scene entry point for the terrain: builds the grid, fills it with test terrain and hands it
-    /// to a renderer. Holds no terrain logic of its own.
+    /// Scene entry point for the terrain: builds the grid, fills it with test terrain, and wires
+    /// it to a renderer and the slump simulator. Holds no terrain logic of its own.
     /// </summary>
     public sealed class TerrainView : MonoBehaviour
     {
         [SerializeField, Min(1)] int _width = 512;
         [SerializeField, Min(1)] int _height = 512;
-        [SerializeField, Range(1, ChunkedMeshTerrainRenderer.MaxChunkSize)] int _chunkSize = ChunkedMeshTerrainRenderer.DefaultChunkSize;
+        [SerializeField, Range(1, ChunkedTerrainRenderer.MaxChunkSize)] int _chunkSize = ChunkedTerrainRenderer.DefaultChunkSize;
         [SerializeField] int _seed = 1;
         [SerializeField] Material _material;
+        [SerializeField] TerrainRendererKind _renderer = TerrainRendererKind.Smoothed;
+
+        /// <summary>
+        /// Metres. Generated surfaces snap to this, and digs, fills and slumps move whole
+        /// multiples of it. Read once when the grid is built.
+        /// </summary>
+        [Min(0f)] public float HeightStep = 1f;
 
         /// <summary>
         /// Cells within this many cells of the clicked one are dug or filled; 0 is the clicked
@@ -23,39 +40,60 @@ namespace TinyDiggers.Presentation
         /// </summary>
         [Min(0)] public int BrushRadius = 2;
 
-        ChunkedMeshTerrainRenderer _renderer;
+        /// <summary>Most cells the slump simulator examines per frame; the rest wait for the next frame.</summary>
+        [Min(1)] public int SlumpTilesPerTick = 1000;
+
+        ChunkedTerrainRenderer _terrainRenderer;
+        AngleOfReposeSimulator _slump;
 
         public TerrainGrid Grid { get; private set; }
 
-        public ITerrainRenderer Renderer => _renderer;
+        public ITerrainRenderer Renderer => _terrainRenderer;
 
         /// <summary>Triangles across all chunks as last built.</summary>
-        public long TriangleCount => _renderer?.TriangleCount ?? 0;
+        public long TriangleCount => _terrainRenderer?.TriangleCount ?? 0;
+
+        /// <summary>Cells waiting for the slump simulator.</summary>
+        public int SlumpPending => _slump?.PendingCount ?? 0;
 
         void Awake()
         {
             var stopwatch = Stopwatch.StartNew();
-            Grid = new TerrainGrid(_width, _height, MaterialTable.CreateDefault());
+            Grid = new TerrainGrid(_width, _height, MaterialTable.CreateDefault(), HeightStep);
             TerrainGenerator.Generate(Grid, _seed);
             var generated = stopwatch.Elapsed.TotalMilliseconds;
 
             stopwatch.Restart();
-            _renderer = new ChunkedMeshTerrainRenderer(Grid, transform, _material, _chunkSize);
+            _terrainRenderer = _renderer == TerrainRendererKind.Walled
+                ? new WalledTerrainRenderer(Grid, transform, _material, _chunkSize)
+                : new SmoothedTerrainRenderer(Grid, transform, _material, _chunkSize);
             var built = stopwatch.Elapsed.TotalMilliseconds;
 
+            // Created after generation, so the freshly generated map is not queued for slumping;
+            // only edits start collapses.
+            _slump = new AngleOfReposeSimulator(Grid);
+
             Debug.Log(
-                $"TerrainView: {_width}x{_height} cells, {_renderer.ChunkCountX * _renderer.ChunkCountZ} chunks, " +
-                $"{_renderer.TriangleCount:N0} triangles. Generated in {generated:0} ms, meshed in {built:0} ms.");
+                $"TerrainView: {_width}x{_height} cells, {_renderer} renderer, " +
+                $"{_terrainRenderer.ChunkCountX * _terrainRenderer.ChunkCountZ} chunks, " +
+                $"{_terrainRenderer.TriangleCount:N0} triangles. Generated in {generated:0} ms, meshed in {built:0} ms.");
+        }
+
+        void Update()
+        {
+            _slump.MaxTilesPerTick = SlumpTilesPerTick;
+            _slump.Tick();
         }
 
         void LateUpdate()
         {
-            _renderer.Rebuild();
+            _terrainRenderer.Rebuild();
         }
 
         void OnDestroy()
         {
-            _renderer?.Dispose();
+            _slump?.Dispose();
+            _terrainRenderer?.Dispose();
         }
     }
 }
