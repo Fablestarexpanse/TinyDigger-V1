@@ -7,23 +7,30 @@ using UnityEngine;
 namespace TinyDiggers.Interaction
 {
     /// <summary>
-    /// Top-left debug panel: frame time, controls, the crew's load, the hovered cell's stack, and
-    /// what the last click did. The text is rebuilt only when something in it changes, not every frame.
+    /// Top-left debug panel: frame time, controls, the unit's state, job and load, designation
+    /// counts, the hovered cell's stack, and what the last designation did. The text is rebuilt
+    /// only when something in it changes, not every frame.
     /// </summary>
     public sealed class TerrainDebugReadout : MonoBehaviour
     {
         const float FrameTimeWindow = 0.5f;
 
         [SerializeField] TerrainView _terrain;
-        [SerializeField] TerrainEditTool _tool;
-        [SerializeField] CrewView _crew;
+        [SerializeField] DesignationTool _tool;
+        [SerializeField] CrewUnitView _unit;
+        [SerializeField] DesignationsView _designations;
 
         readonly TerrainCellReport _report = new TerrainCellReport();
         readonly InventoryReport _loadReport = new InventoryReport();
-        string _load = "";
+        readonly StringBuilder _unitText = new StringBuilder(512);
+        string _unitBlock = "";
+        int _shownUnitVersion = -1;
         int _shownLoadVersion = -1;
-        readonly StringBuilder _text = new StringBuilder(512);
+        int _shownDesignationVersion = -1;
+        float _shownTargetHeight = float.NaN;
+        bool _shownLocked;
 
+        readonly StringBuilder _text = new StringBuilder(1024);
         string _panel = "";
         string _cell = "";
         string _frameTime = "";
@@ -89,11 +96,29 @@ namespace TinyDiggers.Interaction
                 _panelChanged = true;
             }
 
-            var inventory = _crew.Crew.Inventory;
-            if (inventory.Version != _shownLoadVersion)
+            var unit = _unit.Unit;
+            var map = _designations.Map;
+            if (unit != null && (unit.Version != _shownUnitVersion || unit.Inventory.Version != _shownLoadVersion
+                || map.Version != _shownDesignationVersion || _tool.TargetHeight != _shownTargetHeight || _tool.HeightLocked != _shownLocked))
             {
-                _load = _loadReport.Describe(inventory, _terrain.Grid.Materials);
-                _shownLoadVersion = inventory.Version;
+                _shownUnitVersion = unit.Version;
+                _shownLoadVersion = unit.Inventory.Version;
+                _shownDesignationVersion = map.Version;
+                _shownTargetHeight = _tool.TargetHeight;
+                _shownLocked = _tool.HeightLocked;
+
+                _unitText.Clear()
+                    .Append("Unit: ").AppendLine(unit.Status)
+                    .Append("  at (").Append(unit.Cell.x).Append(", ").Append(unit.Cell.y).Append("), dig reach ±")
+                    .Append(unit.DigReachLevels).AppendLine(" levels")
+                    .AppendLine(_loadReport.Describe(unit.Inventory, _terrain.Grid.Materials));
+                if (unit.UnreachableCount > 0)
+                    _unitText.Append("UNREACHABLE designations: ").Append(unit.UnreachableCount)
+                        .Append(", nearest ").AppendLine(unit.NearestUnreachable);
+                _unitText.Append("Designations: ").Append(map.Count)
+                    .Append("   H ").Append(_tool.TargetHeight.ToString("0.#")).Append(" m")
+                    .Append(_tool.HeightLocked ? " (locked)" : " (follows cursor)");
+                _unitBlock = _unitText.ToString();
                 _panelChanged = true;
             }
 
@@ -109,10 +134,11 @@ namespace TinyDiggers.Interaction
                 _text.Clear()
                     .AppendLine(_frameTime)
                     .Append("Brush radius ").Append(_terrain.BrushRadius)
-                    .Append("   LMB dig ").Append(_tool.VolumePerCell.ToString("0.##")).Append(" m into load   RMB tip load").AppendLine()
-                    .AppendLine("WASD pan   Q/E rotate   scroll zoom")
+                    .AppendLine("   LMB dig to H   RMB fill to H   MMB click clear")
+                    .AppendLine("Q/E H -/+ 1 step (locks)   R H follows cursor")
+                    .AppendLine("WASD pan   MMB drag rotate   scroll zoom")
                     .AppendLine()
-                    .AppendLine(_load)
+                    .AppendLine(_unitBlock)
                     .AppendLine()
                     .AppendLine(_cell);
                 if (!string.IsNullOrEmpty(_shownAction))

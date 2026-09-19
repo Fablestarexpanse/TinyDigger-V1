@@ -5,8 +5,8 @@ using TinyDiggers.Terrain;
 namespace TinyDiggers.Units
 {
     /// <summary>
-    /// Placeholder crew for Vertical Slice 1: one <see cref="MaterialInventory"/> and the two
-    /// things it can do to the terrain. It does not move yet; it works wherever it is told to.
+    /// Moving material between the terrain and a <see cref="MaterialInventory"/>: the two things
+    /// a digger does. Stateless; whoever owns the inventory (a <see cref="CrewUnit"/>) calls these.
     ///
     /// Digging moves material out of the ground into the inventory. Dug material comes out
     /// bulked, so the load fills faster than the hole grows. Nothing is dug that would not fit:
@@ -15,33 +15,27 @@ namespace TinyDiggers.Units
     /// Tipping empties the load onto one cell, newest material first, in whole height steps.
     /// Anything less than a step stays in the load until the next dig tops it up.
     /// </summary>
-    public sealed class Crew
+    public static class Excavation
     {
         /// <summary>Slack for comparing sums of bulked floats.</summary>
         const float Epsilon = 1e-4f;
-
-        readonly Layer[] _preview = new Layer[TerrainGrid.MaxLayersPerCell];
-        readonly MaterialVolume[] _removed = new MaterialVolume[TerrainGrid.MaxLayersPerCell];
-
-        public Crew(float capacity = MaterialInventory.DefaultCapacity)
-        {
-            Inventory = new MaterialInventory(capacity);
-        }
-
-        public MaterialInventory Inventory { get; }
 
         /// <summary>
         /// Digs up to <paramref name="volumePerCell"/> (in place) from each cell within
         /// <paramref name="radius"/> of the centre, nearest cells first, into the inventory.
         /// Cells whose loose output would not fit in what is left are skipped, not part-dug.
         /// </summary>
-        public DigReport Dig(TerrainGrid grid, int centreX, int centreZ, int radius, float volumePerCell)
+        public static DigReport Dig(TerrainGrid grid, MaterialInventory inventory, int centreX, int centreZ, int radius, float volumePerCell)
         {
             if (grid == null)
                 throw new ArgumentNullException(nameof(grid));
+            if (inventory == null)
+                throw new ArgumentNullException(nameof(inventory));
             if (radius < 0)
                 throw new ArgumentOutOfRangeException(nameof(radius));
 
+            Span<Layer> preview = stackalloc Layer[TerrainGrid.MaxLayersPerCell];
+            Span<MaterialVolume> removed = stackalloc MaterialVolume[TerrainGrid.MaxLayersPerCell];
             var report = new DigReport(grid.Materials.MaxId + 1);
             foreach (var (dx, dz) in DiscNearestFirst(radius))
             {
@@ -50,7 +44,7 @@ namespace TinyDiggers.Units
                 if (!grid.InBounds(x, z))
                     continue;
 
-                var layers = grid.PeekRemove(x, z, volumePerCell, _preview);
+                var layers = grid.PeekRemove(x, z, volumePerCell, preview);
                 if (layers == 0)
                 {
                     report.CellsAtBedrock++;
@@ -59,8 +53,8 @@ namespace TinyDiggers.Units
 
                 var loose = 0f;
                 for (var i = 0; i < layers; i++)
-                    loose += _preview[i].Thickness * grid.Materials.Get(_preview[i].Material).BulkingFactor;
-                if (!Inventory.CanFit(loose))
+                    loose += preview[i].Thickness * grid.Materials.Get(preview[i].Material).BulkingFactor;
+                if (!inventory.CanFit(loose))
                 {
                     report.CellsThatDidNotFit++;
                     report.SmallestMisfit = Math.Min(report.SmallestMisfit, loose);
@@ -69,16 +63,16 @@ namespace TinyDiggers.Units
 
                 for (var i = 0; i < layers; i++)
                 {
-                    report.InPlaceBySource[_preview[i].Material.Value] += _preview[i].Thickness;
-                    report.InPlace += _preview[i].Thickness;
+                    report.InPlaceBySource[preview[i].Material.Value] += preview[i].Thickness;
+                    report.InPlace += preview[i].Thickness;
                 }
 
-                var pieces = grid.Remove(x, z, volumePerCell, _removed);
+                var pieces = grid.Remove(x, z, volumePerCell, removed);
                 for (var i = 0; i < pieces; i++)
                 {
                     // The preview said it fits; tiny float differences are absorbed by TryAdd's slack.
-                    Inventory.Add(_removed[i].Material, _removed[i].Volume);
-                    report.Loose += _removed[i].Volume;
+                    inventory.Add(removed[i].Material, removed[i].Volume);
+                    report.Loose += removed[i].Volume;
                 }
 
                 report.CellsDug++;
@@ -88,23 +82,26 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
-        /// Tips as many whole height steps of the load as it holds onto cell (x, z), in one go.
-        /// The steps are made up from the top of the load downwards, and one step may mix several
-        /// materials: a load of small interleaved pieces still tips. Within one tip the load is
-        /// mixed into one layer per landed material, newest material lowest, so a tip adds only as
-        /// many layers as it has distinct materials. Whatever is left under one step stays in the
-        /// load, and it is the oldest material. Nothing is tipped if the cell's layer stack has no
-        /// room.
+        /// Tips as many whole height steps of the load as it holds, up to
+        /// <paramref name="maxVolume"/>, onto cell (x, z) in one go. The steps are made up from the
+        /// top of the load downwards, and one step may mix several materials: a load of small
+        /// interleaved pieces still tips. Within one tip the load is mixed into one layer per landed
+        /// material, newest material lowest, so a tip adds only as many layers as it has distinct
+        /// materials. Whatever is left stays in the load, oldest material. Nothing is tipped if the
+        /// cell's layer stack has no room.
         /// </summary>
-        public TipReport Tip(TerrainGrid grid, int x, int z)
+        public static TipReport Tip(TerrainGrid grid, MaterialInventory inventory, int x, int z, float maxVolume = float.PositiveInfinity)
         {
             if (grid == null)
                 throw new ArgumentNullException(nameof(grid));
+            if (inventory == null)
+                throw new ArgumentNullException(nameof(inventory));
 
             var report = new TipReport(grid.Materials.MaxId + 1);
             var step = grid.HeightStep;
-            var total = Inventory.Total;
-            var amount = step > 0f ? (float)Math.Floor((total + Epsilon) / step) * step : total;
+            var total = inventory.Total;
+            var wanted = Math.Min(total, maxVolume);
+            var amount = step > 0f ? (float)Math.Floor((wanted + Epsilon) / step) * step : wanted;
             if (amount <= Epsilon)
             {
                 report.HeldBack = total;
@@ -112,7 +109,7 @@ namespace TinyDiggers.Units
             }
 
             // What comes off the load, top first.
-            var stack = Inventory.Stack;
+            var stack = inventory.Stack;
             var taken = new MaterialVolume[stack.Count];
             var takenCount = 0;
             var remaining = amount;
@@ -149,19 +146,19 @@ namespace TinyDiggers.Units
             }
 
             for (var i = 0; i < takenCount; i++)
-                Inventory.RemoveFromTop(taken[i].Volume);
+                inventory.RemoveFromTop(taken[i].Volume);
             for (var i = 0; i < landedCount; i++)
             {
                 report.TippedByMaterial[landed[i].Material.Value] += landed[i].Volume;
                 report.Tipped += landed[i].Volume;
             }
 
-            report.HeldBack = Inventory.Total;
+            report.HeldBack = inventory.Total;
             return report;
         }
 
         /// <summary>Brush offsets within the disc, centre first, then outwards ring by ring.</summary>
-        static IEnumerable<(int dx, int dz)> DiscNearestFirst(int radius)
+        static List<(int dx, int dz)> DiscNearestFirst(int radius)
         {
             var offsets = new List<(int dx, int dz)>();
             for (var dz = -radius; dz <= radius; dz++)
@@ -181,7 +178,7 @@ namespace TinyDiggers.Units
         }
     }
 
-    /// <summary>What one <see cref="Crew.Dig"/> did.</summary>
+    /// <summary>What one <see cref="Excavation.Dig"/> did.</summary>
     public sealed class DigReport
     {
         public DigReport(int materialSlots)
@@ -213,7 +210,7 @@ namespace TinyDiggers.Units
         public bool WasFull => CellsDug == 0 && CellsThatDidNotFit > 0;
     }
 
-    /// <summary>What one <see cref="Crew.Tip"/> did.</summary>
+    /// <summary>What one <see cref="Excavation.Tip"/> did.</summary>
     public sealed class TipReport
     {
         public TipReport(int materialSlots)
@@ -227,7 +224,7 @@ namespace TinyDiggers.Units
         /// <summary>Placed m³ per material id, as it landed (disturbed form).</summary>
         public readonly float[] TippedByMaterial;
 
-        /// <summary>Loose m³ still in the load afterwards: under one height step, or everything if the stack was full.</summary>
+        /// <summary>Loose m³ still in the load afterwards.</summary>
         public float HeldBack;
 
         /// <summary>The cell's layer stack had no room for the new layers, so nothing was tipped.</summary>

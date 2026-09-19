@@ -41,6 +41,7 @@ namespace TinyDiggers.Terrain
         readonly Queue<int> _queue = new Queue<int>();
         readonly bool[] _queued;
         readonly MaterialVolume[] _moved = new MaterialVolume[TerrainGrid.MaxLayersPerCell];
+        readonly Layer[] _carried = new Layer[TerrainGrid.MaxLayersPerCell];
         readonly int[] _order = new int[8];
         readonly float[] _slopes = new float[8];
 
@@ -187,7 +188,18 @@ namespace TinyDiggers.Terrain
             if (!_grid.Materials.IsDiggable(top.Material))
                 return;
 
+            // One slide carries a whole unit off the top, which can span several layers. It only
+            // goes if every layer in it would fail: a thin soil cap does not drag the rock under
+            // it down at soil's angle. The top layer keeps its thin-skin bias; the ones below it
+            // are judged on their own thickness.
             var angle = EffectiveAngle(top.Material, top.Thickness);
+            var carried = _grid.PeekRemove(x, z, unit, _carried);
+            for (var i = 1; i < carried && angle < NeverSlumps; i++)
+            {
+                var layer = _grid.GetLayer(x, z, count - 1 - i);
+                angle = Math.Max(angle, EffectiveAngle(layer.Material, layer.Thickness));
+            }
+
             if (angle >= NeverSlumps)
                 return;
 

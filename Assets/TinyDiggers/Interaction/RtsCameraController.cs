@@ -5,8 +5,11 @@ using UnityEngine.InputSystem;
 namespace TinyDiggers.Interaction
 {
     /// <summary>
-    /// WASD or arrows to pan, Q/E to rotate around the pivot, scroll to zoom. Reads input and
-    /// hands it to an <see cref="RtsCameraRig"/>, which does the maths.
+    /// WASD or arrows to pan, hold the middle mouse button and drag sideways to rotate around the
+    /// pivot, scroll to zoom. (Q/E belong to the designation tool's height.) A middle press that
+    /// has not yet moved <see cref="DesignationTool.ClickTravelPixels"/> does not rotate, so a
+    /// middle click stays a click. Reads input and hands it to an <see cref="RtsCameraRig"/>,
+    /// which does the maths.
     /// </summary>
     [RequireComponent(typeof(Camera))]
     public sealed class RtsCameraController : MonoBehaviour
@@ -22,9 +25,16 @@ namespace TinyDiggers.Interaction
         [SerializeField] float _startDistance = 350f;
         [SerializeField] float _panSpeed = 0.8f;
         [SerializeField] float _rotateSpeed = 90f;
+
+        [Tooltip("Degrees of rotation per pixel of middle-button drag.")]
+        [SerializeField] float _dragDegreesPerPixel = 0.3f;
+
         [SerializeField, Range(0.01f, 0.5f)] float _zoomStep = 0.12f;
 
         readonly RtsCameraRig _rig = new RtsCameraRig();
+        Vector2 _dragStart;
+        Vector2 _dragLast;
+        bool _dragging;
 
         void Start()
         {
@@ -58,15 +68,27 @@ namespace TinyDiggers.Interaction
                 if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) pan.x -= 1f;
                 _rig.Pan(pan, deltaTime);
 
-                var rotate = 0f;
-                if (keyboard.qKey.isPressed) rotate -= 1f;
-                if (keyboard.eKey.isPressed) rotate += 1f;
-                _rig.Rotate(rotate, deltaTime);
             }
 
             var mouse = Mouse.current;
             if (mouse != null)
             {
+                var pointer = mouse.position.ReadValue();
+                if (mouse.middleButton.wasPressedThisFrame)
+                {
+                    _dragStart = _dragLast = pointer;
+                    _dragging = false;
+                }
+                else if (mouse.middleButton.isPressed)
+                {
+                    if (!_dragging && (pointer - _dragStart).magnitude >= DesignationTool.ClickTravelPixels)
+                        _dragging = true;
+                    if (_dragging)
+                        _rig.RotateBy((pointer.x - _dragLast.x) * _dragDegreesPerPixel);
+                    _dragLast = pointer;
+                }
+
+
                 // Scroll deltas differ by platform and Input System version (±1 or ±120 a notch),
                 // so take one zoom step per frame of scrolling rather than trusting the size.
                 var scroll = mouse.scroll.ReadValue().y;

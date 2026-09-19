@@ -76,23 +76,8 @@ namespace TinyDiggers.Presentation
         }
 
         /// <summary>Average surface height of the up to four cells that touch grid corner (cornerX, cornerZ).</summary>
-        public static float CornerHeight(TerrainGrid grid, int cornerX, int cornerZ)
-        {
-            var sum = 0f;
-            var count = 0;
-            for (var z = cornerZ - 1; z <= cornerZ; z++)
-            {
-                for (var x = cornerX - 1; x <= cornerX; x++)
-                {
-                    if (!grid.InBounds(x, z))
-                        continue;
-                    sum += grid.GetSurfaceHeight(x, z);
-                    count++;
-                }
-            }
-
-            return sum / count;
-        }
+        public static float CornerHeight(TerrainGrid grid, int cornerX, int cornerZ) =>
+            TerrainSurface.CornerHeight(grid, cornerX, cornerZ);
 
         protected override void MarkChunksAffectedBy(int x, int z)
         {

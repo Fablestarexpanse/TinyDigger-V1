@@ -156,6 +156,29 @@ namespace TinyDiggers.Terrain.Tests
         }
 
         [Test]
+        public void ASoilCapSlidesOffButTheRockUnderItHolds()
+        {
+            // Rock to 6 m under 1 m of soil, standing 3 m above its neighbours. The soil (50°)
+            // gives way; the rock (80°) does not follow it.
+            _grid.SetColumn(5, 5, new[]
+            {
+                new Layer(MaterialTable.Bedrock, 2f),
+                new Layer(MaterialTable.Rock, 4f),
+                new Layer(MaterialTable.Dirt, 0.7f),
+                new Layer(MaterialTable.Topsoil, 0.3f),
+            });
+            for (var dz = -1; dz <= 1; dz++)
+                for (var dx = -1; dx <= 1; dx++)
+                    if (dx != 0 || dz != 0)
+                        _grid.SetColumn(5 + dx, 5 + dz, new[] { new Layer(MaterialTable.Bedrock, 2f), new Layer(MaterialTable.Rock, 2f) });
+
+            _slump.RunUntilStable();
+
+            Assert.That(_grid.GetSurfaceHeight(5, 5), Is.EqualTo(6f).Within(Tolerance), "the soil went, the rock stayed");
+            Assert.That(_grid.GetTopMaterial(5, 5), Is.EqualTo(MaterialTable.Rock));
+        }
+
+        [Test]
         public void DiggingStraightDownMakesTheWallsSlumpIn()
         {
             // TERRAIN_REFERENCE.md section 3: an unstepped pit collapses onto the digger.

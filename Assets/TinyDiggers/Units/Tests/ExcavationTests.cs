@@ -4,7 +4,7 @@ using TinyDiggers.Terrain;
 
 namespace TinyDiggers.Units.Tests
 {
-    public class CrewTests
+    public class ExcavationTests
     {
         const float Tolerance = 1e-3f;
         const int Size = 25;
@@ -36,23 +36,23 @@ namespace TinyDiggers.Units.Tests
             // A 0.5m step, so the 4.5m³ load is a whole number of steps and all of it can be tipped.
             var grid = RockField(heightStep: 0.5f);
             using var slump = new AngleOfReposeSimulator(grid);
-            var crew = new Crew();
+            var crew = new MaterialInventory();
 
             // Dig 3m³ of rock (in place) from one cell into an empty crew.
-            var dig = crew.Dig(grid, 4, 4, 0, 3f);
+            var dig = Excavation.Dig(grid, crew, 4, 4, 0, 3f);
 
             Assert.That(dig.InPlace, Is.EqualTo(3f).Within(Tolerance));
             Assert.That(dig.InPlaceBySource[MaterialTable.Rock.Value], Is.EqualTo(3f).Within(Tolerance));
-            Assert.That(crew.Inventory.GetVolume(MaterialTable.RockLoose), Is.EqualTo(4.5f).Within(Tolerance), "rock bulks 1.5x");
-            Assert.That(crew.Inventory.Total, Is.EqualTo(4.5f).Within(Tolerance));
+            Assert.That(crew.GetVolume(MaterialTable.RockLoose), Is.EqualTo(4.5f).Within(Tolerance), "rock bulks 1.5x");
+            Assert.That(crew.Total, Is.EqualTo(4.5f).Within(Tolerance));
             slump.RunUntilStable();
 
             // Tip it all on flat ground.
             var before = TotalHeight(grid);
-            var tip = crew.Tip(grid, 16, 16);
+            var tip = Excavation.Tip(grid, crew, 16, 16);
 
             Assert.That(tip.Tipped, Is.EqualTo(4.5f).Within(Tolerance));
-            Assert.That(crew.Inventory.IsEmpty, Is.True);
+            Assert.That(crew.IsEmpty, Is.True);
             Assert.That(TotalHeight(grid) - before, Is.EqualTo(4.5f).Within(Tolerance), "the terrain gained the loose volume");
             Assert.That(grid.GetSurfaceHeight(16, 16), Is.EqualTo(12.5f).Within(Tolerance), "as one column, before slumping");
 
@@ -111,32 +111,32 @@ namespace TinyDiggers.Units.Tests
         public void AtAOneMetreStepTheLeftoverUnderAStepStaysInTheLoad()
         {
             var grid = RockField(heightStep: 1f);
-            var crew = new Crew();
-            crew.Dig(grid, 4, 4, 0, 3f);
+            var crew = new MaterialInventory();
+            Excavation.Dig(grid, crew, 4, 4, 0, 3f);
             var before = TotalHeight(grid);
 
-            var tip = crew.Tip(grid, 16, 16);
+            var tip = Excavation.Tip(grid, crew, 16, 16);
 
             Assert.That(tip.Tipped, Is.EqualTo(4f).Within(Tolerance), "four whole steps");
             Assert.That(tip.HeldBack, Is.EqualTo(0.5f).Within(Tolerance));
-            Assert.That(crew.Inventory.GetVolume(MaterialTable.RockLoose), Is.EqualTo(0.5f).Within(Tolerance));
-            Assert.That(crew.Inventory.Total, Is.EqualTo(0.5f).Within(Tolerance));
-            Assert.That(TotalHeight(grid) - before + crew.Inventory.Total, Is.EqualTo(4.5f).Within(Tolerance), "nothing lost");
+            Assert.That(crew.GetVolume(MaterialTable.RockLoose), Is.EqualTo(0.5f).Within(Tolerance));
+            Assert.That(crew.Total, Is.EqualTo(0.5f).Within(Tolerance));
+            Assert.That(TotalHeight(grid) - before + crew.Total, Is.EqualTo(4.5f).Within(Tolerance), "nothing lost");
         }
 
         [Test]
         public void TheLeftoverGoesOutWithTheNextLoad()
         {
             var grid = RockField(heightStep: 1f);
-            var crew = new Crew();
-            crew.Dig(grid, 4, 4, 0, 3f);
-            crew.Tip(grid, 16, 16); // 0.5 held back
-            crew.Dig(grid, 5, 4, 0, 1f); // +1.5, merges into the 0.5 on top
+            var crew = new MaterialInventory();
+            Excavation.Dig(grid, crew, 4, 4, 0, 3f);
+            Excavation.Tip(grid, crew, 16, 16); // 0.5 held back
+            Excavation.Dig(grid, crew, 5, 4, 0, 1f); // +1.5, merges into the 0.5 on top
 
-            var tip = crew.Tip(grid, 16, 16);
+            var tip = Excavation.Tip(grid, crew, 16, 16);
 
             Assert.That(tip.Tipped, Is.EqualTo(2f).Within(Tolerance));
-            Assert.That(crew.Inventory.IsEmpty, Is.True);
+            Assert.That(crew.IsEmpty, Is.True);
         }
 
         // --- capacity -------------------------------------------------------------------------
@@ -145,11 +145,11 @@ namespace TinyDiggers.Units.Tests
         public void ABrushDigsOnlyTheCellsWhoseLooseOutputFits()
         {
             var grid = RockField(heightStep: 1f);
-            var crew = new Crew();
+            var crew = new MaterialInventory();
             var before = TotalHeight(grid);
 
             // Radius 2 is 13 cells of 1m rock, 1.5m³ loose each; a 5m³ load takes three.
-            var dig = crew.Dig(grid, 10, 10, 2, 1f);
+            var dig = Excavation.Dig(grid, crew, 10, 10, 2, 1f);
 
             Assert.That(dig.CellsDug, Is.EqualTo(3));
             Assert.That(dig.CellsThatDidNotFit, Is.EqualTo(10));
@@ -162,11 +162,11 @@ namespace TinyDiggers.Units.Tests
         public void AFullCrewDigsNothingAndSaysSo()
         {
             var grid = RockField(heightStep: 1f);
-            var crew = new Crew();
-            crew.Dig(grid, 10, 10, 2, 1f); // 4.5 of 5 used
+            var crew = new MaterialInventory();
+            Excavation.Dig(grid, crew, 10, 10, 2, 1f); // 4.5 of 5 used
             var before = TotalHeight(grid);
 
-            var dig = crew.Dig(grid, 3, 3, 0, 1f);
+            var dig = Excavation.Dig(grid, crew, 3, 3, 0, 1f);
 
             Assert.That(dig.WasFull, Is.True);
             Assert.That(dig.SmallestMisfit, Is.EqualTo(1.5f).Within(Tolerance));
@@ -178,15 +178,15 @@ namespace TinyDiggers.Units.Tests
         {
             var grid = RockField(heightStep: 1f);
             grid.SetColumn(3, 3, new[] { new Layer(MaterialTable.Bedrock, 2f), new Layer(MaterialTable.Sand, 6f) });
-            var crew = new Crew();
-            crew.Dig(grid, 10, 10, 2, 1f); // 0.5 free
+            var crew = new MaterialInventory();
+            Excavation.Dig(grid, crew, 10, 10, 2, 1f); // 0.5 free
 
-            Assert.That(crew.Dig(grid, 4, 4, 0, 1f).WasFull, Is.True, "rock needs 1.5");
-            crew.Inventory.RemoveFromTop(1f); // 1.5 free
-            var dig = crew.Dig(grid, 3, 3, 0, 1f);
+            Assert.That(Excavation.Dig(grid, crew, 4, 4, 0, 1f).WasFull, Is.True, "rock needs 1.5");
+            crew.RemoveFromTop(1f); // 1.5 free
+            var dig = Excavation.Dig(grid, crew, 3, 3, 0, 1f);
 
             Assert.That(dig.CellsDug, Is.EqualTo(1), "sand needs 1.1");
-            Assert.That(crew.Inventory.GetVolume(MaterialTable.Sand), Is.EqualTo(1.1f).Within(Tolerance));
+            Assert.That(crew.GetVolume(MaterialTable.Sand), Is.EqualTo(1.1f).Within(Tolerance));
         }
 
         // --- tipping order ------------------------------------------------------------------------
@@ -197,11 +197,11 @@ namespace TinyDiggers.Units.Tests
             // A 0.5m step so both loads are whole steps and both get tipped.
             var grid = RockField(heightStep: 0.5f);
             grid.SetColumn(3, 3, new[] { new Layer(MaterialTable.Bedrock, 2f), new Layer(MaterialTable.Dirt, 6f) });
-            var crew = new Crew();
-            crew.Dig(grid, 3, 3, 0, 2f); // 2.5 loose dirt
-            crew.Dig(grid, 4, 4, 0, 1f); // then 1.5 loose rock on top of the load
+            var crew = new MaterialInventory();
+            Excavation.Dig(grid, crew, 3, 3, 0, 2f); // 2.5 loose dirt
+            Excavation.Dig(grid, crew, 4, 4, 0, 1f); // then 1.5 loose rock on top of the load
 
-            crew.Tip(grid, 16, 16);
+            Excavation.Tip(grid, crew, 16, 16);
 
             // Rock came off the top of the load first, so it is lowest on the ground.
             var count = grid.GetLayerCount(16, 16);
@@ -223,17 +223,17 @@ namespace TinyDiggers.Units.Tests
                         new Layer(MaterialTable.Dirt, 4.7f),
                         new Layer(MaterialTable.Topsoil, 0.3f),
                     });
-            var crew = new Crew();
-            var dig = crew.Dig(grid, 10, 10, 2, 1f);
+            var crew = new MaterialInventory();
+            var dig = Excavation.Dig(grid, crew, 10, 10, 2, 1f);
             Assert.That(dig.CellsDug, Is.EqualTo(4), "1.25 m³ loose per cell, four fit in five");
-            Assert.That(crew.Inventory.Stack.Count, Is.EqualTo(8), "alternating dirt / loose dirt pieces");
+            Assert.That(crew.Stack.Count, Is.EqualTo(8), "alternating dirt / loose dirt pieces");
             var before = TotalHeight(grid);
 
-            var tip = crew.Tip(grid, 16, 16);
+            var tip = Excavation.Tip(grid, crew, 16, 16);
 
             Assert.That(tip.Tipped, Is.EqualTo(5f).Within(Tolerance));
             Assert.That(TotalHeight(grid) - before, Is.EqualTo(5f).Within(Tolerance));
-            Assert.That(crew.Inventory.IsEmpty, Is.True);
+            Assert.That(crew.IsEmpty, Is.True);
             Assert.That(grid.GetTopMaterial(16, 16), Is.EqualTo(MaterialTable.DirtLoose), "it all lands as loose dirt");
             Assert.That(grid.GetSurfaceHeight(16, 16), Is.EqualTo(7f + 5f).Within(Tolerance), "still on the step grid");
         }
@@ -255,12 +255,12 @@ namespace TinyDiggers.Units.Tests
                         new Layer(MaterialTable.Dirt, 0.1f),
                         new Layer(MaterialTable.Topsoil, 0.3f),
                     });
-            var crew = new Crew();
-            crew.Dig(grid, 10, 10, 2, 1f);
-            Assert.That(crew.Inventory.Stack.Count, Is.GreaterThanOrEqualTo(6));
+            var crew = new MaterialInventory();
+            Excavation.Dig(grid, crew, 10, 10, 2, 1f);
+            Assert.That(crew.Stack.Count, Is.GreaterThanOrEqualTo(6));
             var layersBefore = grid.GetLayerCount(16, 16);
 
-            var tip = crew.Tip(grid, 16, 16);
+            var tip = Excavation.Tip(grid, crew, 16, 16);
 
             // Three cells at 1.4 m³ loose each is 4.2; four whole steps tip, 0.2 stays.
             Assert.That(tip.StackFull, Is.False);
@@ -279,15 +279,15 @@ namespace TinyDiggers.Units.Tests
             for (var i = 1; i < layers.Length; i++)
                 layers[i] = new Layer(i % 2 == 0 ? MaterialTable.Clay : MaterialTable.Sand, 1f);
             grid.SetColumn(16, 16, layers);
-            var crew = new Crew();
-            crew.Dig(grid, 4, 4, 0, 2f); // 3 m³ loose rock
+            var crew = new MaterialInventory();
+            Excavation.Dig(grid, crew, 4, 4, 0, 2f); // 3 m³ loose rock
             var height = grid.GetSurfaceHeight(16, 16);
 
-            var tip = crew.Tip(grid, 16, 16);
+            var tip = Excavation.Tip(grid, crew, 16, 16);
 
             Assert.That(tip.StackFull, Is.True);
             Assert.That(tip.Tipped, Is.EqualTo(0f));
-            Assert.That(crew.Inventory.Total, Is.EqualTo(3f).Within(Tolerance));
+            Assert.That(crew.Total, Is.EqualTo(3f).Within(Tolerance));
             Assert.That(grid.GetSurfaceHeight(16, 16), Is.EqualTo(height));
         }
 
@@ -311,7 +311,7 @@ namespace TinyDiggers.Units.Tests
         {
             var grid = RockField(heightStep: 1f);
 
-            var tip = new Crew().Tip(grid, 16, 16);
+            var tip = Excavation.Tip(grid, new MaterialInventory(), 16, 16);
 
             Assert.That(tip.Tipped, Is.EqualTo(0f));
             Assert.That(grid.GetSurfaceHeight(16, 16), Is.EqualTo(8f));

@@ -5,10 +5,9 @@ this records why.
 
 ---
 
-**NEXT:** Vertical Slice 1 (spoil has to go somewhere) is done, green (163/163) and pushed on
-`main`. Work happens directly on `main`; commit and push after every green slice. Nothing is in
-flight. Terrain rendering stays closed. Still owed: a frame-time check on a mid-range GPU; then
-Ronan's call on the next slice.
+**NEXT:** Vertical Slice 2 (one digger that has to get there) is done, green (198/198) and
+pushed on `main`. Nothing is in flight. Terrain rendering stays closed. Still owed: a frame-time
+check on a mid-range GPU; then Ronan's call on the next slice.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -553,3 +552,76 @@ run only.
 Terrain plus load gained exactly 0.90 m³, the bulking; nothing was lost.
 
 Out of scope, as specified: units moving, pathfinding, designations and hardness gating.
+
+## 2026-09-19 — Vertical Slice 2: one digger that has to get there
+
+### What was built
+- **`CrewUnit`** (plain C#, `TinyDiggers.Units`). It owns the `MaterialInventory`, has a
+  position in cell units and moves at 3 cells/s. It turns toward travel at 360°/s and follows the
+  surface height with an exponential blend. Its body sits on the bilinear surface from the new
+  `TerrainSurface`, which uses the same corner averages as the smoothed renderer, bit for bit.
+  `CrewUnitView` is a thin MonoBehaviour: a yellow 1 × 0.8 × 2 box and the path as a line. The
+  clickable Slice 1 `CrewView` is gone, and `Crew` became the static `Excavation` (Dig/Tip).
+- **`GridPathfinder`**: A*, 8-connected.
+  - A step is allowed only if the height difference is at most `MaxStepHeight` (1.0).
+  - A diagonal is allowed only if both orthogonal corner cells are steppable from the start and
+    into the goal (no corner cutting).
+  - Cost = distance × (1 + heightDelta × `SlopeCostFactor`).
+  - It has `TryFindPathToAdjacent`, a Dijkstra `TryFindNearest(isGoal)` that the job loop uses
+    so "nearest" means nearest by path cost rather than straight line, and `FloodReachable`.
+  - It uses generation stamps, so there is no per-search clear.
+- **`DesignationMap`**: one Dig or Fill target height per cell. It listens to `CellChanged` and
+  clears a designation the moment it is met, which is how "persist until met" works.
+- **Input.** LMB/drag designates dig to H and RMB/drag fill to H. MMB click clears under the
+  brush; MMB drag rotates the camera, having moved off Q/E. H follows the hovered cell; Q/E nudge
+  it one step and lock it; R unlocks. The preview is a sheet at H with an "H x m" label. The
+  overlay is red for dig and blue for fill, drawn with a new unlit overlay shader.
+
+### Job loop rules, and why
+1. Dig the nearest reachable dig cell, one step at a time, until it is met or the load is full.
+2. When full, or when no dig is reachable, fill the nearest reachable fill cell. It tips only
+   whole steps and never more than the target, and never above stand + reach.
+3. Otherwise, **and only when full**, dump at the nearest reachable cell that:
+   - is not the unit's own cell;
+   - is at least as high as the stand;
+   - has no designation in its 3×3 neighbourhood;
+   - has had no cell in its 3×3 dug or filled by this unit (a `_worked` bitmap).
+
+   The first version dumped whenever it held anything and had no dig. In tests it refilled
+   finished pit cells and the lowest terrace it had just cut, undoing its own work. Holding a
+   part load while idle is deliberate; tipping it would only waste a step.
+4. Nothing reachable: state Unreachable, and the readout says `UNREACHABLE: dig (x, z) to H m (+N
+   more)` for the nearest one.
+- **Reach**: a cell can be worked only from an adjacent stand cell within ±`DigReachLevels` (2)
+  height steps.
+- **The unit never stands on a cell that is still dig-designated.** Without this rule it happily
+  dug the ground from under itself, and on a terrace it could cut down its own route back.
+  With it, the upper terraces of a mound are *properly* unreachable until the player leaves a
+  step, which is what the slice asks for.
+- **Re-path** happens when a cell on the path, or a diagonal corner cell of it, changes height.
+  Changes elsewhere are ignored (tested both ways). Slump runs after tips as before.
+
+### Slump bug found in play and fixed
+The first play run built the mound as soil-capped rock. The walls slumped, every terrace became
+reachable and all 58 designations completed. That is the behaviour the reference intends for
+soil, but it exposed a bug. One slide carries a whole step, which can span several layers,
+yet only the top layer's angle was checked. A 0.3 m topsoil cap therefore dragged rock down at
+soil's angle.
+
+The effective angle is now the maximum over every layer the slide would carry. New test:
+`ASoilCapSlidesOffButTheRockUnderItHolds`.
+
+### Verified in play (rock outcrop, screenshots in the session scratchpad)
+- **Setup.** Flat ground at 20 m, and a bare-rock 7×7 mound with terraces at 24/23/22/21. Dig to
+  20 was designated over the whole mound, and fill to 20 over a 3×3 dip 2 m deep.
+- **Start:** `UNREACHABLE designations 25`, the two inner rings.
+- **After 186 s (game time, ×4).** Outer rings dug to 20; the ring-3 spoil went into the dip,
+  whose fill was met; the rest was dumped clear of the work. Then the unit stopped with `UNREACHABLE:
+  dig (265, 255) to 20 m (+8 more)`: ring 1 is at 23, three levels above anywhere it can stand.
+- **Stepped path.** A player-designated stair (fill (263,256) to 21 and (264,256) to 22), with
+  the top 3×3 re-designated dig to 22. The unit built the stair from its load, climbed it, benched
+  the top to 22, and after a final dig-everything-to-20 took the mound to the ground. Max height
+  inside the old footprint was 21.00, where a later dump landed. Every designation was met.
+
+Out of scope, as specified: multiple units, auto-ramping, hardness gating, vehicle stats, economy
+and art.

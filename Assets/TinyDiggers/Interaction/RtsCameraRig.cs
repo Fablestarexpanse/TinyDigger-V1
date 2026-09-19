@@ -59,7 +59,13 @@ namespace TinyDiggers.Interaction
         /// <summary>Positive direction orbits clockwise seen from above.</summary>
         public void Rotate(float direction, float deltaTime)
         {
-            Yaw = Mathf.Repeat(Yaw + direction * RotateSpeed * deltaTime, 360f);
+            RotateBy(direction * RotateSpeed * deltaTime);
+        }
+
+        /// <summary>Orbits by <paramref name="degrees"/>, clockwise seen from above when positive.</summary>
+        public void RotateBy(float degrees)
+        {
+            Yaw = Mathf.Repeat(Yaw + degrees, 360f);
         }
 
         /// <summary>Eases the pivot's height towards the ground so the camera rides over hills without snapping.</summary>
