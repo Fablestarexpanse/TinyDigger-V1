@@ -10,10 +10,11 @@ namespace TinyDiggers.Terrain
     public static class TerrainBrush
     {
         /// <summary>
-        /// Digs up to <paramref name="volumePerCell"/> from each cell in the disc. Adds what came
-        /// out into <paramref name="removedByMaterial"/>, indexed by <see cref="MaterialId.Value"/>
-        /// and sized at least <see cref="MaterialTable.MaxId"/> + 1, and returns the total.
-        /// Less comes out than asked wherever a column bottoms out on bedrock.
+        /// Digs up to <paramref name="volumePerCell"/> (in place) from each cell in the disc. Adds
+        /// the loose volume that came out into <paramref name="removedByMaterial"/>, indexed by
+        /// <see cref="MaterialId.Value"/> and sized at least <see cref="MaterialTable.MaxId"/> + 1,
+        /// and returns the loose total. Less comes out than asked wherever a column bottoms out
+        /// on bedrock.
         /// </summary>
         public static float Dig(
             TerrainGrid grid,
@@ -23,6 +24,23 @@ namespace TinyDiggers.Terrain
             float volumePerCell,
             Span<float> removedByMaterial)
         {
+            return Dig(grid, centreX, centreZ, radius, volumePerCell, removedByMaterial, out _);
+        }
+
+        /// <summary>
+        /// As <see cref="Dig(TerrainGrid,int,int,int,float,Span{float})"/>, also reporting the
+        /// in-place volume removed, i.e. how much the ground dropped, before bulking.
+        /// </summary>
+        public static float Dig(
+            TerrainGrid grid,
+            int centreX,
+            int centreZ,
+            int radius,
+            float volumePerCell,
+            Span<float> removedByMaterial,
+            out float inPlaceVolume)
+        {
+            inPlaceVolume = 0f;
             Validate(grid, radius);
             if (removedByMaterial.Length <= grid.Materials.MaxId)
                 throw new ArgumentException(
@@ -38,7 +56,9 @@ namespace TinyDiggers.Terrain
                     if (dx * dx + dz * dz > radiusSquared || !grid.InBounds(centreX + dx, centreZ + dz))
                         continue;
 
+                    var before = grid.GetSurfaceHeight(centreX + dx, centreZ + dz);
                     var count = grid.Remove(centreX + dx, centreZ + dz, volumePerCell, removed);
+                    inPlaceVolume += before - grid.GetSurfaceHeight(centreX + dx, centreZ + dz);
                     for (var i = 0; i < count; i++)
                     {
                         removedByMaterial[removed[i].Material.Value] += removed[i].Volume;

@@ -77,23 +77,26 @@ namespace TinyDiggers.Terrain
         public static readonly MaterialId DirtLoose = new MaterialId(9);
 
         /// <summary>
-        /// The seed material set. Undisturbed ground stands steep; once dug it becomes a loose
-        /// variant with a lower angle of repose, so spoil heaps slump where cut faces hold.
-        /// Undisturbed angles sit above the ~63 degrees that a 1 m step over one cell makes, so
-        /// natural ground does not slide on its own at the default height step.
+        /// The seed material set, per TERRAIN_REFERENCE.md section 2. Undisturbed ground stands
+        /// steep; once dug it becomes a loose variant with a lower angle of repose and swells by
+        /// its bulking factor, so spoil heaps are bigger than the holes they came from and slump
+        /// where cut faces hold. Slopes of one 1 m step per cell never slump (a move needs a 2 m
+        /// drop), so generated terraces are stable.
         /// </summary>
         public static MaterialTable CreateDefault()
         {
             return new MaterialTable(
                 new MaterialDefinition(Bedrock, "Bedrock", new Color32(52, 52, 58, 255), 1.00f, 90f, isDiggable: false),
-                new MaterialDefinition(Granite, "Granite", new Color32(128, 122, 124, 255), 0.85f, 90f, disturbed: RockLoose),
-                new MaterialDefinition(Rock, "Rock", new Color32(150, 148, 142, 255), 0.60f, 80f, disturbed: RockLoose),
-                new MaterialDefinition(Clay, "Clay", new Color32(166, 106, 72, 255), 0.35f, 60f),
-                new MaterialDefinition(Dirt, "Dirt", new Color32(122, 88, 60, 255), 0.20f, 50f, disturbed: DirtLoose),
-                new MaterialDefinition(Sand, "Sand", new Color32(214, 195, 140, 255), 0.15f, 34f),
-                new MaterialDefinition(Topsoil, "Topsoil", new Color32(86, 106, 58, 255), 0.10f, 50f, disturbed: Dirt),
-                new MaterialDefinition(RockLoose, "Loose rock", new Color32(172, 166, 156, 255), 0.30f, 38f),
-                new MaterialDefinition(DirtLoose, "Loose dirt", new Color32(148, 110, 76, 255), 0.10f, 32f));
+                // Rock colours are kept darker than they look in a swatch: lit by the full sun plus
+                // ambient, lighter greys rendered as near-white and a cut stopped reading as rock.
+                new MaterialDefinition(Granite, "Granite", new Color32(96, 92, 94, 255), 0.85f, 90f, disturbed: RockLoose, bulkingFactor: 1.5f),
+                new MaterialDefinition(Rock, "Rock", new Color32(112, 110, 106, 255), 0.60f, 80f, disturbed: RockLoose, bulkingFactor: 1.5f),
+                new MaterialDefinition(Clay, "Clay", new Color32(166, 106, 72, 255), 0.35f, 60f, bulkingFactor: 1.3f),
+                new MaterialDefinition(Dirt, "Dirt", new Color32(122, 88, 60, 255), 0.20f, 50f, disturbed: DirtLoose, bulkingFactor: 1.25f),
+                new MaterialDefinition(Sand, "Sand", new Color32(214, 195, 140, 255), 0.15f, 34f, bulkingFactor: 1.1f, isLoose: true),
+                new MaterialDefinition(Topsoil, "Topsoil", new Color32(86, 106, 58, 255), 0.10f, 50f, disturbed: Dirt, bulkingFactor: 1.25f),
+                new MaterialDefinition(RockLoose, "Loose rock", new Color32(130, 125, 118, 255), 0.30f, 38f, isLoose: true),
+                new MaterialDefinition(DirtLoose, "Loose dirt", new Color32(148, 110, 76, 255), 0.10f, 32f, isLoose: true));
         }
     }
 }

@@ -154,8 +154,13 @@ namespace TinyDiggers.Terrain
         ///
         /// Stops early, having removed less than asked, when the column runs out or when the next
         /// layer down is not diggable. Bedrock is not diggable, so the world has a floor.
+        ///
+        /// <paramref name="volume"/> is in-place volume, how far the surface drops. The reported
+        /// volumes are loose, swollen by each layer's <see cref="MaterialDefinition.BulkingFactor"/>
+        /// unless <paramref name="bulk"/> is false, which the slump simulator uses so that material
+        /// sliding between cells stays on the height step.
         /// </summary>
-        public int Remove(int x, int z, float volume, Span<MaterialVolume> removed)
+        public int Remove(int x, int z, float volume, Span<MaterialVolume> removed, bool bulk = true)
         {
             var cell = RequireIndex(x, z);
             volume = Quantize(volume);
@@ -194,10 +199,11 @@ namespace TinyDiggers.Terrain
                 }
 
                 remaining -= taken;
+                var loose = bulk ? taken * Materials.Get(layer.Material).BulkingFactor : taken;
                 if (merges)
-                    removed[written - 1] = new MaterialVolume(comesOutAs, removed[written - 1].Volume + taken);
+                    removed[written - 1] = new MaterialVolume(comesOutAs, removed[written - 1].Volume + loose);
                 else
-                    removed[written++] = new MaterialVolume(comesOutAs, taken);
+                    removed[written++] = new MaterialVolume(comesOutAs, loose);
             }
 
             if (written > 0)
@@ -214,14 +220,14 @@ namespace TinyDiggers.Terrain
         /// <paramref name="removed"/> first and reuses its capacity, so it allocates nothing after
         /// the first call.
         /// </summary>
-        public int Remove(int x, int z, float volume, List<MaterialVolume> removed)
+        public int Remove(int x, int z, float volume, List<MaterialVolume> removed, bool bulk = true)
         {
             if (removed == null)
                 throw new ArgumentNullException(nameof(removed));
 
             removed.Clear();
             Span<MaterialVolume> buffer = stackalloc MaterialVolume[MaxLayersPerCell];
-            var count = Remove(x, z, volume, buffer);
+            var count = Remove(x, z, volume, buffer, bulk);
             for (var i = 0; i < count; i++)
                 removed.Add(buffer[i]);
             return count;

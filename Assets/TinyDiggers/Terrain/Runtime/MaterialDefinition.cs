@@ -33,6 +33,18 @@ namespace TinyDiggers.Terrain
         /// </summary>
         public MaterialId Disturbed { get; }
 
+        /// <summary>
+        /// Loose volume per unit of in-place volume dug out: rock swells to about 1.5x once
+        /// broken up. 1 for material that is already loose.
+        /// </summary>
+        public float BulkingFactor { get; }
+
+        /// <summary>
+        /// Already-loose material (spoil, sand). Only loose material gets the thin-layer bias
+        /// that lets a skin of it cling to a slope; undisturbed ground fails on its angle alone.
+        /// </summary>
+        public bool IsLoose { get; }
+
         public MaterialDefinition(
             MaterialId id,
             string displayName,
@@ -40,8 +52,13 @@ namespace TinyDiggers.Terrain
             float hardness,
             float angleOfRepose,
             bool isDiggable = true,
-            MaterialId disturbed = default)
+            MaterialId disturbed = default,
+            float bulkingFactor = 1f,
+            bool isLoose = false)
         {
+            if (!(bulkingFactor >= 1f))
+                throw new System.ArgumentOutOfRangeException(nameof(bulkingFactor), "Digging never shrinks material.");
+
             Id = id;
             DisplayName = displayName;
             Color = color;
@@ -49,6 +66,8 @@ namespace TinyDiggers.Terrain
             AngleOfRepose = angleOfRepose;
             IsDiggable = isDiggable;
             Disturbed = disturbed;
+            BulkingFactor = bulkingFactor;
+            IsLoose = isLoose;
         }
 
         public override string ToString() => DisplayName;

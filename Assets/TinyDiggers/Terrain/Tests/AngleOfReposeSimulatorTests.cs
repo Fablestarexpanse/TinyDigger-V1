@@ -137,6 +137,61 @@ namespace TinyDiggers.Terrain.Tests
         }
 
         [Test]
+        public void AThinTopsoilCapDoesNotHoldUpACutWall()
+        {
+            // The thin-layer bias is for loose material only; a 0.3m undisturbed cap over dirt
+            // standing 3m proud gives way on dirt's own angle.
+            _grid.SetColumn(5, 5, new[]
+            {
+                new Layer(MaterialTable.Bedrock, 2f),
+                new Layer(MaterialTable.Dirt, 2.7f),
+                new Layer(MaterialTable.Topsoil, 0.3f),
+            });
+
+            _slump.RunUntilStable();
+
+            Assert.That(_grid.GetSurfaceHeight(5, 5), Is.LessThan(5f - Tolerance));
+            Assert.That(_slump.EffectiveAngle(MaterialTable.Topsoil, 0.3f),
+                Is.EqualTo(_grid.Materials.Get(MaterialTable.Topsoil).AngleOfRepose));
+        }
+
+        [Test]
+        public void DiggingStraightDownMakesTheWallsSlumpIn()
+        {
+            // TERRAIN_REFERENCE.md section 3: an unstepped pit collapses onto the digger.
+            for (var z = 0; z < Size; z++)
+                for (var x = 0; x < Size; x++)
+                    _grid.SetColumn(x, z, new[]
+                    {
+                        new Layer(MaterialTable.Bedrock, 2f),
+                        new Layer(MaterialTable.Dirt, 4.7f),
+                        new Layer(MaterialTable.Topsoil, 0.3f),
+                    });
+            _slump.RunUntilStable();
+            var removed = new float[_grid.Materials.MaxId + 1];
+
+            for (var i = 0; i < 3; i++)
+                TerrainBrush.Dig(_grid, Centre, Centre, 1, 1f, removed);
+            _slump.RunUntilStable();
+
+            // Which rim cells give way depends on the order slumps refill the pit; what matters is
+            // that ground outside the dug footprint came down and landed in it.
+            var rimCellsLowered = 0;
+            for (var z = Centre - 3; z <= Centre + 3; z++)
+                for (var x = Centre - 3; x <= Centre + 3; x++)
+                {
+                    var dx = x - Centre;
+                    var dz = z - Centre;
+                    if (dx * dx + dz * dz > 1 && _grid.GetSurfaceHeight(x, z) < 7f - Tolerance)
+                        rimCellsLowered++;
+                }
+
+            Assert.That(rimCellsLowered, Is.GreaterThan(0), "the rim gave way");
+            Assert.That(_grid.GetSurfaceHeight(Centre, Centre), Is.GreaterThan(4f + Tolerance), "spoil slid back into the pit");
+            Assert.That(_grid.GetTopMaterial(Centre, Centre), Is.EqualTo(MaterialTable.DirtLoose));
+        }
+
+        [Test]
         public void ThinLayersGetASteeperEffectiveAngle()
         {
             var thin = _slump.EffectiveAngle(MaterialTable.DirtLoose, 0.25f);

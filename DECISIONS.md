@@ -5,11 +5,13 @@ this records why.
 
 ---
 
-**NEXT:** Course-corrected after CoI diary #35 and green (117/117): smoothed heightfield with
-steep-face layer colouring as the default renderer (walls kept, not selected), 1 m height step,
-disturbed/loose materials, and a budgeted 8-neighbour slump simulator. Nothing is in flight.
-Still owed: a frame-time check on a mid-range GPU (the readout's top line shows it), then
-Ronan's call on what comes next.
+**NEXT:** `TERRAIN_REFERENCE.md` section 5 "Now" plan done and green (137/137): smooth
+per-vertex normals, grain and edge-line shader, plateau/terrace test terrain, bulking, loose-only
+thin-layer bias. Nothing is in flight. Still owed: a frame-time check on a mid-range GPU (the
+readout's top line shows it); two known close-up artefacts at pit rims (see the 2026-09-19
+"reference" entry); then Ronan's call on what comes next.
+
+Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
 Run the suite with the menu item **TinyDiggers > Run EditMode Tests**; it prints a single
 `TESTS PASS ...` / `TESTS FAIL ...` line to the console, with one line per failure.
@@ -322,3 +324,84 @@ A scripted run on the highest peak dug a radius-5 pit 6 m deep: 454 m³ of loose
 dirt (from topsoil) and 8 m³ of loose dirt came out. Its steep faces show grey rock under a
 brown band of dirt. Tipping 50 m³ of dirt as an 11 m column on the plain slumped within a
 couple of frames into a mound about 3 m high, topped with loose dirt.
+
+## 2026-09-19 — `TERRAIN_REFERENCE.md` added; its section 5 "Now" plan
+
+Ronan added `TERRAIN_REFERENCE.md` (repo root; `CLAUDE.md` points at it) as the design intent
+for the terrain. Its diagnosis (section 1): the render read as voxels because of rendering, not
+data. CoI terrain is a displaced heightfield on a discrete level grid with large noise features,
+fine grain from textures, and smooth per-vertex normals. Flat per-quad normals broke rule 4.
+
+Items 1 (smoothed renderer as default, walls kept unselected), the 1.0 m `HeightStep`, the
+disturbed variants and the 8-neighbour budgeted slump were already in from the previous entry.
+This round added what was missing.
+
+### Smooth per-vertex normals
+- One normal per grid corner: central differences of the corner heights around it,
+  one-sided at the world edge. Each cell is still its own quad (colours stay per cell), but the
+  four quads meeting at a corner share its normal, so light rolls across the land.
+- **No seams:** each chunk caches corner heights one ring beyond its own border, and the maths
+  runs in grid coordinates. `NormalsAtChunkEdgesMatchAnUnchunkedMesh` compares every vertex on
+  both sides of the x=32 and z=32 borders against the same grid meshed as one 127-wide chunk.
+- **The dirty region grew from 3x3 to 5x5**, because a cell's height feeds corners that feed the
+  normals of corners one step further out. A test covers editing a cell two away from a chunk
+  border.
+
+### Shader
+- Steepness blend now starts at 40° (complete by 50°), on the interpolated smooth normal.
+- **Grain:** three octaves of 3D world-space value noise at 0.25, 0.5 and 1 m, weighted 0.5,
+  0.3 and 0.2, scale the colour by ±8%. It is 3D so vertical cut faces get grain, not streaks.
+  The finest octave stops at 0.25 m: at the default camera distance a pixel is about 0.13 m, so
+  anything finer would shimmer.
+- **Edge line (the optional item, done):** UV2 flags each quad side whose neighbour has a
+  different top material, and UV0 gives the fragment's position in its cell. A line 4% of a cell
+  wide (at least a pixel, via `fwidth`) is darkened 12%.
+- Cost: camera render at 2560x1440 is 0.60 ms with terrain against 0.50 ms without (RTX 4090),
+  so terrain plus grain costs about 0.1 ms.
+
+### Test terrain (reference 1.2)
+- Plateau noise at 0.006 cycles per cell (a rise every ~170 cells), 4 m range, plus a 0.015
+  octave of 1.5 m so plateau edges wander. **The small-scale detail noise is gone**: it frayed
+  terrace edges into single-cell speckle.
+- 2–4 hills, **4–8 m high** (4–8 terraces) and 8–15% of the map wide.
+- Test at game scale (256x256, three seeds): neighbours never differ by more than one step, so
+  fresh terrain can never slump, and more than 80% of cells are terrace tops.
+- At RTS height the hills now read as concentric terrace contours on smooth land, which is what
+  section 1 describes.
+
+### Bulking (reference section 2)
+- `MaterialDefinition.BulkingFactor`: Rock and Granite 1.5, Clay 1.3 (my pick; the reference
+  does not list clay), Dirt and Topsoil 1.25, Sand 1.1, loose variants 1.0. Values below 1 are
+  rejected.
+- `Remove` takes an in-place volume (how far the surface drops) and reports loose volume. The
+  brush reports both: "Dug 486 m³ -> 721 m³ loose".
+- **Slump does not bulk** (`Remove(..., bulk: false)`). A 1 m slide would otherwise produce
+  1.25 m, and `Add` rounds that to 1 m, silently losing material. Bulking happens once, when
+  ground is dug. This is a deliberate deviation for the height grid.
+
+### Thin-layer bias: loose material only (reference section 3)
+The reference says the bias is for a thin layer of **loose** material, and that digging
+straight down without stepping the edges makes the walls slump in. The previous build applied
+the bias to any thin top layer, so the 0.3 m topsoil cap held up every cut wall. Only
+`IsLoose` materials (loose rock, loose dirt, sand) get the bias now. The test
+`DiggingStraightDownMakesTheWallsSlumpIn` digs an unstepped 3 m pit in dirt and checks that the
+rim comes down into it.
+
+### Palette
+Rock, granite and loose rock are about 25% darker. In the first capture, a full sun plus
+ambient rendered them near-white, and a cut no longer read as rock. This is a rendering
+correction, not final art.
+
+### The same pit as before
+Same procedure: highest peak, radius 5, six 1 m digs, same camera offset. The peak is now 24 m
+on 14–17 m plains. 486 m³ dug in place came out as 721 m³ loose (680 loose rock, 30 dirt from
+topsoil, 10 loose dirt). The rock walls (80°) held; the topsoil and dirt at the rims slumped in.
+
+**Known close-up artefacts, not fixed:**
+- **Sawtooth rims:** where a quad's top colour (green) and exposed colour (grey) differ, the
+  per-fragment steepness blend follows the interpolated normal across the quad's two triangles,
+  giving triangular teeth along pit edges. At RTS distance this reads as a blocky outline. The
+  fixes would be blending on a per-corner steepness weight, or moving to texture-based
+  triplanar (reference "Later").
+- **Edge lines inside pits** trace every change of top material (rock, loose rock, loose dirt)
+  across the floor. That is correct by the rule, but busy.

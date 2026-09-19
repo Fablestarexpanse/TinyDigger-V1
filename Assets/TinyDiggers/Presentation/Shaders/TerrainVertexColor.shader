@@ -1,10 +1,13 @@
-// Flat low-poly terrain lit by the main light's N.L plus ambient from spherical harmonics. No
-// textures, no shadows — placeholder lighting for the terrain slice, not final art.
+// Terrain look per TERRAIN_REFERENCE.md section 5 ("Now"): no textures yet.
 //
-// Colour: the vertex colour is the top material, and UV1 carries the colour of the layer a
-// steep face cuts through. Faces steeper than about 45 degrees blend from the first to the
-// second, so a cut shows what is under the topsoil. A cheap stand-in for the triplanar blend a
-// textured version would do.
+// - Colour: the vertex colour is the top material; UV1 carries the colour of the layer a steep
+//   face cuts through. Faces past _SteepStart degrees blend towards it, fully by _SteepEnd.
+// - Grain: three octaves of world-space value noise, finest at _GrainScale metres, scale the
+//   colour by up to +-_GrainAmount so dirt and rock read as granular at RTS distance.
+// - Edges: UV2 flags quad sides whose neighbour has a different top material; a faint dark line
+//   is drawn along them. UV0 is the fragment's position within its cell.
+// - Lighting: main light N.L plus spherical-harmonic ambient on the interpolated, smooth normal.
+//   No shadows. Placeholder lighting, not final art.
 Shader "TinyDiggers/Terrain Vertex Color"
 {
     Properties
@@ -12,6 +15,10 @@ Shader "TinyDiggers/Terrain Vertex Color"
         _Tint ("Tint", Color) = (1, 1, 1, 1)
         _SteepStart ("Steep blend starts (degrees)", Range(0, 90)) = 40
         _SteepEnd ("Steep blend complete (degrees)", Range(0, 90)) = 50
+        _GrainScale ("Grain scale, finest octave (m)", Range(0.05, 2)) = 0.25
+        _GrainAmount ("Grain amount (fraction of colour)", Range(0, 0.3)) = 0.08
+        _EdgeDarken ("Material edge darkening", Range(0, 0.5)) = 0.12
+        _EdgeWidth ("Material edge width (cell fraction)", Range(0, 0.25)) = 0.04
     }
 
     SubShader
@@ -30,6 +37,10 @@ Shader "TinyDiggers/Terrain Vertex Color"
             half4 _Tint;
             half _SteepStart;
             half _SteepEnd;
+            float _GrainScale;
+            half _GrainAmount;
+            half _EdgeDarken;
+            half _EdgeWidth;
         CBUFFER_END
         ENDHLSL
 
@@ -49,15 +60,20 @@ Shader "TinyDiggers/Terrain Vertex Color"
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
                 half4 color : COLOR;
+                float2 local : TEXCOORD0;
                 half4 exposed : TEXCOORD1;
+                half4 edges : TEXCOORD2;
             };
 
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
-                half3 normalWS : TEXCOORD0;
-                half3 color : TEXCOORD1;
-                half3 exposed : TEXCOORD2;
+                float3 positionWS : TEXCOORD0;
+                half3 normalWS : TEXCOORD1;
+                half3 color : TEXCOORD2;
+                half3 exposed : TEXCOORD3;
+                float2 local : TEXCOORD4;
+                nointerpolation half4 edges : TEXCOORD5;
             };
 
             half3 ToWorkingSpace(half3 srgb)
@@ -71,13 +87,56 @@ Shader "TinyDiggers/Terrain Vertex Color"
                 #endif
             }
 
+            // Integer-lattice hash (Hoskins' hash13): stable at world coordinates in the hundreds,
+            // unlike frac(sin(...)).
+            float Hash(float3 p)
+            {
+                p = frac(p * 0.1031);
+                p += dot(p, p.zyx + 31.32);
+                return frac((p.x + p.y) * p.z);
+            }
+
+            // 3D value noise in [-1, 1]. Three-dimensional so vertical cut faces get grain too,
+            // not stretched streaks.
+            float ValueNoise(float3 p)
+            {
+                float3 cell = floor(p);
+                float3 f = frac(p);
+                float3 u = f * f * (3.0 - 2.0 * f);
+                float n000 = Hash(cell);
+                float n100 = Hash(cell + float3(1, 0, 0));
+                float n010 = Hash(cell + float3(0, 1, 0));
+                float n110 = Hash(cell + float3(1, 1, 0));
+                float n001 = Hash(cell + float3(0, 0, 1));
+                float n101 = Hash(cell + float3(1, 0, 1));
+                float n011 = Hash(cell + float3(0, 1, 1));
+                float n111 = Hash(cell + float3(1, 1, 1));
+                float n = lerp(
+                    lerp(lerp(n000, n100, u.x), lerp(n010, n110, u.x), u.y),
+                    lerp(lerp(n001, n101, u.x), lerp(n011, n111, u.x), u.y),
+                    u.z);
+                return n * 2.0 - 1.0;
+            }
+
+            // Octaves at 4x, 2x and 1x the finest scale, weighted towards the finest so the grain
+            // reads at 0.25 m while the coarser ones break up repetition. Result in [-1, 1].
+            float Grain(float3 positionWS)
+            {
+                float3 p = positionWS / _GrainScale;
+                return ValueNoise(p) * 0.5 + ValueNoise(p * 0.5 + 17.3) * 0.3 + ValueNoise(p * 0.25 + 41.7) * 0.2;
+            }
+
             Varyings Vert(Attributes input)
             {
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                VertexPositionInputs position = GetVertexPositionInputs(input.positionOS.xyz);
+                output.positionCS = position.positionCS;
+                output.positionWS = position.positionWS;
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
                 output.color = ToWorkingSpace(input.color.rgb) * _Tint.rgb;
                 output.exposed = ToWorkingSpace(input.exposed.rgb) * _Tint.rgb;
+                output.local = input.local;
+                output.edges = input.edges;
                 return output;
             }
 
@@ -88,6 +147,16 @@ Shader "TinyDiggers/Terrain Vertex Color"
                 // normal.y is the cosine of the slope angle: 1 flat, 0 vertical.
                 half steepness = 1.0h - smoothstep(cos(radians(_SteepEnd)), cos(radians(_SteepStart)), normalWS.y);
                 half3 albedo = lerp(input.color, input.exposed, steepness);
+
+                albedo *= 1.0h + _GrainAmount * (half)Grain(input.positionWS);
+
+                // Distance to each flagged side of the cell, in cell units; unflagged sides are
+                // pushed far away. fwidth keeps the line at least a pixel wide and anti-aliased.
+                float2 uv = input.local;
+                float4 toEdge = float4(uv.x, 1.0 - uv.x, uv.y, 1.0 - uv.y) + (1.0 - input.edges) * 10.0;
+                float nearest = min(min(toEdge.x, toEdge.y), min(toEdge.z, toEdge.w));
+                float width = max(_EdgeWidth, fwidth(nearest));
+                albedo *= 1.0h - _EdgeDarken * (half)(1.0 - smoothstep(0.0, width, nearest));
 
                 Light mainLight = GetMainLight();
                 half diffuse = saturate(dot(normalWS, mainLight.direction));

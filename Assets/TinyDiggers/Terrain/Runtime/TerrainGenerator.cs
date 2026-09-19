@@ -4,9 +4,12 @@ using UnityEngine;
 namespace TinyDiggers.Terrain
 {
     /// <summary>
-    /// Temporary test terrain: a gently rolling plain with a few hills, layered bedrock, then
-    /// granite in the hill cores, then rock, then a dirt and topsoil cap. The soil thins out over
-    /// the hills so that digging there reaches rock within a click or two.
+    /// Temporary test terrain: broad plateaus from large, low-frequency noise, plus a few wide
+    /// hills 4-8 m high, so that at a 1 m height step the land reads as wide terraces
+    /// (TERRAIN_REFERENCE.md section 1.2). There is deliberately no small-scale noise: it would
+    /// fray the terrace edges into single-cell speckle. Layered bedrock, then granite in the hill
+    /// cores, then rock, then a dirt and topsoil cap. The soil thins over the hills so that
+    /// digging there reaches rock quickly.
     ///
     /// Deterministic for a given seed and grid size. Surfaces land on the grid's
     /// <see cref="TerrainGrid.HeightStep"/> when it has one; layer boundaries inside a column
@@ -21,7 +24,18 @@ namespace TinyDiggers.Terrain
         const float MinLayerThickness = 0.05f;
 
         /// <summary>Plain surface sits this far above the bedrock before noise and hills.</summary>
-        const float BaseRockDepth = 5f;
+        const float BaseRockDepth = 6f;
+
+        /// <summary>Cycles per cell of the plateau noise: one broad rise every ~170 cells.</summary>
+        const float PlateauFrequency = 0.006f;
+
+        /// <summary>Peak-to-peak metres of the plateau noise: three or four terrace levels across the map.</summary>
+        const float PlateauRange = 4f;
+
+        /// <summary>A second, smaller octave so plateau edges wander instead of following smooth ovals.</summary>
+        const float EdgeFrequency = 0.015f;
+
+        const float EdgeRange = 1.5f;
 
         const float SoilOnPlains = 2.5f;
         const float SoilOnHilltops = 0.4f;
@@ -51,17 +65,17 @@ namespace TinyDiggers.Terrain
             var offsetZ = (float)random.NextDouble() * 1000f;
 
             var shortSide = Math.Min(grid.Width, grid.Height);
-            var hills = new Hill[2 + random.Next(2)];
+            var hills = new Hill[2 + random.Next(3)];
             for (var i = 0; i < hills.Length; i++)
             {
-                // Steep enough to read as hills from RTS camera height; gentler ones vanished.
-                var radius = shortSide * Lerp(0.04f, 0.07f, (float)random.NextDouble());
+                // Wide and low: 4-8 terraces at the 1 m step, each terrace ring several cells deep.
+                var radius = shortSide * Lerp(0.08f, 0.15f, (float)random.NextDouble());
                 hills[i] = new Hill
                 {
                     X = grid.Width * Lerp(0.2f, 0.8f, (float)random.NextDouble()),
                     Z = grid.Height * Lerp(0.2f, 0.8f, (float)random.NextDouble()),
                     InverseRadiusSquared = 1f / (radius * radius),
-                    Height = Lerp(16f, 24f, (float)random.NextDouble()),
+                    Height = Lerp(4f, 8f, (float)random.NextDouble()),
                 };
             }
 
@@ -78,9 +92,9 @@ namespace TinyDiggers.Terrain
                         hill += h.Height * (float)Math.Exp(-(dx * dx + dz * dz) * h.InverseRadiusSquared);
                     }
 
-                    var rolling = (Mathf.PerlinNoise(offsetX + x * 0.02f, offsetZ + z * 0.02f) - 0.5f) * 3f;
-                    var detail = (Mathf.PerlinNoise(offsetZ + x * 0.09f, offsetX + z * 0.09f) - 0.5f) * 0.6f;
-                    var surface = BedrockThickness + BaseRockDepth + rolling + detail + hill;
+                    var plateau = (Mathf.PerlinNoise(offsetX + x * PlateauFrequency, offsetZ + z * PlateauFrequency) - 0.5f) * PlateauRange;
+                    var edges = (Mathf.PerlinNoise(offsetZ + x * EdgeFrequency, offsetX + z * EdgeFrequency) - 0.5f) * EdgeRange;
+                    var surface = BedrockThickness + BaseRockDepth + plateau + edges + hill;
                     // Snap to the grid's height step; the rock layer absorbs the difference, so
                     // the soil thicknesses stay as designed and only the surface moves.
                     if (grid.HeightStep > 0f)

@@ -82,9 +82,41 @@ namespace TinyDiggers.Terrain.Tests
                 soil += layer.Thickness;
             }
 
-            Assert.That(grid.GetSurfaceHeight(peakX, peakZ), Is.GreaterThan(TerrainGenerator.BedrockThickness + 10f),
-                "expected at least one real hill");
+            var mean = 0f;
+            for (var z = 0; z < grid.Height; z++)
+                for (var x = 0; x < grid.Width; x++)
+                    mean += grid.GetSurfaceHeight(x, z);
+            mean /= grid.Width * grid.Height;
+
+            Assert.That(grid.GetSurfaceHeight(peakX, peakZ), Is.GreaterThan(mean + 3f), "expected at least one real hill");
             Assert.That(soil, Is.LessThanOrEqualTo(1f));
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public void AtGameScaleNeighboursNeverDifferByMoreThanOneStep(int seed)
+        {
+            // Terraces one step high are what make the land read as plateaus, and a single step
+            // can never slump, so freshly generated ground is stable.
+            var grid = new TerrainGrid(256, 256, MaterialTable.CreateDefault(), heightStep: 1f);
+            TerrainGenerator.Generate(grid, seed);
+
+            var flat = 0;
+            for (var z = 0; z < grid.Height - 1; z++)
+            {
+                for (var x = 0; x < grid.Width - 1; x++)
+                {
+                    var h = grid.GetSurfaceHeight(x, z);
+                    var east = Mathf.Abs(h - grid.GetSurfaceHeight(x + 1, z));
+                    var north = Mathf.Abs(h - grid.GetSurfaceHeight(x, z + 1));
+                    Assert.That(Mathf.Max(east, north), Is.LessThanOrEqualTo(1f + 1e-3f), $"cell ({x}, {z})");
+                    if (east < 1e-3f && north < 1e-3f)
+                        flat++;
+                }
+            }
+
+            Assert.That(flat, Is.GreaterThan(255 * 255 * 0.8f), "most of the land should be terrace tops, not risers");
         }
 
         [Test]

@@ -202,17 +202,28 @@ namespace TinyDiggers.Presentation
     }
 
     /// <summary>
-    /// Scratch geometry for one chunk. Every quad carries two colours: the vertex colour, which
-    /// is what a gentle face shows, and an "exposed" colour in UV1, which the terrain shader
-    /// blends towards on steep faces. The lists keep their capacity, so after the first few
-    /// builds rebuilding allocates nothing on the managed heap.
+    /// Scratch geometry for one chunk. Every quad carries:
+    /// - the vertex colour, which is what a gentle face shows;
+    /// - UV0, the vertex's position within the quad (0..1 on each axis);
+    /// - UV1, an "exposed" colour the terrain shader blends towards on steep faces;
+    /// - UV2, which of the quad's edges (west, east, south, north) border a different top
+    ///   material, for the shader's faint edge line.
+    /// The lists keep their capacity, so after the first few builds rebuilding allocates nothing
+    /// on the managed heap.
     /// </summary>
     public sealed class TerrainMeshBuilder
     {
+        static readonly Vector2 CornerA = new Vector2(0f, 0f);
+        static readonly Vector2 CornerB = new Vector2(0f, 1f);
+        static readonly Vector2 CornerC = new Vector2(1f, 1f);
+        static readonly Vector2 CornerD = new Vector2(1f, 0f);
+
         readonly List<Vector3> _vertices;
         readonly List<Vector3> _normals;
         readonly List<Color32> _colors;
+        readonly List<Vector2> _local;
         readonly List<Vector4> _exposed;
+        readonly List<Vector4> _edges;
         readonly List<int> _triangles;
         float _minY;
         float _maxY;
@@ -224,7 +235,9 @@ namespace TinyDiggers.Presentation
             _vertices = new List<Vector3>(initialVertexCapacity);
             _normals = new List<Vector3>(initialVertexCapacity);
             _colors = new List<Color32>(initialVertexCapacity);
+            _local = new List<Vector2>(initialVertexCapacity);
             _exposed = new List<Vector4>(initialVertexCapacity);
+            _edges = new List<Vector4>(initialVertexCapacity);
             _triangles = new List<int>(initialVertexCapacity / 4 * 6);
         }
 
@@ -235,7 +248,9 @@ namespace TinyDiggers.Presentation
             _vertices.Clear();
             _normals.Clear();
             _colors.Clear();
+            _local.Clear();
             _exposed.Clear();
+            _edges.Clear();
             _triangles.Clear();
             _minY = float.MaxValue;
             _maxY = float.MinValue;
@@ -243,20 +258,41 @@ namespace TinyDiggers.Presentation
             _maxZ = 0f;
         }
 
-        /// <summary>Corners in clockwise order as seen from the front, which is Unity's front face.</summary>
+        /// <summary>A flat-shaded quad with no edge lines. Corners clockwise as seen from the front.</summary>
         public void AddQuad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal, Color32 color, Color32 exposed)
+        {
+            AddQuad(a, b, c, d, normal, normal, normal, normal, color, exposed, Vector4.zero);
+        }
+
+        /// <summary>
+        /// A quad with a normal per corner. Corners clockwise as seen from the front, which is
+        /// Unity's front face; for a terrain top that is (i, j), (i, j+1), (i+1, j+1), (i+1, j).
+        /// <paramref name="edges"/> flags the west, east, south and north edges (1 = draw a line).
+        /// </summary>
+        public void AddQuad(
+            Vector3 a, Vector3 b, Vector3 c, Vector3 d,
+            Vector3 normalA, Vector3 normalB, Vector3 normalC, Vector3 normalD,
+            Color32 color, Color32 exposed, Vector4 edges)
         {
             var first = _vertices.Count;
             _vertices.Add(a);
             _vertices.Add(b);
             _vertices.Add(c);
             _vertices.Add(d);
+            _normals.Add(normalA);
+            _normals.Add(normalB);
+            _normals.Add(normalC);
+            _normals.Add(normalD);
+            _local.Add(CornerA);
+            _local.Add(CornerB);
+            _local.Add(CornerC);
+            _local.Add(CornerD);
             var exposedValue = new Vector4(exposed.r / 255f, exposed.g / 255f, exposed.b / 255f, 1f);
             for (var k = 0; k < 4; k++)
             {
-                _normals.Add(normal);
                 _colors.Add(color);
                 _exposed.Add(exposedValue);
+                _edges.Add(edges);
             }
 
             _triangles.Add(first);
@@ -280,7 +316,9 @@ namespace TinyDiggers.Presentation
             mesh.SetVertices(_vertices);
             mesh.SetNormals(_normals);
             mesh.SetColors(_colors);
+            mesh.SetUVs(0, _local);
             mesh.SetUVs(1, _exposed);
+            mesh.SetUVs(2, _edges);
             mesh.SetTriangles(_triangles, 0, false);
             if (_vertices.Count > 0)
             {

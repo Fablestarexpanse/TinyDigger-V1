@@ -18,8 +18,10 @@ namespace TinyDiggers.Terrain
     /// top material's effective angle. Checking all eight, not only the lowest, makes collapses
     /// spread in round patterns rather than along the grid axes.
     ///
-    /// The effective angle is steepened for thin top layers (<see cref="ThinLayerDepth"/>), so a
-    /// skin of loose material clings to a slope instead of all of it sliding to the bottom.
+    /// The effective angle is steepened for thin loose top layers (<see cref="ThinLayerDepth"/>), so
+    /// a skin of loose material clings to a slope instead of all of it sliding to the bottom.
+    ///
+    /// Slides are not bulked: bulking happens once, when ground is dug.
     ///
     /// Deterministic: a FIFO queue, a fixed neighbour order and no randomness.
     /// </summary>
@@ -96,12 +98,16 @@ namespace TinyDiggers.Terrain
 
         /// <summary>
         /// The angle at which this cell's top layer gives way: its material's angle of repose,
-        /// raised towards vertical when the layer is thinner than <see cref="ThinLayerDepth"/>.
+        /// raised towards vertical when it is loose material thinner than
+        /// <see cref="ThinLayerDepth"/>. Undisturbed ground gets no bias: a thin topsoil cap does
+        /// not hold up a cut wall, so digging straight down without stepping the edges makes the
+        /// walls slump in (TERRAIN_REFERENCE.md section 3).
         /// </summary>
         public float EffectiveAngle(MaterialId material, float thickness)
         {
-            var repose = _grid.Materials.Get(material).AngleOfRepose;
-            if (repose >= NeverSlumps || ThinLayerDepth <= 0f)
+            var definition = _grid.Materials.Get(material);
+            var repose = definition.AngleOfRepose;
+            if (repose >= NeverSlumps || ThinLayerDepth <= 0f || !definition.IsLoose)
                 return repose;
 
             var thinness = 1f - Math.Min(Math.Max(thickness / ThinLayerDepth, 0f), 1f);
@@ -196,7 +202,9 @@ namespace TinyDiggers.Terrain
             if (!TargetCanTake(x, z, count, nx, nz, unit))
                 return;
 
-            var pieces = _grid.Remove(x, z, unit, _moved);
+            // Unbulked: a slide moves one step off the source and lands one step on the target, so
+            // both stay on the height grid and total volume is conserved.
+            var pieces = _grid.Remove(x, z, unit, _moved, bulk: false);
             for (var i = 0; i < pieces; i++)
                 _grid.Add(nx, nz, _moved[i].Material, _moved[i].Volume);
         }

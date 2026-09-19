@@ -73,7 +73,7 @@ namespace TinyDiggers.Interaction
         void Dig(TerrainGrid grid, int x, int z)
         {
             Array.Clear(_removedByMaterial, 0, _removedByMaterial.Length);
-            var total = TerrainBrush.Dig(grid, x, z, _terrain.BrushRadius, _volumePerCell, _removedByMaterial);
+            var total = TerrainBrush.Dig(grid, x, z, _terrain.BrushRadius, _volumePerCell, _removedByMaterial, out var inPlace);
 
             _summary.Clear();
             if (total <= 0f)
@@ -82,7 +82,9 @@ namespace TinyDiggers.Interaction
             }
             else
             {
-                _summary.Append("Dug ").Append(total.ToString("0.0")).Append(" m3:");
+                // In-place volume is the hole; loose is what it swelled to once dug.
+                _summary.Append("Dug ").Append(inPlace.ToString("0.0"))
+                    .Append(" m3 -> ").Append(total.ToString("0.0")).Append(" m3 loose:");
                 for (var id = 0; id < _removedByMaterial.Length; id++)
                 {
                     if (_removedByMaterial[id] <= 0f)

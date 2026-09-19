@@ -148,7 +148,7 @@ namespace TinyDiggers.Terrain.Tests
 
             Assert.That(count, Is.EqualTo(1));
             Assert.That(removed[0].Material, Is.EqualTo(MaterialTable.Dirt), "dug topsoil comes out as its disturbed form, dirt");
-            Assert.That(removed[0].Volume, Is.EqualTo(0.25f).Within(Tolerance));
+            Assert.That(removed[0].Volume, Is.EqualTo(0.25f * 1.25f).Within(Tolerance), "topsoil bulks by 1.25");
             Assert.That(_grid.GetSurfaceHeight(0, 0), Is.EqualTo(14.25f).Within(Tolerance));
             Assert.That(_grid.GetLayerCount(0, 0), Is.EqualTo(4), "a partly dug layer stays on the stack");
         }
@@ -163,9 +163,9 @@ namespace TinyDiggers.Terrain.Tests
 
             Assert.That(count, Is.EqualTo(2));
             Assert.That(removed[0].Material, Is.EqualTo(MaterialTable.Dirt));
-            Assert.That(removed[0].Volume, Is.EqualTo(0.5f).Within(Tolerance));
+            Assert.That(removed[0].Volume, Is.EqualTo(0.5f * 1.25f).Within(Tolerance));
             Assert.That(removed[1].Material, Is.EqualTo(MaterialTable.RockLoose));
-            Assert.That(removed[1].Volume, Is.EqualTo(1f).Within(Tolerance));
+            Assert.That(removed[1].Volume, Is.EqualTo(1f * 1.5f).Within(Tolerance));
             Assert.That(_grid.GetSurfaceHeight(0, 0), Is.EqualTo(13f).Within(Tolerance));
             // The 1m of rock was exactly consumed, so the granite beneath it is now the surface.
             Assert.That(_grid.GetTopMaterial(0, 0), Is.EqualTo(MaterialTable.Granite));
@@ -210,7 +210,8 @@ namespace TinyDiggers.Terrain.Tests
             foreach (var entry in removed)
                 total += entry.Volume;
 
-            Assert.That(total, Is.EqualTo(4.5f).Within(Tolerance));
+            // 4.5m in place: 0.5 topsoil at 1.25x, then 4m of rock and granite at 1.5x.
+            Assert.That(total, Is.EqualTo(0.5f * 1.25f + 4f * 1.5f).Within(Tolerance));
             Assert.That(_grid.GetSurfaceHeight(0, 0), Is.EqualTo(10f).Within(Tolerance));
             Assert.That(_grid.GetTopMaterial(0, 0), Is.EqualTo(MaterialTable.Bedrock));
         }
@@ -263,7 +264,7 @@ namespace TinyDiggers.Terrain.Tests
 
             Assert.That(count, Is.EqualTo(1));
             Assert.That(removed[0].Material, Is.EqualTo(MaterialTable.DirtLoose));
-            Assert.That(removed[0].Volume, Is.EqualTo(2f).Within(Tolerance));
+            Assert.That(removed[0].Volume, Is.EqualTo(2f * 1.25f).Within(Tolerance));
         }
 
         [Test]
@@ -282,12 +283,26 @@ namespace TinyDiggers.Terrain.Tests
         }
 
         [Test]
-        public void RemoveThenAddRestoresTheOriginalHeight()
+        public void TippingDugMaterialBackLeavesAHeapBecauseItBulked()
         {
             SetTestColumn(0, 0);
             var removed = new List<MaterialVolume>();
 
             _grid.Remove(0, 0, 2f, removed);
+            foreach (var entry in removed)
+                _grid.Add(0, 0, entry.Material, entry.Volume);
+
+            // 2m dug: 0.5 topsoil (x1.25), 1 rock and 0.5 granite (x1.5) come back as 2.875m loose.
+            Assert.That(_grid.GetSurfaceHeight(0, 0), Is.EqualTo(12.5f + 2.875f).Within(Tolerance));
+        }
+
+        [Test]
+        public void UnbulkedRemoveThenAddRestoresTheOriginalHeight()
+        {
+            SetTestColumn(0, 0);
+            var removed = new List<MaterialVolume>();
+
+            _grid.Remove(0, 0, 2f, removed, bulk: false);
             foreach (var entry in removed)
                 _grid.Add(0, 0, entry.Material, entry.Volume);
 
@@ -414,6 +429,37 @@ namespace TinyDiggers.Terrain.Tests
             Assert.That(table.Get(MaterialTable.DirtLoose).AngleOfRepose, Is.LessThan(table.Get(MaterialTable.Dirt).AngleOfRepose));
         }
 
+        [TestCase(3, 1.5f)] // Rock
+        [TestCase(2, 1.5f)] // Granite
+        [TestCase(5, 1.25f)] // Dirt
+        [TestCase(7, 1.25f)] // Topsoil
+        [TestCase(6, 1.1f)] // Sand
+        [TestCase(8, 1f)] // RockLoose is already loose
+        [TestCase(9, 1f)] // DirtLoose is already loose
+        public void BulkingFactorsFollowTheReference(int id, float expected)
+        {
+            Assert.That(MaterialTable.CreateDefault().Get(new MaterialId((byte)id)).BulkingFactor, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void OnlyLooseMaterialsAreMarkedLoose()
+        {
+            var table = MaterialTable.CreateDefault();
+
+            Assert.That(table.Get(MaterialTable.RockLoose).IsLoose, Is.True);
+            Assert.That(table.Get(MaterialTable.DirtLoose).IsLoose, Is.True);
+            Assert.That(table.Get(MaterialTable.Sand).IsLoose, Is.True);
+            Assert.That(table.Get(MaterialTable.Topsoil).IsLoose, Is.False);
+            Assert.That(table.Get(MaterialTable.Rock).IsLoose, Is.False);
+        }
+
+        [Test]
+        public void ABulkingFactorBelowOneIsRejected()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => new MaterialDefinition(new MaterialId(1), "A", default, 0f, 45f, bulkingFactor: 0.9f));
+        }
+
         [Test]
         public void ATableThatDisturbsIntoAMissingMaterialIsRejected()
         {
@@ -434,7 +480,7 @@ namespace TinyDiggers.Terrain.Tests
             Assert.That(grid.Add(0, 0, MaterialTable.Dirt, 1.6f), Is.EqualTo(2f).Within(Tolerance));
             grid.Remove(0, 0, 1.4f, removed);
 
-            Assert.That(removed[0].Volume, Is.EqualTo(1f).Within(Tolerance));
+            Assert.That(removed[0].Volume, Is.EqualTo(1f).Within(Tolerance), "one whole step of the tipped loose dirt, which does not bulk again");
             Assert.That(grid.GetSurfaceHeight(0, 0), Is.EqualTo(7f).Within(Tolerance));
         }
 

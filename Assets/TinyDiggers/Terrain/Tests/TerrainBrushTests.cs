@@ -58,12 +58,14 @@ namespace TinyDiggers.Terrain.Tests
         [Test]
         public void DigTotalsWhatCameOutByMaterial()
         {
-            // 5 cells x 1m: 0.5 topsoil and 0.5 dirt from each, reported in their disturbed forms.
-            var total = TerrainBrush.Dig(_grid, 5, 5, 1, 1f, _removed);
+            // 5 cells x 1m in place: 0.5 topsoil and 0.5 dirt from each, reported loose (x1.25)
+            // in their disturbed forms.
+            var total = TerrainBrush.Dig(_grid, 5, 5, 1, 1f, _removed, out var inPlace);
 
-            Assert.That(total, Is.EqualTo(5f).Within(Tolerance));
-            Assert.That(_removed[MaterialTable.Dirt.Value], Is.EqualTo(2.5f).Within(Tolerance), "from topsoil");
-            Assert.That(_removed[MaterialTable.DirtLoose.Value], Is.EqualTo(2.5f).Within(Tolerance), "from dirt");
+            Assert.That(inPlace, Is.EqualTo(5f).Within(Tolerance));
+            Assert.That(total, Is.EqualTo(5f * 1.25f).Within(Tolerance));
+            Assert.That(_removed[MaterialTable.Dirt.Value], Is.EqualTo(2.5f * 1.25f).Within(Tolerance), "from topsoil");
+            Assert.That(_removed[MaterialTable.DirtLoose.Value], Is.EqualTo(2.5f * 1.25f).Within(Tolerance), "from dirt");
         }
 
         [Test]
@@ -72,15 +74,16 @@ namespace TinyDiggers.Terrain.Tests
             TerrainBrush.Dig(_grid, 5, 5, 0, 0.25f, _removed);
             TerrainBrush.Dig(_grid, 5, 5, 0, 0.25f, _removed);
 
-            Assert.That(_removed[MaterialTable.Dirt.Value], Is.EqualTo(0.5f).Within(Tolerance));
+            Assert.That(_removed[MaterialTable.Dirt.Value], Is.EqualTo(0.5f * 1.25f).Within(Tolerance));
         }
 
         [Test]
         public void DigStopsAtBedrock()
         {
-            var total = TerrainBrush.Dig(_grid, 5, 5, 0, 100f, _removed);
+            var total = TerrainBrush.Dig(_grid, 5, 5, 0, 100f, _removed, out var inPlace);
 
-            Assert.That(total, Is.EqualTo(1.5f).Within(Tolerance));
+            Assert.That(inPlace, Is.EqualTo(1.5f).Within(Tolerance));
+            Assert.That(total, Is.EqualTo(1.5f * 1.25f).Within(Tolerance));
             Assert.That(_grid.GetSurfaceHeight(5, 5), Is.EqualTo(5f).Within(Tolerance));
             Assert.That(TerrainBrush.Dig(_grid, 5, 5, 0, 1f, _removed), Is.EqualTo(0f));
         }

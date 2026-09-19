@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using TinyDiggers.Terrain;
 using UnityEngine;
+using UnityEngine.TestTools.Utils;
 
 namespace TinyDiggers.Presentation.Tests
 {
@@ -92,6 +93,106 @@ namespace TinyDiggers.Presentation.Tests
             Assert.That(_renderer.PendingChunkCount, Is.EqualTo(4));
         }
 
+        [Test]
+        public void EditingACellTwoFromAChunkEdgeStillDirtiesTheNeighbour()
+        {
+            // Cell 30 moves corner 31, whose height feeds the normal at corner 32, the first
+            // column of chunk 1.
+            _grid.Add(30, 10, MaterialTable.Dirt, 1f);
+
+            Assert.That(_renderer.PendingChunkCount, Is.EqualTo(2));
+        }
+
+        // --- normals ---------------------------------------------------------------------------
+
+        [Test]
+        public void NormalsAtChunkEdgesMatchAnUnchunkedMesh()
+        {
+            // Rough ground across the chunk borders: a ramp plus a lump that straddles x = 32.
+            for (var z = 0; z < _grid.Height; z++)
+                for (var x = 0; x < _grid.Width; x++)
+                    _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Dirt, 2f + x * 0.1f + (x - 32) * (x - 32) % 3) });
+            _renderer.Rebuild();
+
+            var root = new GameObject("Unchunked");
+            // Chunk size 127 covers the whole 70x40 grid in one chunk: no borders at all.
+            var unchunked = new SmoothedTerrainRenderer(_grid, root.transform, null, 127);
+            try
+            {
+                Assert.That(unchunked.ChunkCountX * unchunked.ChunkCountZ, Is.EqualTo(1));
+                var whole = unchunked.GetChunkMesh(0, 0);
+                var wholeNormals = whole.normals;
+
+                // Every cell along the x = 32 border, on both sides, and along z = 32.
+                var checkedVertices = 0;
+                for (var z = 0; z < _grid.Height; z++)
+                {
+                    foreach (var x in new[] { 31, 32 })
+                    {
+                        var chunkX = x / ChunkSize;
+                        var chunkZ = z / ChunkSize;
+                        var chunked = _renderer.GetChunkMesh(chunkX, chunkZ).normals;
+                        var local = ((z - chunkZ * ChunkSize) * ChunkWidth(chunkX) + (x - chunkX * ChunkSize)) * 4;
+                        var global = (z * _grid.Width + x) * 4;
+                        for (var k = 0; k < 4; k++, checkedVertices++)
+                            Assert.That(chunked[local + k], Is.EqualTo(wholeNormals[global + k]).Using(Vector3EqualityComparer.Instance),
+                                $"cell ({x}, {z}) corner {k}");
+                    }
+                }
+
+                for (var x = 0; x < _grid.Width; x++)
+                {
+                    foreach (var z in new[] { 31, 32 })
+                    {
+                        if (z >= _grid.Height)
+                            continue;
+                        var chunkX = x / ChunkSize;
+                        var chunkZ = z / ChunkSize;
+                        var chunked = _renderer.GetChunkMesh(chunkX, chunkZ).normals;
+                        var local = ((z - chunkZ * ChunkSize) * ChunkWidth(chunkX) + (x - chunkX * ChunkSize)) * 4;
+                        var global = (z * _grid.Width + x) * 4;
+                        for (var k = 0; k < 4; k++, checkedVertices++)
+                            Assert.That(chunked[local + k], Is.EqualTo(wholeNormals[global + k]).Using(Vector3EqualityComparer.Instance),
+                                $"cell ({x}, {z}) corner {k}");
+                    }
+                }
+
+                Assert.That(checkedVertices, Is.GreaterThan(500));
+            }
+            finally
+            {
+                unchunked.Dispose();
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void NormalsFollowTheSlopeOfTheGround()
+        {
+            // A uniform ramp rising 0.5m per cell along +x: interior normals lean back towards -x.
+            for (var z = 0; z < _grid.Height; z++)
+                for (var x = 0; x < _grid.Width; x++)
+                    _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Dirt, 1f + 0.5f * x) });
+            _renderer.Rebuild();
+
+            var normal = _renderer.GetChunkMesh(0, 0).normals[Quad(10, 10)];
+            var expected = new Vector3(-0.5f, 1f, 0f).normalized;
+            Assert.That(normal, Is.EqualTo(expected).Using(Vector3EqualityComparer.Instance));
+        }
+
+        [Test]
+        public void NeighbouringQuadsShareNormalsAtTheirCommonCorner()
+        {
+            _grid.Add(10, 10, MaterialTable.Dirt, 4f);
+            _renderer.Rebuild();
+
+            // Corner (11, 11) is c for cell (10, 10) and a for cell (11, 11): smooth, not faceted.
+            var normals = _renderer.GetChunkMesh(0, 0).normals;
+            Assert.That(normals[Quad(10, 10) + 2], Is.EqualTo(normals[Quad(11, 11)]).Using(Vector3EqualityComparer.Instance));
+        }
+
+        int ChunkWidth(int chunkX) => Mathf.Min(ChunkSize, _grid.Width - chunkX * ChunkSize);
+
         // --- geometry --------------------------------------------------------------------------
 
         [Test]
@@ -166,6 +267,21 @@ namespace TinyDiggers.Presentation.Tests
             Assert.That(mesh.colors32[slope], Is.EqualTo(ColorOf(MaterialTable.Dirt)), "gentle-face colour is still the top");
             Assert.That(ExposedAt(mesh, slope), Is.EqualTo(ColorOf(MaterialTable.Rock)));
             Assert.That(mesh.colors32[Quad(10, 10)], Is.EqualTo(ColorOf(MaterialTable.Topsoil)));
+        }
+
+        [Test]
+        public void EdgeFlagsMarkSidesWhereTheTopMaterialChanges()
+        {
+            _grid.Add(5, 5, MaterialTable.Sand, 1f);
+            _renderer.Rebuild();
+
+            var edges = new List<Vector4>();
+            var mesh = _renderer.GetChunkMesh(0, 0);
+            mesh.GetUVs(2, edges);
+
+            Assert.That(edges[Quad(5, 5)], Is.EqualTo(new Vector4(1f, 1f, 1f, 1f)), "sand surrounded by dirt on all four sides");
+            Assert.That(edges[Quad(6, 5)], Is.EqualTo(new Vector4(1f, 0f, 0f, 0f)), "the dirt to the east only borders sand on its west");
+            Assert.That(edges[Quad(20, 20)], Is.EqualTo(Vector4.zero));
         }
 
         [Test]
