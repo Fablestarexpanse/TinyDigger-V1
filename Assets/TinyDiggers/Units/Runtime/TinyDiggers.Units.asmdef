@@ -1,11 +1,8 @@
 {
-    "name": "TinyDiggers.Interaction",
-    "rootNamespace": "TinyDiggers.Interaction",
+    "name": "TinyDiggers.Units",
+    "rootNamespace": "TinyDiggers.Units",
     "references": [
-        "TinyDiggers.Terrain",
-        "TinyDiggers.Presentation",
-        "TinyDiggers.Units",
-        "Unity.InputSystem"
+        "TinyDiggers.Terrain"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

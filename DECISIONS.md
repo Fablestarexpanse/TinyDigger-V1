@@ -5,10 +5,10 @@ this records why.
 
 ---
 
-**NEXT:** Terrain rendering is closed for now, per Ronan (green, 139/139). The sawtooth pit rims
-and busy pit-floor edge lines stay as they are until triplanar textures (reference section 5,
-"Later"). Nothing is in flight. Still owed: a frame-time check on a mid-range GPU (the readout's
-top line shows it); then Ronan's call on what comes next.
+**NEXT:** Vertical Slice 1 (spoil has to go somewhere) is done, green (163/163) and pushed on
+`main`. Work happens directly on `main`; commit and push after every green slice. Nothing is in
+flight. Terrain rendering stays closed. Still owed: a frame-time check on a mid-range GPU; then
+Ronan's call on the next slice.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -469,3 +469,87 @@ Ronan saw in the readout was taken during a 2560x1440 `ScreenCapture`, not durin
 
 If slump frames need to be cheaper still, the next lever is rebuilding only the dirty rows of a
 chunk rather than the whole chunk.
+
+## 2026-09-19 — Housekeeping, then Vertical Slice 1: spoil has to go somewhere
+
+### Housekeeping
+- Ronan's pending working-tree changes were committed as `chore: strip template files, project
+  settings`. That covers the deleted URP template TutorialInfo/Readme and the Hub helper, and
+  Unity's own ProjectSettings edits: the cloud project link, package define symbols and
+  QualitySettings serialisation. It also adds the AI Assistant package settings file, which was
+  checked first and holds no secrets.
+- `terrain/vertical-slice-0` was fast-forwarded into `main` without a checkout, so Unity never
+  saw files vanish, and `main` was pushed to origin. **Work now happens on `main`; commit and
+  push after every green slice.**
+- `.gitignore` is GitHub's standard Unity template. It covers Library/, Temp/, Logs/,
+  UserSettings/, obj/, *.csproj and *.sln, and none of those are tracked.
+
+### Slice 1 design
+Digging no longer deletes material: it goes into a crew's load and has to be tipped somewhere.
+New assembly `TinyDiggers.Units` (plain C#). It is not named `TinyDiggers.Crew`, because a class
+`Crew` inside a namespace `TinyDiggers.Crew` cannot be referenced from sibling namespaces: C#
+resolves the name to the namespace first.
+
+- **`MaterialInventory`:** loose m³ per material up to a capacity (default 5), with a per-material
+  dictionary plus a LIFO stack in dig order. Adding the same material as the top merges into it.
+  It has `Add` (throws when over capacity), `TryAdd` (all or nothing), `Remove(material)`
+  (newest first, from anywhere in the stack), and `TryPeekTop`/`RemoveFromTop` for tipping. A
+  `Version` counter lets the readout redraw only on change.
+- **`Crew`** owns one inventory. The scene has a placeholder `Crew` object (`CrewView`) with no
+  body and no movement.
+
+**Digging (left click)** goes cell by cell, the clicked cell first, then outward by distance.
+- Each cell is previewed with the new read-only `TerrainGrid.PeekRemove`, which applies the same
+  rounding and rules as `Remove`. The cell is dug only if its loose (bulked) output fits in the
+  space left.
+- Cells that would overflow are skipped whole, never part-dug, so material cannot vanish.
+- If no cell fits, the click does nothing and the readout says `Full: 1.1 m³ free, next dig
+  needs 1.3 m³`. "Full" means "nothing fits", which can happen with space still free.
+- Otherwise the readout says, for example, `Dug 3.0 m³ solid → 3.9 m³ loose (Rock, Dirt,
+  Topsoil); 10 cells did not fit`. The names are the materials as they were in the ground.
+
+**Tipping (right click)** empties the load onto the clicked cell in one go:
+- **In whole height steps of the total load.** The 1 m step means only whole metres can land.
+  Tipping per inventory entry was tried first and failed in play: a plains dig loads alternating
+  pieces of 0.375 dirt and 0.875 loose dirt, each under a step, so nothing would ever tip. Steps
+  are now built from the top of the load downward, and one step can mix pieces. The new
+  `TerrainGrid.AddStack` places several pieces at once and only requires their sum to be a whole
+  number of steps. It is all or nothing. Whatever is left under one step stays in the load (the
+  oldest material) and goes out with the next load.
+- **One tip mixes into one layer per landed material,** in the order each first appears, so the
+  newest material still lands lowest. This was also found in play: a hilltop load alternated loose
+  dirt and loose rock six times, and one layer per piece overflowed the 8-layer cap on a
+  generated 5-layer column. A tip now adds only as many layers as it has distinct materials,
+  usually two. If even that does not fit, nothing is tipped and the load is kept.
+- Tipped material lands in its disturbed form (dug topsoil is carried as dirt and lands as loose
+  dirt). Slump then runs as usual.
+
+**Readout:** it shows the load top first, marked "tips first", with fill level and free space,
+or "- Full". It is rebuilt only when the inventory's `Version` changes.
+
+### The acceptance test, and what "≤ the RockLoose angle" can mean
+`DugRockBulksIntoTheLoadAndTippedRockSlumpsToItsAngle`:
+- Digging 3 m³ of rock into an empty crew gives 4.5 m³ of RockLoose.
+- All of it is tipped on flat ground, and the terrain gains exactly 4.5 m³, before and after
+  slumping.
+- The pile settles so that every drop big enough to move is within RockLoose's effective angle.
+
+Two deliberate details:
+- It runs at a **0.5 m step**. At the game's 1 m step only 4 of the 4.5 m³ can land, and the
+  0.5 stays in the load. A separate test covers that case and checks nothing is lost.
+- "Within the angle" is the **effective** angle: 38° for thick loose rock, steeper for loose
+  skins thinner than 2 m (the thin-layer bias from reference section 3). A plain "every slope
+  ≤ 38°" is impossible by design at our step sizes: a one-step drop never moves, and thin skins
+  are meant to cling.
+
+### Verified in play, through the real mouse path
+Clicks were queued through the Input System, with runInBackground and input routing on for the
+run only.
+1. On a hilltop: `Dug 3.0 m³ solid → 3.9 m³ loose (Rock, Dirt, Topsoil); 10 cells did not fit`.
+2. Clicking again: `Full: 1.1 m³ free, next dig needs 1.3 m³`.
+3. Right click elsewhere: `Tipped 3.0 m³ (Loose rock, Loose dirt); 0.90 m³ kept (under one 1 m
+   step)`. The slump queue then emptied.
+
+Terrain plus load gained exactly 0.90 m³, the bulking; nothing was lost.
+
+Out of scope, as specified: units moving, pathfinding, designations and hardness gating.

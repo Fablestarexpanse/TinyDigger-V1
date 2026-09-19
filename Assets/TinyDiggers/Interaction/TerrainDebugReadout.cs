@@ -1,13 +1,14 @@
 using System.Text;
 using TinyDiggers.Presentation;
 using TinyDiggers.Terrain;
+using TinyDiggers.Units;
 using UnityEngine;
 
 namespace TinyDiggers.Interaction
 {
     /// <summary>
-    /// Top-left debug panel: frame time, controls, the hovered cell's stack, and what the last
-    /// click did. The text is rebuilt only when something in it changes, not every frame.
+    /// Top-left debug panel: frame time, controls, the crew's load, the hovered cell's stack, and
+    /// what the last click did. The text is rebuilt only when something in it changes, not every frame.
     /// </summary>
     public sealed class TerrainDebugReadout : MonoBehaviour
     {
@@ -15,8 +16,12 @@ namespace TinyDiggers.Interaction
 
         [SerializeField] TerrainView _terrain;
         [SerializeField] TerrainEditTool _tool;
+        [SerializeField] CrewView _crew;
 
         readonly TerrainCellReport _report = new TerrainCellReport();
+        readonly InventoryReport _loadReport = new InventoryReport();
+        string _load = "";
+        int _shownLoadVersion = -1;
         readonly StringBuilder _text = new StringBuilder(512);
 
         string _panel = "";
@@ -84,6 +89,14 @@ namespace TinyDiggers.Interaction
                 _panelChanged = true;
             }
 
+            var inventory = _crew.Crew.Inventory;
+            if (inventory.Version != _shownLoadVersion)
+            {
+                _load = _loadReport.Describe(inventory, _terrain.Grid.Materials);
+                _shownLoadVersion = inventory.Version;
+                _panelChanged = true;
+            }
+
             if (!ReferenceEquals(_tool.LastAction, _shownAction) || _terrain.BrushRadius != _shownRadius)
             {
                 _shownAction = _tool.LastAction;
@@ -96,8 +109,10 @@ namespace TinyDiggers.Interaction
                 _text.Clear()
                     .AppendLine(_frameTime)
                     .Append("Brush radius ").Append(_terrain.BrushRadius)
-                    .Append("   LMB dig ").Append(_tool.VolumePerCell.ToString("0.##")).Append(" m   RMB tip Dirt").AppendLine()
+                    .Append("   LMB dig ").Append(_tool.VolumePerCell.ToString("0.##")).Append(" m into load   RMB tip load").AppendLine()
                     .AppendLine("WASD pan   Q/E rotate   scroll zoom")
+                    .AppendLine()
+                    .AppendLine(_load)
                     .AppendLine()
                     .AppendLine(_cell);
                 if (!string.IsNullOrEmpty(_shownAction))

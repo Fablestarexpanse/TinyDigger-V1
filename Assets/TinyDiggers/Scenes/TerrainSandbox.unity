@@ -153,7 +153,10 @@ MonoBehaviour:
   _chunkSize: 32
   _seed: 1
   _material: {fileID: 2100000, guid: 4fd8fa78ded655542ae757b61b907654, type: 2}
+  _renderer: 0
+  HeightStep: 1
   BrushRadius: 2
+  SlumpTilesPerTick: 1000
 --- !u!4 &551060600
 Transform:
   m_ObjectHideFlags: 0
@@ -410,6 +413,51 @@ MonoBehaviour:
   _panSpeed: 0.8
   _rotateSpeed: 90
   _zoomStep: 0.12
+--- !u!1 &1879082569
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1879082571}
+  - component: {fileID: 1879082570}
+  m_Layer: 0
+  m_Name: Crew
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1879082570
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1879082569}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6cea843391e77494d931b06018e16b4c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: TinyDiggers.Interaction::TinyDiggers.Interaction.CrewView
+  _capacity: 5
+--- !u!4 &1879082571
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1879082569}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2023474830
 GameObject:
   m_ObjectHideFlags: 0
@@ -442,6 +490,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: TinyDiggers.Interaction::TinyDiggers.Interaction.TerrainDebugReadout
   _terrain: {fileID: 551060599}
   _tool: {fileID: 2023474832}
+  _crew: {fileID: 1879082570}
 --- !u!114 &2023474832
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -456,6 +505,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: TinyDiggers.Interaction::TinyDiggers.Interaction.TerrainEditTool
   _terrain: {fileID: 551060599}
   _camera: {fileID: 907044674}
+  _crew: {fileID: 1879082570}
   _volumePerCell: 1
 --- !u!4 &2023474833
 Transform:
@@ -480,3 +530,4 @@ SceneRoots:
   - {fileID: 730936065}
   - {fileID: 551060600}
   - {fileID: 2023474833}
+  - {fileID: 1879082571}

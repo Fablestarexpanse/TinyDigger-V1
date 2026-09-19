@@ -222,6 +222,40 @@ namespace TinyDiggers.Terrain
         }
 
         /// <summary>
+        /// Lists, top first, the in-place layers that <see cref="Remove(int,int,float,Span{MaterialVolume},bool)"/>
+        /// would take for <paramref name="volume"/>, without changing anything: same rounding to
+        /// the height step, same no-slivers rule, same stop at undiggable layers. Callers use it to
+        /// check whether the loose result will fit somewhere before digging. Returns the count.
+        /// </summary>
+        public int PeekRemove(int x, int z, float volume, Span<Layer> taken)
+        {
+            var cell = RequireIndex(x, z);
+            volume = Quantize(volume);
+            if (volume <= Epsilon)
+                return 0;
+
+            var layerBase = cell * MaxLayersPerCell;
+            int count = _layerCounts[cell];
+            var remaining = volume;
+            var written = 0;
+            while (remaining > Epsilon && count > 0 && written < taken.Length)
+            {
+                var layer = _layers[layerBase + count - 1];
+                if (!Materials.IsDiggable(layer.Material))
+                    break;
+
+                var thickness = Math.Min(remaining, layer.Thickness);
+                if (layer.Thickness - thickness <= Epsilon)
+                    thickness = layer.Thickness;
+                taken[written++] = new Layer(layer.Material, thickness);
+                remaining -= thickness;
+                count--;
+            }
+
+            return written;
+        }
+
+        /// <summary>
         /// Convenience overload for callers that would rather not deal in spans. Clears
         /// <paramref name="removed"/> first and reuses its capacity, so it allocates nothing after
         /// the first call.
@@ -275,6 +309,75 @@ namespace TinyDiggers.Terrain
 
             OnCellMutated(cell, x, z);
             return volume;
+        }
+
+        /// <summary>
+        /// Tips several pieces onto the column in one go, first piece lowest, each as its disturbed
+        /// form and merging with whatever is beneath when the material matches. The pieces are not
+        /// rounded one by one; only their sum has to be a whole number of height steps, so a load of
+        /// small mixed pieces can still land and keep the surface on the step grid.
+        ///
+        /// All or nothing: returns false and changes nothing if the sum is off the step grid or the
+        /// column has no room for the new layers. Raises one <see cref="CellChanged"/>.
+        /// </summary>
+        public bool AddStack(int x, int z, ReadOnlySpan<MaterialVolume> pieces)
+        {
+            var cell = RequireIndex(x, z);
+            var total = 0f;
+            foreach (var piece in pieces)
+            {
+                if (piece.Material.IsNone)
+                    throw new ArgumentException("Cannot add MaterialId.None.", nameof(pieces));
+                if (!(piece.Volume >= 0f))
+                    throw new ArgumentOutOfRangeException(nameof(pieces), "Piece volumes must be zero or positive.");
+                total += piece.Volume;
+            }
+
+            if (total <= Epsilon)
+                return false;
+            if (HeightStep > 0f && Math.Abs(Quantize(total) - total) > 1e-3f)
+                return false;
+
+            // Dry run: count the layer slots the pieces need after merging.
+            var layerBase = cell * MaxLayersPerCell;
+            int count = _layerCounts[cell];
+            var top = count == 0 ? MaterialId.None : _layers[layerBase + count - 1].Material;
+            var slots = count;
+            foreach (var piece in pieces)
+            {
+                if (piece.Volume <= Epsilon)
+                    continue;
+                var lands = Materials.GetDisturbed(piece.Material);
+                if (lands != top)
+                {
+                    slots++;
+                    top = lands;
+                }
+            }
+
+            if (slots > MaxLayersPerCell)
+                return false;
+
+            foreach (var piece in pieces)
+            {
+                if (piece.Volume <= Epsilon)
+                    continue;
+                var lands = Materials.GetDisturbed(piece.Material);
+                if (count > 0 && _layers[layerBase + count - 1].Material == lands)
+                {
+                    var at = layerBase + count - 1;
+                    _layers[at] = new Layer(lands, _layers[at].Thickness + piece.Volume);
+                }
+                else
+                {
+                    _layers[layerBase + count] = new Layer(lands, piece.Volume);
+                    count++;
+                }
+            }
+
+            _layerCounts[cell] = (byte)count;
+            OnCellMutated(cell, x, z);
+            return true;
         }
 
         /// <summary>

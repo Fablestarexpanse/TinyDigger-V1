@@ -1,27 +1,27 @@
-using System;
 using System.Text;
 using TinyDiggers.Presentation;
 using TinyDiggers.Terrain;
+using TinyDiggers.Units;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace TinyDiggers.Interaction
 {
     /// <summary>
-    /// Finds the cell under the mouse each frame; left click digs, right click tips Dirt, both
-    /// across <see cref="TerrainView.BrushRadius"/>. The picking and brush logic live in
-    /// <see cref="TerrainPicker"/> and <see cref="TerrainBrush"/>.
+    /// Finds the cell under the mouse each frame. Left click digs into the crew's load across
+    /// <see cref="TerrainView.BrushRadius"/>; right click tips the load onto the clicked cell.
+    /// Picking lives in <see cref="TerrainPicker"/>, digging and tipping in <see cref="Crew"/>.
     /// </summary>
     public sealed class TerrainEditTool : MonoBehaviour
     {
         [SerializeField] TerrainView _terrain;
         [SerializeField] Camera _camera;
+        [SerializeField] CrewView _crew;
 
-        [Tooltip("Volume dug from, or tipped onto, each cell in the brush per click. Cells are 1x1 m, so this is metres.")]
+        [Tooltip("In-place volume dug from each cell in the brush per click. Cells are 1x1 m, so this is metres.")]
         [SerializeField, Min(0.01f)] float _volumePerCell = 1f;
 
         readonly StringBuilder _summary = new StringBuilder(128);
-        float[] _removedByMaterial;
 
         public bool HasHover { get; private set; }
 
@@ -33,11 +33,6 @@ namespace TinyDiggers.Interaction
 
         /// <summary>What the last click did, for the readout. Rebuilt only on clicks.</summary>
         public string LastAction { get; private set; } = "";
-
-        void Start()
-        {
-            _removedByMaterial = new float[_terrain.Grid.Materials.MaxId + 1];
-        }
 
         void Update()
         {
@@ -67,46 +62,83 @@ namespace TinyDiggers.Interaction
             if (mouse.leftButton.wasPressedThisFrame)
                 Dig(grid, x, z);
             else if (mouse.rightButton.wasPressedThisFrame)
-                Fill(grid, x, z);
+                Tip(grid, x, z);
         }
 
         void Dig(TerrainGrid grid, int x, int z)
         {
-            Array.Clear(_removedByMaterial, 0, _removedByMaterial.Length);
-            var total = TerrainBrush.Dig(grid, x, z, _terrain.BrushRadius, _volumePerCell, _removedByMaterial, out var inPlace);
+            var crew = _crew.Crew;
+            var report = crew.Dig(grid, x, z, _terrain.BrushRadius, _volumePerCell);
 
             _summary.Clear();
-            if (total <= 0f)
+            if (report.WasFull)
+            {
+                _summary.Append("Full: ").Append(crew.Inventory.Remaining.ToString("0.0"))
+                    .Append(" m³ free, next dig needs ").Append(report.SmallestMisfit.ToString("0.0")).Append(" m³");
+            }
+            else if (report.CellsDug == 0)
             {
                 _summary.Append("Dug nothing: bedrock");
             }
             else
             {
-                // In-place volume is the hole; loose is what it swelled to once dug.
-                _summary.Append("Dug ").Append(inPlace.ToString("0.0"))
-                    .Append(" m3 -> ").Append(total.ToString("0.0")).Append(" m3 loose:");
-                for (var id = 0; id < _removedByMaterial.Length; id++)
+                // In-place volume is the hole; loose is what it swelled to in the load.
+                _summary.Append("Dug ").Append(report.InPlace.ToString("0.0"))
+                    .Append(" m³ solid → ").Append(report.Loose.ToString("0.0")).Append(" m³ loose (");
+                AppendMaterials(grid, report.InPlaceBySource);
+                _summary.Append(')');
+                if (report.CellsThatDidNotFit > 0)
+                    _summary.Append("; ").Append(report.CellsThatDidNotFit).Append(" cells did not fit");
+            }
+
+            LastAction = _summary.ToString();
+        }
+
+        void Tip(TerrainGrid grid, int x, int z)
+        {
+            var report = _crew.Crew.Tip(grid, x, z);
+
+            _summary.Clear();
+            if (report.StackFull)
+            {
+                _summary.Append("Tipped nothing: that cell's layer stack is full");
+            }
+            else if (report.Tipped <= 0f && report.HeldBack <= 0f)
+            {
+                _summary.Append("Nothing to tip");
+            }
+            else
+            {
+                _summary.Append("Tipped ").Append(report.Tipped.ToString("0.0")).Append(" m³");
+                if (report.Tipped > 0f)
                 {
-                    if (_removedByMaterial[id] <= 0f)
-                        continue;
-                    _summary.Append(' ')
-                        .Append(grid.Materials.Get(new MaterialId((byte)id)).DisplayName)
-                        .Append(' ')
-                        .Append(_removedByMaterial[id].ToString("0.0"));
+                    _summary.Append(" (");
+                    AppendMaterials(grid, report.TippedByMaterial);
+                    _summary.Append(')');
+                }
+
+                if (report.HeldBack > 0f)
+                {
+                    _summary.Append("; ").Append(report.HeldBack.ToString("0.00"))
+                        .Append(" m³ kept (under one ").Append(grid.HeightStep.ToString("0.#")).Append(" m step)");
                 }
             }
 
             LastAction = _summary.ToString();
         }
 
-        void Fill(TerrainGrid grid, int x, int z)
+        void AppendMaterials(TerrainGrid grid, float[] byMaterial)
         {
-            var added = TerrainBrush.Fill(grid, x, z, _terrain.BrushRadius, MaterialTable.Dirt, _volumePerCell);
-            // The grid places the disturbed form, so name what actually landed.
-            var landed = grid.Materials.Get(grid.Materials.GetDisturbed(MaterialTable.Dirt)).DisplayName;
-            LastAction = added > 0f
-                ? $"Tipped {added:0.0} m3 of {landed}"
-                : "Tipped nothing: layer stacks full";
+            var first = true;
+            for (var id = 0; id < byMaterial.Length; id++)
+            {
+                if (byMaterial[id] <= 0f)
+                    continue;
+                if (!first)
+                    _summary.Append(", ");
+                _summary.Append(grid.Materials.Get(new MaterialId((byte)id)).DisplayName);
+                first = false;
+            }
         }
     }
 }
