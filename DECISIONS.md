@@ -5,9 +5,10 @@ this records why.
 
 ---
 
-**NEXT:** Vertical Slice 2 (one digger that has to get there) is done, green (198/198) and
-pushed on `main`. Nothing is in flight. Terrain rendering stays closed. Still owed: a frame-time
-check on a mid-range GPU; then Ronan's call on the next slice.
+**NEXT:** Vertical Slice 3 (the crew carves its own ramp) is done, green (211/211) and pushed
+on `main`. Nothing is in flight. Terrain rendering stays closed. Still owed: a frame-time check
+on a mid-range machine (the 8 ms full-map re-flood after each terrain change is the thing to
+watch); then Ronan's call on the next slice.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -625,3 +626,130 @@ The effective angle is now the maximum over every layer the slide would carry. N
 
 Out of scope, as specified: multiple units, auto-ramping, hardness gating, vehicle stats, economy
 and art.
+
+## 2026-09-19 — Vertical Slice 3: the crew carves its own ramp
+
+Goal from Ronan: UNREACHABLE should be rare. When a dig cannot be reached, the unit works toward
+it on its own.
+
+### The 340 ms frame from Slice 2, found and fixed
+It was measured in play before any change.
+- **Cause.** While UNREACHABLE the unit rethinks every second. Each rethink flooded all 262,135
+  cells of the map for the unreachable count, which took 17 ms. It then ran a nearest-first
+  Dijkstra search for each job kind it tried, and each search expanded every reachable cell
+  (the whole map) and found nothing, at 105 ms per search.
+- **The frame.** With a part load that was a dig search plus a fill search: about 185 ms at
+  timeScale 1, and more at ×4.
+
+The fix has three parts:
+- **`ReachabilityCache`.** One flood from the unit's cell, stored as a set.
+  - Any `CellChanged` marks it stale, and it re-floods lazily on the next query.
+  - Moving inside the set never re-floods, because every cell of a connected area reaches the
+    same area.
+  - "Is this reachable" is now an array lookup.
+- **A set-lookup precheck before every nearest-first search** (`AnyCandidate`). If no designated
+  cell has a reachable, standable neighbour it could be worked from, no search runs.
+- **`FloodReachable` reads the height array directly.** This took the full-map flood from 17 ms
+  to 8 ms.
+
+**After** (play mode, same stuck scenario):
+- Rethink with nothing changed: 0.01 ms.
+- Rethink right after a terrain change: 7.8 ms, which is one flood.
+
+Still owed: the 8 ms flood recurs on the first rethink after any dig. If that shows up on a
+mid-range GPU/CPU check, the next step is an incremental or local re-flood.
+
+### The spec's ramp alone could not do the mound: benching added
+Taken literally, the ramp rule is to dig the first too-steep corridor cell to one step above the
+cell before it, when nothing is reachable. That cannot finish the 4-terrace mound:
+- Nearest-first digging takes the two outer rings to 20 m first, because they are reachable.
+- That leaves the inner 3×3 at 23–24 m behind a 3 m face.
+- With dig reach 2, a 3 m face cannot be cut from below. No sequence of Auto steps fixes that.
+- The ramp only triggers once it is already too late.
+
+So `AutoRamp` also turns on **benching** (`CrewUnit.DigFloor`):
+- **Floor.** A dig cell is never taken below one climbable step under its highest neighbouring
+  dig cell. A designated hill therefore comes down in 1 m layers and stays a staircase the unit
+  can drive.
+- **Standing on benched cells.** A dig cell sitting at its floor is "benched" (nothing can be dug
+  there yet), and the unit may stand on it.
+- **Pit guard.** A benched cell is not a stand if any undesignated neighbour is higher. Benching
+  is for taking hills down; in a pit it would let the unit dig itself in.
+- **Counting.** A cell held up by its floor is "waiting", not UNREACHABLE.
+
+**Corridor Auto ramps** are built as specified. They handle cliffs in *undesignated* ground,
+such as a dig on top of a plateau with 2 m faces:
+- **Corridor.** A* from the unit to the nearest unreachable dig (straight-line nearest), with no
+  step limit and a penalty of 20 per metre over the climb limit. It is 4-connected, so the
+  finished ramp needs no corner cuts. It may only cross undesignated or already-reachable cells.
+- **Placing a step.** At the first too-steep step, the higher cell gets an Auto dig to one step
+  above the lower cell, worked from the cell before it. This covers drops as well as climbs.
+  When the step is met, the corridor is re-planned and the next step placed.
+- **Ending.** The ramp ends when the target can be worked, and any Auto step left is removed.
+- **Blocked.** No fixable step (the cliff is out of reach, it would cut into a player designation,
+  or there is no route) means blocked. The target is left alone for 10 s and the status says
+  `ramp blocked: …`.
+- **Never over player cells.** Auto designations never go on player-designated cells; they carry
+  an Auto flag in `DesignationMap`.
+- **Cancelling.** The player cancelling one (MMB, or designating over it) raises
+  `AutoCancelled`, and the unit holds off that target for `RampCancelSeconds` (10).
+- **Toggle.** `CrewUnitView.autoRamp` in the inspector. Off gives exact Slice 2 behaviour; the
+  Slice 2 terrace test now runs with it off.
+
+### Dump heaps: 2 m heaps walled the unit in
+Found by the headless mound test. Heaping spoil up to stand + dig reach (2 m) built a closed ring
+of 2 m heaps around the work. The unit then could not drive out, and with a full load had
+nowhere left to dump. Heaps (the undesignated dump and Dump Zones alike) now go only one
+climbable step above the stand, so a heap can always be climbed and heaped further.
+
+### Dump Zones
+- **Marking.** Shift + RMB drag marks green Dump Zone cells, a separate layer in
+  `DesignationMap`. They never auto-clear and do not count as work. MMB clears them.
+- **Tipping.** With a full load and no reachable fill, the unit tips on the nearest reachable
+  zone cell. Cells below the stand come first (filling them level with it), then heaps one step
+  up. Only with no reachable zone cell does it fall back to the old nearest-undesignated rule.
+- **Part loads.** With nothing reachable to dig, a part load is tipped at the zone and the unit
+  idles. It can only tip whole height steps, so under 1 m³ can stay in the bucket. That is not
+  quite the spec's "idle empty", and it is unavoidable with 1 m steps.
+
+### Readout
+The readout adds:
+- the target (job, cell and stand) and `ON AUTO RAMP`;
+- whether auto-ramping is on;
+- the Auto designation count and the ramp target;
+- the ramp planner's last note;
+- the Dump Zone cell count;
+- the new control.
+
+### Verified in play
+**Mound.** The Slice 2 rock mound: 7×7, bare rock, terraces 24/23/22/21 on 20 m ground.
+- Setup: dig to 20 over all of it, Dump Zone on the 3×3 dip (2 m deep), `autoRamp` on, hands off.
+- Finished in 800 s game time (×4). The mound is flat at 20.00 and it was **never UNREACHABLE**
+  (longest 0.0 s).
+- It never needed an Auto step. Benching kept the terraces drivable: it drove up and took the top
+  down first (screenshot at t = 3 s, standing at 22.7 m).
+- All spoil went to the Dump Zone. It filled the dip, then heaped the zone to 23 m, and slump
+  spread the heap past the zone's edges. The unit ended idle and empty.
+
+**Ramp.** 2 m tiers of undesignated rock (20, 22, 24 m) with a 3×3 dig on the plateau.
+- The unit cut a hatched Auto step (264, 251) to 23 m from the band.
+- The readout showed `ON AUTO RAMP` with the ramp target.
+- It then drove up and finished the dig in 21 s.
+- Only one Auto step was needed, because the unit started on the 22 m band. The two-tier,
+  two-step case is covered by `CutsAClimbableRampUpTwoTiersToReachItsTarget`.
+
+### Tests (211/211 green)
+New tests:
+- Reachability cache: re-floods only after a height change; re-floods when asked from outside its
+  set.
+- An UNREACHABLE unit runs no search and floods once.
+- Auto ramps:
+  - the ramp climbs two tiers;
+  - the corridor is monotonic and never more than a step once cut;
+  - Auto steps are removed when the target becomes reachable;
+  - cancelling holds off the target for the timeout, then it comes back;
+  - designating over an Auto step counts as cancelling;
+  - a 4 m cliff is reported, not ramped;
+  - with AutoRamp off, no Auto steps are made.
+- Mound: the headless 4-terrace mound finishes, never UNREACHABLE for 3 s or more.
+- Dump Zones: spoil lands only in the zone; with no zone, a part load is kept.

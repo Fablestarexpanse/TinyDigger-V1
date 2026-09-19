@@ -112,10 +112,25 @@ namespace TinyDiggers.Interaction
                     .Append("  at (").Append(unit.Cell.x).Append(", ").Append(unit.Cell.y).Append("), dig reach ±")
                     .Append(unit.DigReachLevels).AppendLine(" levels")
                     .AppendLine(_loadReport.Describe(unit.Inventory, _terrain.Grid.Materials));
+                _unitText.Append("Target: ");
+                if (unit.Job == CrewJobKind.None)
+                    _unitText.Append("none");
+                else
+                    _unitText.Append(unit.Job).Append(" (").Append(unit.JobTarget.x).Append(", ").Append(unit.JobTarget.y).Append(')')
+                        .Append(" from (").Append(unit.JobStand.x).Append(", ").Append(unit.JobStand.y).Append(')');
+                _unitText.AppendLine(unit.OnAutoRamp ? "   ON AUTO RAMP" : "");
+                _unitText.Append("Auto ramp ").Append(unit.AutoRamp ? "on" : "off")
+                    .Append(": ").Append(map.AutoCount).Append(" Auto designation").Append(map.AutoCount == 1 ? "" : "s");
+                if (unit.HasRamp)
+                    _unitText.Append(", ramp toward (").Append(unit.RampTarget.x).Append(", ").Append(unit.RampTarget.y).Append(')');
+                _unitText.AppendLine();
+                if (unit.AutoRamp && unit.RampNote.Length > 0)
+                    _unitText.Append("  ").AppendLine(unit.RampNote);
                 if (unit.UnreachableCount > 0)
                     _unitText.Append("UNREACHABLE designations: ").Append(unit.UnreachableCount)
                         .Append(", nearest ").AppendLine(unit.NearestUnreachable);
                 _unitText.Append("Designations: ").Append(map.Count)
+                    .Append("   Dump Zone cells: ").Append(map.DumpZoneCount)
                     .Append("   H ").Append(_tool.TargetHeight.ToString("0.#")).Append(" m")
                     .Append(_tool.HeightLocked ? " (locked)" : " (follows cursor)");
                 _unitBlock = _unitText.ToString();
@@ -134,7 +149,8 @@ namespace TinyDiggers.Interaction
                 _text.Clear()
                     .AppendLine(_frameTime)
                     .Append("Brush radius ").Append(_terrain.BrushRadius)
-                    .AppendLine("   LMB dig to H   RMB fill to H   MMB click clear")
+                    .AppendLine("   LMB dig to H   RMB fill to H   Shift+RMB dump zone   MMB click clear")
+
                     .AppendLine("Q/E H -/+ 1 step (locks)   R H follows cursor")
                     .AppendLine("WASD pan   MMB drag rotate   scroll zoom")
                     .AppendLine()

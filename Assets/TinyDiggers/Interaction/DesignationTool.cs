@@ -13,7 +13,9 @@ namespace TinyDiggers.Interaction
     /// do. Across <see cref="TerrainView.BrushRadius"/>:
     /// - left click or drag: dig to height H;
     /// - right click or drag: fill to height H;
-    /// - middle click (without dragging; a middle drag rotates the camera): clear designations.
+    /// - Shift + right click or drag: mark a Dump Zone, where the unit tips spoil;
+    /// - middle click (without dragging; a middle drag rotates the camera): clear designations,
+    ///   the unit's Auto ramp steps and Dump Zones.
     ///
     /// H follows the hovered cell's height until Q or E moves it by one height step, which locks
     /// it; R unlocks it again. A drag stroke keeps the H it started with, so dragging across a
@@ -37,6 +39,7 @@ namespace TinyDiggers.Interaction
 
         Mesh _preview;
         DesignationKind _stroke;
+        bool _strokeIsZone;
         float _strokeHeight;
         readonly HashSet<int> _strokeCells = new HashSet<int>();
         Vector2 _middlePressedAt;
@@ -131,9 +134,9 @@ namespace TinyDiggers.Interaction
         {
             // Strokes: the kind and H are fixed when the button goes down.
             if (mouse.leftButton.wasPressedThisFrame)
-                BeginStroke(DesignationKind.Dig);
+                BeginStroke(DesignationKind.Dig, false);
             else if (mouse.rightButton.wasPressedThisFrame)
-                BeginStroke(DesignationKind.Fill);
+                BeginStroke(DesignationKind.Fill, Keyboard.current != null && Keyboard.current.shiftKey.isPressed);
 
             var held = _stroke == DesignationKind.Dig ? mouse.leftButton.isPressed
                 : _stroke == DesignationKind.Fill && mouse.rightButton.isPressed;
@@ -144,6 +147,13 @@ namespace TinyDiggers.Interaction
                     var width = _terrain.Grid.Width;
                     ApplyBrush(HoverX, HoverZ, cell =>
                     {
+                        if (_strokeIsZone)
+                        {
+                            _designations.Map.SetDumpZone(cell.x, cell.y, true);
+                            _strokeCells.Add(cell.y * width + cell.x);
+                            return true;
+                        }
+
                         if (!_designations.Map.Designate(cell.x, cell.y, _stroke, _strokeHeight))
                             return false;
                         _strokeCells.Add(cell.y * width + cell.x);
@@ -163,9 +173,8 @@ namespace TinyDiggers.Interaction
                 var cleared = 0;
                 ApplyBrush(HoverX, HoverZ, cell =>
                 {
-                    if (_designations.Map.GetKind(cell.x, cell.y) == DesignationKind.None)
+                    if (!_designations.Map.Cancel(cell.x, cell.y))
                         return false;
-                    _designations.Map.Clear(cell.x, cell.y);
                     cleared++;
                     return true;
                 });
@@ -173,9 +182,10 @@ namespace TinyDiggers.Interaction
             }
         }
 
-        void BeginStroke(DesignationKind kind)
+        void BeginStroke(DesignationKind kind, bool zone)
         {
             _stroke = kind;
+            _strokeIsZone = zone;
             _strokeHeight = TargetHeight;
             _strokeCells.Clear();
         }
@@ -184,7 +194,16 @@ namespace TinyDiggers.Interaction
         {
             var verb = _stroke == DesignationKind.Dig ? "dig" : "fill";
             var count = _strokeCells.Count;
+            if (_strokeIsZone)
+            {
+                LastAction = $"Marked {count} cell{(count == 1 ? "" : "s")} as Dump Zone";
+                _stroke = DesignationKind.None;
+                _strokeIsZone = false;
+                return;
+            }
+
             LastAction = count > 0
+
                 ? $"Designated {count} cell{(count == 1 ? "" : "s")}: {verb} to {_strokeHeight:0.#} m"
                 : $"Nothing to {verb}: those cells are already at {_strokeHeight:0.#} m";
             _stroke = DesignationKind.None;

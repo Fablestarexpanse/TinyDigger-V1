@@ -38,7 +38,7 @@ namespace TinyDiggers.Units
         readonly int[] _parent;
         readonly int[] _seen;
         readonly int[] _closed;
-        readonly Stack<int> _floodStack = new Stack<int>();
+        readonly int[] _floodCells;
         int _generation;
 
         // Binary min-heap of (key, cell); stale entries are skipped when popped.
@@ -54,6 +54,8 @@ namespace TinyDiggers.Units
             _parent = new int[cells];
             _seen = new int[cells];
             _closed = new int[cells];
+            _floodCells = new int[cells];
+
         }
 
         /// <summary>Cells expanded by the last search. For tests and perf reporting.</summary>
@@ -131,6 +133,9 @@ namespace TinyDiggers.Units
         /// <summary>
         /// Marks every cell reachable from the start in <paramref name="reachable"/> (indexed
         /// z * width + x). Returns how many there are.
+        ///
+        /// Reads the grid's height array directly rather than through <see cref="CanStep"/>: on
+        /// open ground this touches every cell of the map, so it is the hot loop.
         /// </summary>
         public int FloodReachable(int startX, int startZ, bool[] reachable)
         {
@@ -140,41 +145,77 @@ namespace TinyDiggers.Units
             if (!_grid.InBounds(startX, startZ))
                 return 0;
 
+            var heights = _grid.SurfaceHeights;
             var width = _grid.Width;
-            var stack = _floodStack;
-            stack.Clear();
+            var depth = _grid.Height;
+            var limit = MaxStepHeight + Tolerance;
+            var stack = _floodCells;
+            var top = 0;
             var start = startZ * width + startX;
             reachable[start] = true;
-            stack.Push(start);
+            stack[top++] = start;
             var count = 1;
-            while (stack.Count > 0)
+            while (top > 0)
             {
-                var cell = stack.Pop();
+                var cell = stack[--top];
                 var x = cell % width;
                 var z = cell / width;
+                var h = heights[cell];
                 for (var n = 0; n < 8; n++)
                 {
                     var nx = x + StepX[n];
                     var nz = z + StepZ[n];
-                    if (!_grid.InBounds(nx, nz))
+                    if (nx < 0 || nz < 0 || nx >= width || nz >= depth)
                         continue;
                     var next = nz * width + nx;
-                    if (reachable[next] || !CanStep(x, z, nx, nz))
+                    if (reachable[next] || Math.Abs(heights[next] - h) > limit)
                         continue;
+                    if (n >= 4)
+                    {
+                        // Diagonal: no cutting past a corner that is a step away from either end.
+                        var sideA = z * width + nx;
+                        var sideB = nz * width + x;
+                        var hn = heights[next];
+                        if (Math.Abs(heights[sideA] - h) > limit || Math.Abs(heights[sideA] - hn) > limit
+                            || Math.Abs(heights[sideB] - h) > limit || Math.Abs(heights[sideB] - hn) > limit)
+                            continue;
+                    }
+
                     reachable[next] = true;
                     count++;
-                    stack.Push(next);
+                    stack[top++] = next;
                 }
             }
 
             return count;
         }
 
+        /// <summary>
+        /// A route from the start to the goal that ignores the step limit, for planning a ramp.
+        /// Steps higher than <see cref="MaxStepHeight"/> are allowed but cost an extra
+        /// <paramref name="steepPenalty"/> per metre over the limit, so the route crosses as few
+        /// and as small cliffs as it can. It is 4-connected, so a unit can drive the finished ramp
+        /// without cutting corners. <paramref name="canCross"/> limits which cells it may use
+        /// (the goal is always allowed). Start and goal inclusive.
+        /// </summary>
+        public bool TryFindCorridor(int startX, int startZ, int goalX, int goalZ, List<Vector2Int> path, float steepPenalty, Func<int, int, bool> canCross = null)
+        {
+            var goal = goalZ * _grid.Width + goalX;
+            var found = Search(startX, startZ, cell => cell == goal, goalX, goalZ, 0f, true,
+                canCross ?? ((x, z) => true), steepPenalty, goal);
+            return Reconstruct(found, path);
+        }
+
         bool Climbable(int ax, int az, int bx, int bz) =>
             Math.Abs(_grid.GetSurfaceHeight(ax, az) - _grid.GetSurfaceHeight(bx, bz)) <= MaxStepHeight + Tolerance;
 
-        /// <summary>A* (or Dijkstra without a heuristic). Returns the goal cell index, or -1.</summary>
-        int Search(int startX, int startZ, Predicate<int> isGoal, int headingX, int headingZ, float heuristicSlack, bool useHeuristic)
+        /// <summary>
+        /// A* (or Dijkstra without a heuristic). Returns the goal cell index, or -1. With
+        /// <paramref name="corridor"/> set it is the ramp-planning search instead: 4-connected,
+        /// no step limit, steep steps penalised, only cells <paramref name="corridor"/> allows.
+        /// </summary>
+        int Search(int startX, int startZ, Predicate<int> isGoal, int headingX, int headingZ, float heuristicSlack, bool useHeuristic,
+            Func<int, int, bool> corridor = null, float steepPenalty = 0f, int corridorGoal = -1)
         {
             LastExpandedCount = 0;
             if (!_grid.InBounds(startX, startZ))
@@ -205,17 +246,20 @@ namespace TinyDiggers.Units
 
                 var x = cell % width;
                 var z = cell / width;
-                for (var n = 0; n < 8; n++)
+                var neighbours = corridor == null ? 8 : 4;
+                for (var n = 0; n < neighbours; n++)
                 {
                     var nx = x + StepX[n];
                     var nz = z + StepZ[n];
                     if (!_grid.InBounds(nx, nz))
                         continue;
                     var next = nz * width + nx;
-                    if (_closed[next] == _generation || !CanStep(x, z, nx, nz))
+                    if (_closed[next] == _generation)
+                        continue;
+                    if (corridor == null ? !CanStep(x, z, nx, nz) : next != corridorGoal && !corridor(nx, nz))
                         continue;
 
-                    var cost = _cost[cell] + StepCost(x, z, nx, nz);
+                    var cost = _cost[cell] + (corridor == null ? StepCost(x, z, nx, nz) : CorridorCost(x, z, nx, nz, steepPenalty));
                     if (_seen[next] == _generation && _cost[next] <= cost)
                         continue;
                     _seen[next] = _generation;
@@ -226,6 +270,15 @@ namespace TinyDiggers.Units
             }
 
             return -1;
+        }
+
+        float CorridorCost(int ax, int az, int bx, int bz, float steepPenalty)
+        {
+            var rise = Math.Abs(_grid.GetSurfaceHeight(bx, bz) - _grid.GetSurfaceHeight(ax, az));
+            var cost = 1f + rise * SlopeCostFactor;
+            if (rise > MaxStepHeight + Tolerance)
+                cost += (rise - MaxStepHeight) * steepPenalty;
+            return cost;
         }
 
         bool Reconstruct(int goal, List<Vector2Int> path)

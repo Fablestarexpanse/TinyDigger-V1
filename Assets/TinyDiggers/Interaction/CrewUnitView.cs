@@ -31,6 +31,9 @@ namespace TinyDiggers.Interaction
         /// <summary>Largest height change the unit can drive across between neighbouring cells, in metres.</summary>
         [Min(0f)] public float maxStepHeight = 1f;
 
+        /// <summary>Let the unit bench dig areas and cut its own ramps to work it cannot reach. Read every frame.</summary>
+        public bool autoRamp = true;
+
         [SerializeField] Vector3 _bodySize = new Vector3(1f, 0.8f, 2f);
         [SerializeField] Color _bodyColor = new Color(1f, 0.78f, 0.1f);
 
@@ -72,6 +75,7 @@ namespace TinyDiggers.Interaction
         void Update()
         {
             Unit.DigReachLevels = digReachLevels;
+            Unit.AutoRamp = autoRamp;
             Unit.Speed = _speed;
             Unit.WorkInterval = _workInterval;
             _pathfinder.MaxStepHeight = maxStepHeight;

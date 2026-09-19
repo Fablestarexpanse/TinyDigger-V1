@@ -223,11 +223,12 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
-        public void UpperTerracesAreUnreachableUntilAStepIsLeft()
+        public void WithoutAutoRampUpperTerracesAreUnreachableUntilAStepIsLeft()
         {
             // A 4-terrace mound, one cell per terrace: centre 12, then rings at 11, 10, 9 on 8 m ground.
             BuildMound(10, 10, 8f);
             Spawn(2, 10);
+            _unit.AutoRamp = false;
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     if (_grid.GetSurfaceHeight(x, z) > 8f)
@@ -246,7 +247,7 @@ namespace TinyDiggers.Units.Tests
         }
 
         /// <summary>Concentric one-cell terraces up to 4 m above <paramref name="ground"/>.</summary>
-        void BuildMound(int cx, int cz, float ground)
+        internal void BuildMound(int cx, int cz, float ground)
         {
             for (var z = 0; z < Size; z++)
             {
