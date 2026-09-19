@@ -23,7 +23,7 @@ namespace TinyDiggers.Presentation
             Rebuild();
         }
 
-        public override void MarkDirty(int x, int z)
+        protected override void MarkChunksAffectedBy(int x, int z)
         {
             // A cell draws its own top plus the walls on its +x and +z edges. Its -x and -z edges
             // are drawn by the neighbours on those sides, whose walls take their height and

@@ -7,8 +7,10 @@ namespace TinyDiggers.Terrain
     /// Temporary test terrain: broad plateaus from large, low-frequency noise, plus a few wide
     /// hills 4-8 m high, so that at a 1 m height step the land reads as wide terraces
     /// (TERRAIN_REFERENCE.md section 1.2). There is deliberately no small-scale noise: it would
-    /// fray the terrace edges into single-cell speckle. Layered bedrock, then granite in the hill
-    /// cores, then rock, then a dirt and topsoil cap. The soil thins over the hills so that
+    /// fray the terrace edges into single-cell speckle. A medium octave (~40 m) adds texture
+    /// between terraces, and a domain warp (~30 m features, ~6 m strength) bends every contour so
+    /// the hills do not show up as perfect concentric rings. Layered bedrock, then granite in the
+    /// hill cores, then rock, then a dirt and topsoil cap. The soil thins over the hills so that
     /// digging there reaches rock quickly.
     ///
     /// Deterministic for a given seed and grid size. Surfaces land on the grid's
@@ -36,6 +38,20 @@ namespace TinyDiggers.Terrain
         const float EdgeFrequency = 0.015f;
 
         const float EdgeRange = 1.5f;
+
+        /// <summary>A medium octave with ~40 m features and a low amplitude, for texture between terraces.</summary>
+        const float MediumFrequency = 1f / 40f;
+
+        const float MediumRange = 1.2f;
+
+        /// <summary>
+        /// Domain warp: every height sample, hills included, is taken at a position pushed around
+        /// by a second noise field with ~30 m features, by up to about <see cref="WarpStrength"/>
+        /// metres. The terrace lines wander instead of forming a bullseye around each hill.
+        /// </summary>
+        const float WarpFrequency = 1f / 30f;
+
+        const float WarpStrength = 6f;
 
         const float SoilOnPlains = 2.5f;
         const float SoilOnHilltops = 0.4f;
@@ -79,24 +95,35 @@ namespace TinyDiggers.Terrain
                 };
             }
 
+            // Drawn after the hills so hill placement for a given seed is unchanged by the warp.
+            var mediumOffset = (float)random.NextDouble() * 1000f;
+            var warpOffsetX = (float)random.NextDouble() * 1000f;
+            var warpOffsetZ = (float)random.NextDouble() * 1000f;
+
             Span<Layer> column = stackalloc Layer[5];
             for (var z = 0; z < grid.Height; z++)
             {
                 for (var x = 0; x < grid.Width; x++)
                 {
+                    // Warp first: every field below is sampled at the displaced position.
+                    var sx = x + (Mathf.PerlinNoise(warpOffsetX + x * WarpFrequency, warpOffsetZ + z * WarpFrequency) - 0.5f) * 2f * WarpStrength;
+                    var sz = z + (Mathf.PerlinNoise(warpOffsetZ + x * WarpFrequency, warpOffsetX + z * WarpFrequency) - 0.5f) * 2f * WarpStrength;
+
                     var hill = 0f;
                     foreach (var h in hills)
                     {
-                        var dx = x - h.X;
-                        var dz = z - h.Z;
+                        var dx = sx - h.X;
+                        var dz = sz - h.Z;
                         hill += h.Height * (float)Math.Exp(-(dx * dx + dz * dz) * h.InverseRadiusSquared);
                     }
 
-                    var plateau = (Mathf.PerlinNoise(offsetX + x * PlateauFrequency, offsetZ + z * PlateauFrequency) - 0.5f) * PlateauRange;
-                    var edges = (Mathf.PerlinNoise(offsetZ + x * EdgeFrequency, offsetX + z * EdgeFrequency) - 0.5f) * EdgeRange;
-                    var surface = BedrockThickness + BaseRockDepth + plateau + edges + hill;
-                    // Snap to the grid's height step; the rock layer absorbs the difference, so
-                    // the soil thicknesses stay as designed and only the surface moves.
+                    var plateau = (Mathf.PerlinNoise(offsetX + sx * PlateauFrequency, offsetZ + sz * PlateauFrequency) - 0.5f) * PlateauRange;
+                    var edges = (Mathf.PerlinNoise(offsetZ + sx * EdgeFrequency, offsetX + sz * EdgeFrequency) - 0.5f) * EdgeRange;
+                    var medium = (Mathf.PerlinNoise(mediumOffset + sx * MediumFrequency, mediumOffset + sz * MediumFrequency) - 0.5f) * MediumRange;
+                    var surface = BedrockThickness + BaseRockDepth + plateau + edges + medium + hill;
+                    // Snap to the grid's height step only after warping and summing, so terrace
+                    // lines follow the warped field; the rock layer absorbs the difference, so the
+                    // soil thicknesses stay as designed and only the surface moves.
                     if (grid.HeightStep > 0f)
                         surface = (float)Math.Round(surface / grid.HeightStep) * grid.HeightStep;
 

@@ -32,6 +32,7 @@ namespace TinyDiggers.Terrain
         readonly Layer[] _layers;
         readonly byte[] _layerCounts;
         readonly float[] _surfaceHeights;
+        readonly MaterialId[] _topMaterials;
 
         public TerrainGrid(int width, int height, MaterialTable materials, float heightStep = 0f)
         {
@@ -51,6 +52,7 @@ namespace TinyDiggers.Terrain
             _layers = new Layer[cellCount * MaxLayersPerCell];
             _layerCounts = new byte[cellCount];
             _surfaceHeights = new float[cellCount];
+            _topMaterials = new MaterialId[cellCount];
         }
 
         public int Width { get; }
@@ -84,13 +86,17 @@ namespace TinyDiggers.Terrain
         /// <summary>Height of the top of the column in metres. Cached, so this is a single array read.</summary>
         public float GetSurfaceHeight(int x, int z) => _surfaceHeights[RequireIndex(x, z)];
 
+        /// <summary>
+        /// Every cell's surface height, indexed <c>z * Width + x</c>. For hot loops (mesh building)
+        /// that read many cells and would otherwise pay a bounds check per read.
+        /// </summary>
+        public ReadOnlySpan<float> SurfaceHeights => _surfaceHeights;
+
+        /// <summary>Every cell's top material, indexed <c>z * Width + x</c>; cached like the heights.</summary>
+        public ReadOnlySpan<MaterialId> TopMaterials => _topMaterials;
+
         /// <summary>The material of the topmost layer, or <see cref="MaterialId.None"/> if the column is empty.</summary>
-        public MaterialId GetTopMaterial(int x, int z)
-        {
-            var cell = RequireIndex(x, z);
-            var count = _layerCounts[cell];
-            return count == 0 ? MaterialId.None : _layers[cell * MaxLayersPerCell + count - 1].Material;
-        }
+        public MaterialId GetTopMaterial(int x, int z) => _topMaterials[RequireIndex(x, z)];
 
         public int GetLayerCount(int x, int z) => _layerCounts[RequireIndex(x, z)];
 
@@ -316,6 +322,7 @@ namespace TinyDiggers.Terrain
             for (var i = 0; i < count; i++)
                 height += _layers[layerBase + i].Thickness;
             _surfaceHeights[cell] = height;
+            _topMaterials[cell] = count == 0 ? MaterialId.None : _layers[layerBase + count - 1].Material;
 
             CellChanged?.Invoke(x, z);
         }

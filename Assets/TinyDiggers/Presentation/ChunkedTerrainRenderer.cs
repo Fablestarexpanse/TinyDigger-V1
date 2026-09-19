@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using TinyDiggers.Terrain;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
@@ -9,8 +10,13 @@ namespace TinyDiggers.Presentation
 {
     /// <summary>
     /// Shared plumbing for renderers that draw a <see cref="TerrainGrid"/> as one mesh per square
-    /// chunk of cells: the chunk objects, the dirty set, the material palette and the mesh upload.
+    /// chunk of cells: the chunk objects, the dirty sets, the material palette and the mesh upload.
     /// Subclasses decide which chunks an edit dirties and what geometry a chunk gets.
+    ///
+    /// Edits are batched in two stages. <see cref="MarkDirty"/> only records the cell in a
+    /// deduplicated dirty-cell set, which is cheap however many times a slump tick touches the same
+    /// cell. <see cref="Rebuild"/> then expands each dirty cell into the chunks it affects, and
+    /// rebuilds each of those chunks once.
     ///
     /// Plain C#, not a MonoBehaviour: the owner calls <see cref="Rebuild"/> once a frame and
     /// <see cref="Dispose"/> when done. Subclasses must call <see cref="Rebuild"/> at the end of
@@ -28,6 +34,8 @@ namespace TinyDiggers.Presentation
         readonly Chunk[] _chunks;
         readonly bool[] _dirty;
         readonly List<int> _dirtyChunks = new List<int>();
+        readonly bool[] _dirtyCell;
+        readonly List<int> _dirtyCells = new List<int>();
         readonly TerrainMeshBuilder _builder;
         bool _disposed;
 
@@ -53,6 +61,7 @@ namespace TinyDiggers.Presentation
             _builder = new TerrainMeshBuilder(chunkSize * chunkSize * 4);
             _chunks = new Chunk[ChunkCountX * ChunkCountZ];
             _dirty = new bool[_chunks.Length];
+            _dirtyCell = new bool[grid.Width * grid.Height];
             for (var cz = 0; cz < ChunkCountZ; cz++)
             {
                 for (var cx = 0; cx < ChunkCountX; cx++)
@@ -77,8 +86,18 @@ namespace TinyDiggers.Presentation
 
         public int ChunkCountZ { get; }
 
-        /// <summary>Chunks flagged since the last <see cref="Rebuild"/>.</summary>
-        public int PendingChunkCount => _dirtyChunks.Count;
+        /// <summary>Chunks that the next <see cref="Rebuild"/> will rebuild.</summary>
+        public int PendingChunkCount
+        {
+            get
+            {
+                ResolveDirtyCells();
+                return _dirtyChunks.Count;
+            }
+        }
+
+        /// <summary>Cells changed since the last <see cref="Rebuild"/> and not yet expanded into chunks.</summary>
+        public int PendingCellCount => _dirtyCells.Count;
 
         /// <summary>Triangles across all chunks as last built. For perf reporting.</summary>
         public long TriangleCount
@@ -95,27 +114,63 @@ namespace TinyDiggers.Presentation
         /// <summary>The mesh for one chunk. For tests and debugging.</summary>
         public Mesh GetChunkMesh(int chunkX, int chunkZ) => _chunks[chunkZ * ChunkCountX + chunkX].Mesh;
 
-        /// <summary>Flags every chunk whose mesh depends on cell (x, z).</summary>
-        public abstract void MarkDirty(int x, int z);
+        /// <summary>Records that cell (x, z) changed. O(1) and deduplicated; the chunks come later.</summary>
+        public void MarkDirty(int x, int z)
+        {
+            if (!Grid.InBounds(x, z))
+                return;
+            var cell = z * Grid.Width + x;
+            if (_dirtyCell[cell])
+                return;
+            _dirtyCell[cell] = true;
+            _dirtyCells.Add(cell);
+        }
+
+        /// <summary>Flags, via <see cref="MarkCellsChunkDirty"/>, every chunk whose mesh depends on cell (x, z).</summary>
+        protected abstract void MarkChunksAffectedBy(int x, int z);
+
+        void ResolveDirtyCells()
+        {
+            foreach (var cell in _dirtyCells)
+            {
+                _dirtyCell[cell] = false;
+                MarkChunksAffectedBy(cell % Grid.Width, cell / Grid.Width);
+            }
+
+            _dirtyCells.Clear();
+        }
+
+        /// <summary>Chunks rebuilt by the last <see cref="Rebuild"/>. For perf reporting.</summary>
+        public int LastRebuiltChunkCount { get; private set; }
+
+        static readonly ProfilerMarker BuildMarker = new ProfilerMarker("TinyDiggers.ChunkBuild");
+        static readonly ProfilerMarker UploadMarker = new ProfilerMarker("TinyDiggers.ChunkUpload");
 
         public void Rebuild()
         {
             if (_disposed)
                 return;
 
+            ResolveDirtyCells();
+            LastRebuiltChunkCount = _dirtyChunks.Count;
             foreach (var index in _dirtyChunks)
             {
                 var chunk = _chunks[index];
                 var originX = chunk.X * ChunkSize;
                 var originZ = chunk.Z * ChunkSize;
                 _builder.Clear();
-                BuildChunk(
-                    originX,
-                    originZ,
-                    Math.Min(ChunkSize, Grid.Width - originX),
-                    Math.Min(ChunkSize, Grid.Height - originZ),
-                    _builder);
-                chunk.TriangleCount = _builder.ApplyTo(chunk.Mesh);
+                using (BuildMarker.Auto())
+                {
+                    BuildChunk(
+                        originX,
+                        originZ,
+                        Math.Min(ChunkSize, Grid.Width - originX),
+                        Math.Min(ChunkSize, Grid.Height - originZ),
+                        _builder);
+                }
+
+                using (UploadMarker.Auto())
+                    chunk.TriangleCount = _builder.ApplyTo(chunk.Mesh);
                 _dirty[index] = false;
             }
 
@@ -201,141 +256,4 @@ namespace TinyDiggers.Presentation
         }
     }
 
-    /// <summary>
-    /// Scratch geometry for one chunk. Every quad carries:
-    /// - the vertex colour, which is what a gentle face shows;
-    /// - UV0, the vertex's position within the quad (0..1 on each axis);
-    /// - UV1, an "exposed" colour the terrain shader blends towards on steep faces;
-    /// - UV2, which of the quad's edges (west, east, south, north) border a different top
-    ///   material, for the shader's faint edge line.
-    /// The lists keep their capacity, so after the first few builds rebuilding allocates nothing
-    /// on the managed heap.
-    /// </summary>
-    public sealed class TerrainMeshBuilder
-    {
-        static readonly Vector2 CornerA = new Vector2(0f, 0f);
-        static readonly Vector2 CornerB = new Vector2(0f, 1f);
-        static readonly Vector2 CornerC = new Vector2(1f, 1f);
-        static readonly Vector2 CornerD = new Vector2(1f, 0f);
-
-        readonly List<Vector3> _vertices;
-        readonly List<Vector3> _normals;
-        readonly List<Color32> _colors;
-        readonly List<Vector2> _local;
-        readonly List<Vector4> _exposed;
-        readonly List<Vector4> _edges;
-        readonly List<int> _triangles;
-        float _minY;
-        float _maxY;
-        float _maxX;
-        float _maxZ;
-
-        public TerrainMeshBuilder(int initialVertexCapacity)
-        {
-            _vertices = new List<Vector3>(initialVertexCapacity);
-            _normals = new List<Vector3>(initialVertexCapacity);
-            _colors = new List<Color32>(initialVertexCapacity);
-            _local = new List<Vector2>(initialVertexCapacity);
-            _exposed = new List<Vector4>(initialVertexCapacity);
-            _edges = new List<Vector4>(initialVertexCapacity);
-            _triangles = new List<int>(initialVertexCapacity / 4 * 6);
-        }
-
-        public int VertexCount => _vertices.Count;
-
-        public void Clear()
-        {
-            _vertices.Clear();
-            _normals.Clear();
-            _colors.Clear();
-            _local.Clear();
-            _exposed.Clear();
-            _edges.Clear();
-            _triangles.Clear();
-            _minY = float.MaxValue;
-            _maxY = float.MinValue;
-            _maxX = 0f;
-            _maxZ = 0f;
-        }
-
-        /// <summary>A flat-shaded quad with no edge lines. Corners clockwise as seen from the front.</summary>
-        public void AddQuad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal, Color32 color, Color32 exposed)
-        {
-            AddQuad(a, b, c, d, normal, normal, normal, normal, color, exposed, Vector4.zero);
-        }
-
-        /// <summary>
-        /// A quad with a normal per corner. Corners clockwise as seen from the front, which is
-        /// Unity's front face; for a terrain top that is (i, j), (i, j+1), (i+1, j+1), (i+1, j).
-        /// <paramref name="edges"/> flags the west, east, south and north edges (1 = draw a line).
-        /// </summary>
-        public void AddQuad(
-            Vector3 a, Vector3 b, Vector3 c, Vector3 d,
-            Vector3 normalA, Vector3 normalB, Vector3 normalC, Vector3 normalD,
-            Color32 color, Color32 exposed, Vector4 edges)
-        {
-            var first = _vertices.Count;
-            _vertices.Add(a);
-            _vertices.Add(b);
-            _vertices.Add(c);
-            _vertices.Add(d);
-            _normals.Add(normalA);
-            _normals.Add(normalB);
-            _normals.Add(normalC);
-            _normals.Add(normalD);
-            _local.Add(CornerA);
-            _local.Add(CornerB);
-            _local.Add(CornerC);
-            _local.Add(CornerD);
-            var exposedValue = new Vector4(exposed.r / 255f, exposed.g / 255f, exposed.b / 255f, 1f);
-            for (var k = 0; k < 4; k++)
-            {
-                _colors.Add(color);
-                _exposed.Add(exposedValue);
-                _edges.Add(edges);
-            }
-
-            _triangles.Add(first);
-            _triangles.Add(first + 1);
-            _triangles.Add(first + 2);
-            _triangles.Add(first);
-            _triangles.Add(first + 2);
-            _triangles.Add(first + 3);
-
-            Track(a);
-            Track(b);
-            Track(c);
-            Track(d);
-        }
-
-        /// <summary>Uploads the geometry and returns its triangle count.</summary>
-        public int ApplyTo(Mesh mesh)
-        {
-            mesh.Clear();
-            mesh.indexFormat = _vertices.Count > ushort.MaxValue ? IndexFormat.UInt32 : IndexFormat.UInt16;
-            mesh.SetVertices(_vertices);
-            mesh.SetNormals(_normals);
-            mesh.SetColors(_colors);
-            mesh.SetUVs(0, _local);
-            mesh.SetUVs(1, _exposed);
-            mesh.SetUVs(2, _edges);
-            mesh.SetTriangles(_triangles, 0, false);
-            if (_vertices.Count > 0)
-            {
-                var min = new Vector3(0f, _minY, 0f);
-                var max = new Vector3(_maxX, _maxY, _maxZ);
-                mesh.bounds = new Bounds((min + max) * 0.5f, max - min);
-            }
-
-            return _triangles.Count / 3;
-        }
-
-        void Track(Vector3 p)
-        {
-            _minY = Math.Min(_minY, p.y);
-            _maxY = Math.Max(_maxY, p.y);
-            _maxX = Math.Max(_maxX, p.x);
-            _maxZ = Math.Max(_maxZ, p.z);
-        }
-    }
 }

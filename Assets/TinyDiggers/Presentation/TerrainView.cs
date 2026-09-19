@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using TinyDiggers.Terrain;
+using Unity.Profiling;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
@@ -56,6 +57,9 @@ namespace TinyDiggers.Presentation
         /// <summary>Cells waiting for the slump simulator.</summary>
         public int SlumpPending => _slump?.PendingCount ?? 0;
 
+        /// <summary>Chunks rebuilt in the last frame. For perf reporting.</summary>
+        public int ChunksRebuiltLastFrame => _terrainRenderer?.LastRebuiltChunkCount ?? 0;
+
         void Awake()
         {
             var stopwatch = Stopwatch.StartNew();
@@ -79,15 +83,20 @@ namespace TinyDiggers.Presentation
                 $"{_terrainRenderer.TriangleCount:N0} triangles. Generated in {generated:0} ms, meshed in {built:0} ms.");
         }
 
+        static readonly ProfilerMarker SlumpMarker = new ProfilerMarker("TinyDiggers.SlumpTick");
+        static readonly ProfilerMarker RebuildMarker = new ProfilerMarker("TinyDiggers.TerrainRebuild");
+
         void Update()
         {
             _slump.MaxTilesPerTick = SlumpTilesPerTick;
-            _slump.Tick();
+            using (SlumpMarker.Auto())
+                _slump.Tick();
         }
 
         void LateUpdate()
         {
-            _terrainRenderer.Rebuild();
+            using (RebuildMarker.Auto())
+                _terrainRenderer.Rebuild();
         }
 
         void OnDestroy()

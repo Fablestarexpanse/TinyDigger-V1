@@ -5,11 +5,10 @@ this records why.
 
 ---
 
-**NEXT:** `TERRAIN_REFERENCE.md` section 5 "Now" plan done and green (137/137): smooth
-per-vertex normals, grain and edge-line shader, plateau/terrace test terrain, bulking, loose-only
-thin-layer bias. Nothing is in flight. Still owed: a frame-time check on a mid-range GPU (the
-readout's top line shows it); two known close-up artefacts at pit rims (see the 2026-09-19
-"reference" entry); then Ronan's call on what comes next.
+**NEXT:** Terrain rendering is closed for now, per Ronan (green, 139/139). The sawtooth pit rims
+and busy pit-floor edge lines stay as they are until triplanar textures (reference section 5,
+"Later"). Nothing is in flight. Still owed: a frame-time check on a mid-range GPU (the readout's
+top line shows it); then Ronan's call on what comes next.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -405,3 +404,68 @@ topsoil, 10 loose dirt). The rock walls (80°) held; the topsoil and dirt at the
   triplanar (reference "Later").
 - **Edge lines inside pits** trace every change of top material (rock, loose rock, loose dirt)
   across the floor. That is correct by the rule, but busy.
+
+## 2026-09-19 — Wandering contours, softer creases, slump frame cost
+
+Ronan closed terrain rendering after this round. The two pit artefacts above stay as they are
+until triplanar textures.
+
+### Generator: domain warp and a medium octave
+The hills produced perfect concentric terrace rings, a bullseye. Two changes, both before
+quantising:
+- **Domain warp:** every height sample, hills included, is taken at a position displaced by a
+  second Perlin field with ~30 m features, by up to ±6 m.
+- **Medium octave:** ~40 m features with a 1.2 m range, for texture between terraces.
+The new random draws come after the hills, so hill placement per seed is unchanged. The 3-seed
+game-scale test (neighbours never differ by more than 1 m; more than 80% of cells are terrace
+tops) still passes: the warp stretches slopes by at most ~2x, and hill slopes were ~0.17 per cell.
+
+### Crease shading halved
+The dark terrace lines were plain N·L on risers turned away from the sun. The shader now also
+computes the lighting flat ground would get, and where a face is darker than that it gives back
+`_CreaseSoftening` = 0.5 of the shortfall. Faces lit brighter than flat are untouched, so relief
+still reads.
+
+### Slump perf: profiled, and the hypothesis did not hold
+Ronan expected per-tile `MarkDirty` to be triggering chunk rebuilds every frame. Profiler markers
+(`TinyDiggers.SlumpTick`, `TinyDiggers.TerrainRebuild`, `TinyDiggers.ChunkBuild`,
+`TinyDiggers.ChunkUpload`) on a 1,045-tile queue (a radius-17, 8 m heap of loose dirt) showed:
+- Each dirty chunk was **already rebuilt at most once per frame**: the renderer kept a
+  deduplicated chunk set and rebuilt in `LateUpdate`, after the slump tick in `Update`.
+- The heap settled in 8 frames, rebuilding 4–6 chunks each frame. Mean self time per slump frame:
+  `ChunkBuild` 2.27 ms, `EditorLoop` 1.58 ms (editor, not game), `SlumpTick` 0.64 ms, profiler
+  overhead 0.50 ms, `ChunkUpload` 0.33 ms. **The cost was rebuilding each chunk from scratch**
+  (~0.45 ms, ~440 ns per cell), not how often it happened.
+
+Changes:
+- **The dirty-cell set Ronan asked for.** `MarkDirty` now only records the cell, O(1) and
+  deduplicated. `Rebuild` expands each dirty cell into chunks once, then rebuilds each chunk once.
+  This saves the 5x5 chunk fan-out on every repeated touch of a cell within a tick. It is a small
+  win (slump tick 0.31–0.66 down to 0.28–0.52 ms).
+- **The actual fix: a cheaper chunk build.**
+  - `TerrainGrid` caches each cell's top material next to its height, and exposes both as
+    read-only spans.
+  - The smoothed renderer copies the chunk plus a two-cell halo into local arrays once, then
+    builds without bounds checks or grid calls.
+  - Flat ground skips the exposed-layer lookup (the answer is its own top).
+  - The builder writes plain arrays instead of `List`s.
+  - The index buffer is not re-uploaded when the quad count is unchanged, which for the smoothed
+    renderer is always.
+  - Corner heights are summed in the same order as the public `CornerHeight`, so the
+    chunk-border normal test still matches bit for bit.
+
+Same 1,045-tile heap, before and after (RTX 4090, editor play mode):
+
+| Per busy frame | Before | After |
+|---|---|---|
+| Main thread | 4.4–7.9 ms | **3.5–5.4 ms** |
+| Terrain rebuild (4–6 chunks) | 1.65–2.74 ms | 0.87–1.40 ms |
+| Per chunk | ~0.45 ms | ~0.23 ms |
+| Slump tick | 0.31–0.66 ms | 0.28–0.52 ms |
+
+The editor alone accounts for ~1.6 ms of an idle main-thread frame here. Initial meshing of the
+whole map went from 140 ms to 89 ms, and the EditMode suite from 1.8 s to 0.8 s. The 10.6 ms
+Ronan saw in the readout was taken during a 2560x1440 `ScreenCapture`, not during normal play.
+
+If slump frames need to be cheaper still, the next lever is rebuilding only the dirty rows of a
+chunk rather than the whole chunk.

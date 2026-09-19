@@ -94,6 +94,32 @@ namespace TinyDiggers.Presentation.Tests
         }
 
         [Test]
+        public void RepeatedEditsToOneCellAreRecordedOnce()
+        {
+            // A slump tick can touch the same cell many times; the renderer should expand it into
+            // chunks once.
+            for (var i = 0; i < 10; i++)
+                _grid.Add(10, 10, MaterialTable.Dirt, 0.1f);
+
+            Assert.That(_renderer.PendingCellCount, Is.EqualTo(1));
+            Assert.That(_renderer.PendingChunkCount, Is.EqualTo(1));
+            Assert.That(_renderer.PendingCellCount, Is.EqualTo(0), "expanded into chunks");
+        }
+
+        [Test]
+        public void RebuildingKeepsTheSameQuadLayout()
+        {
+            var mesh = _renderer.GetChunkMesh(0, 0);
+            var indicesBefore = mesh.GetIndexCount(0);
+
+            _grid.Add(10, 10, MaterialTable.Dirt, 3f);
+            _renderer.Rebuild();
+
+            Assert.That(mesh.GetIndexCount(0), Is.EqualTo(indicesBefore));
+            Assert.That(mesh.vertices[Quad(10, 10)].y, Is.GreaterThan(2f), "the new height was uploaded");
+        }
+
+        [Test]
         public void EditingACellTwoFromAChunkEdgeStillDirtiesTheNeighbour()
         {
             // Cell 30 moves corner 31, whose height feeds the normal at corner 32, the first

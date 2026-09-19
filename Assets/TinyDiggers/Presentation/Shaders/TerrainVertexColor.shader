@@ -7,7 +7,8 @@
 // - Edges: UV2 flags quad sides whose neighbour has a different top material; a faint dark line
 //   is drawn along them. UV0 is the fragment's position within its cell.
 // - Lighting: main light N.L plus spherical-harmonic ambient on the interpolated, smooth normal.
-//   No shadows. Placeholder lighting, not final art.
+//   Faces darker than flat ground have _CreaseSoftening of the difference given back, so terrace
+//   risers read as gentle creases. No shadows. Placeholder lighting, not final art.
 Shader "TinyDiggers/Terrain Vertex Color"
 {
     Properties
@@ -19,6 +20,7 @@ Shader "TinyDiggers/Terrain Vertex Color"
         _GrainAmount ("Grain amount (fraction of colour)", Range(0, 0.3)) = 0.08
         _EdgeDarken ("Material edge darkening", Range(0, 0.5)) = 0.12
         _EdgeWidth ("Material edge width (cell fraction)", Range(0, 0.25)) = 0.04
+        _CreaseSoftening ("Crease softening (share of shadow removed)", Range(0, 1)) = 0.5
     }
 
     SubShader
@@ -41,6 +43,7 @@ Shader "TinyDiggers/Terrain Vertex Color"
             half _GrainAmount;
             half _EdgeDarken;
             half _EdgeWidth;
+            half _CreaseSoftening;
         CBUFFER_END
         ENDHLSL
 
@@ -161,6 +164,13 @@ Shader "TinyDiggers/Terrain Vertex Color"
                 Light mainLight = GetMainLight();
                 half diffuse = saturate(dot(normalWS, mainLight.direction));
                 half3 lighting = mainLight.color * diffuse + SampleSH(normalWS);
+
+                // Terrace creases: a riser turned away from the sun is darker than flat ground.
+                // Give back _CreaseSoftening of that shortfall; faces lit brighter than flat keep
+                // their full light, so relief still reads.
+                half3 flatLighting = mainLight.color * saturate(mainLight.direction.y) + SampleSH(half3(0, 1, 0));
+                lighting = lerp(lighting, max(lighting, flatLighting), _CreaseSoftening);
+
                 return half4(albedo * lighting, 1);
             }
             ENDHLSL
