@@ -49,13 +49,18 @@ namespace TinyDiggers.Presentation
 
             _plinthMaterial = NewMaterial(_plinthColor);
             _bandMaterial = NewMaterial(_bandColor);
-            // Unity's cylinder is 2 units tall and 1 across, so a scale of (d, h/2, d) gives a
-            // plinth of diameter d and height h.
-            // The top of the plinth sits just under the rim of the land, or the two surfaces
-            // fight for the same depth and the flats come out striped.
+
+            // The top of the plinth sits just under the rim of the land, or the two surfaces fight
+            // for the same depth and the flats come out striped.
+            //
+            // It is a ring, not a solid cylinder: a solid one's top is a disc right under the
+            // land, and anything dug deeper than three quarters of a metre comes out through it —
+            // a pit floor drawn in plinth colour. The ring only fills the collar between the
+            // ragged edge of the land and the clean circle of the plinth, so however deep a pit
+            // goes, what is under it is still terrain.
             var top = rim - 0.75f;
-            AddCylinder("Plinth", centre, top - _depth * 0.5f, radius * 2f, _depth, _plinthMaterial);
-            AddCylinder("Plinth Band", centre, top - _bandHeight * 0.5f, radius * 2f + 0.05f, _bandHeight, _bandMaterial);
+            AddRing("Plinth", centre, top, _depth, radius, _terrain.DiscRadius - 2f, capBottom: true, _plinthMaterial);
+            AddRing("Plinth Band", centre, top, _bandHeight, radius + 0.025f, radius - 0.025f, capBottom: false, _bandMaterial);
 
             var shader = Shader.Find("TinyDiggers/Gradient Sky");
             if (shader != null)
@@ -69,16 +74,92 @@ namespace TinyDiggers.Presentation
             }
         }
 
-        void AddCylinder(string name, Vector2 centre, float centreHeight, float diameter, float height, Material material)
+        /// <summary>
+        /// A ring standing on its end: an outer wall from <paramref name="top"/> down by
+        /// <paramref name="height"/>, a collar across the top from <paramref name="innerRadius"/>
+        /// out to <paramref name="outerRadius"/>, and optionally a floor. No disc across the top,
+        /// so nothing of the plinth ever appears inside the land.
+        /// </summary>
+        void AddRing(string name, Vector2 centre, float top, float height, float outerRadius, float innerRadius, bool capBottom, Material material)
         {
-            var cylinder = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            cylinder.name = name;
-            cylinder.hideFlags = HideFlags.DontSave;
-            Destroy(cylinder.GetComponent<Collider>());
-            cylinder.transform.SetParent(_terrain.transform, false);
-            cylinder.transform.localPosition = new Vector3(centre.x, centreHeight, centre.y);
-            cylinder.transform.localScale = new Vector3(diameter, height * 0.5f, diameter);
-            var renderer = cylinder.GetComponent<MeshRenderer>();
+            const int Segments = 96;
+            var bottom = top - height;
+            innerRadius = Mathf.Clamp(innerRadius, 0f, outerRadius);
+
+            var vertices = new Vector3[Segments * 4 + (capBottom ? Segments + 1 : 0)];
+            var normals = new Vector3[vertices.Length];
+            var triangles = new int[Segments * 12 + (capBottom ? Segments * 3 : 0)];
+            var vertex = 0;
+            var triangle = 0;
+
+            for (var i = 0; i < Segments; i++)
+            {
+                var angle = i * Mathf.PI * 2f / Segments;
+                var direction = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+                vertices[vertex] = direction * outerRadius + Vector3.up * top;
+                vertices[vertex + 1] = direction * outerRadius + Vector3.up * bottom;
+                vertices[vertex + 2] = direction * innerRadius + Vector3.up * top;
+                normals[vertex] = direction;
+                normals[vertex + 1] = direction;
+                normals[vertex + 2] = Vector3.up;
+                normals[vertex + 3] = Vector3.up;
+                vertex += 4;
+            }
+
+            for (var i = 0; i < Segments; i++)
+            {
+                var a = i * 4;
+                var b = (i + 1) % Segments * 4;
+
+                // Outer wall.
+                triangles[triangle++] = a;
+                triangles[triangle++] = a + 1;
+                triangles[triangle++] = b + 1;
+                triangles[triangle++] = a;
+                triangles[triangle++] = b + 1;
+                triangles[triangle++] = b;
+
+                // Collar across the top, between the land and the plinth's edge.
+                triangles[triangle++] = a;
+                triangles[triangle++] = b;
+                triangles[triangle++] = b + 2;
+                triangles[triangle++] = a;
+                triangles[triangle++] = b + 2;
+                triangles[triangle++] = a + 2;
+            }
+
+            if (capBottom)
+            {
+                var centreVertex = vertex;
+                vertices[centreVertex] = Vector3.up * bottom;
+                normals[centreVertex] = Vector3.down;
+                vertex++;
+                for (var i = 0; i < Segments; i++)
+                {
+                    var angle = i * Mathf.PI * 2f / Segments;
+                    vertices[vertex + i] = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * outerRadius + Vector3.up * bottom;
+                    normals[vertex + i] = Vector3.down;
+                }
+
+                for (var i = 0; i < Segments; i++)
+                {
+                    triangles[triangle++] = centreVertex;
+                    triangles[triangle++] = vertex + (i + 1) % Segments;
+                    triangles[triangle++] = vertex + i;
+                }
+            }
+
+            var mesh = new Mesh { name = name };
+            mesh.vertices = vertices;
+            mesh.normals = normals;
+            mesh.triangles = triangles;
+            mesh.RecalculateBounds();
+
+            var piece = new GameObject(name) { hideFlags = HideFlags.DontSave };
+            piece.transform.SetParent(_terrain.transform, false);
+            piece.transform.localPosition = new Vector3(centre.x, 0f, centre.y);
+            piece.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = piece.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = material;
             renderer.shadowCastingMode = ShadowCastingMode.Off;
         }

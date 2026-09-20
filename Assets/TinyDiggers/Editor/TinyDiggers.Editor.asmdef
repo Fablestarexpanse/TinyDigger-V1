@@ -3,6 +3,9 @@
     "rootNamespace": "TinyDiggers.EditorTools",
     "references": [
         "TinyDiggers.Terrain",
+        "TinyDiggers.Presentation",
+        "TinyDiggers.Units",
+        "TinyDiggers.Interaction",
         "UnityEditor.TestRunner",
         "UnityEngine.TestRunner"
     ],

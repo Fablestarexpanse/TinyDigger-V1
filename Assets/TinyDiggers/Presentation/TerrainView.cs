@@ -29,6 +29,28 @@ namespace TinyDiggers.Presentation
         [SerializeField] Material _material;
         [SerializeField] TerrainRendererKind _renderer = TerrainRendererKind.Smoothed;
 
+        [Header("Material detail")]
+        [SerializeField, Tooltip("Leave empty to draw with the flat vertex-colour material instead.")]
+        TerrainTextureSet _textures;
+
+        /// <summary>Metres one tile of the albedo covers.</summary>
+        [Min(0.1f)] public float AlbedoRepeat = 0.5f;
+
+        /// <summary>Metres one tile of the fine detail normal covers.</summary>
+        [Min(0.05f)] public float DetailRepeat = 0.25f;
+
+        /// <summary>How far the detail normal bends the mesh's smooth normal. 0 is off.</summary>
+        [Range(0f, 2f)] public float DetailStrength = 1f;
+
+        /// <summary>Metres one cycle of the slow brightness mottle covers.</summary>
+        [Min(1f)] public float MottleRepeat = 12f;
+
+        /// <summary>How far the mottle lifts and drops brightness, either way.</summary>
+        [Range(0f, 0.4f)] public float MottleStrength = 0.1f;
+
+        /// <summary>Cells a material boundary is blended across.</summary>
+        [Range(0.05f, 1f)] public float BlendWidth = 0.5f;
+
         /// <summary>
         /// Metres. Generated surfaces snap to this, and digs, fills and slumps move whole
         /// multiples of it. Read once when the grid is built.
@@ -40,6 +62,7 @@ namespace TinyDiggers.Presentation
 
         ChunkedTerrainRenderer _terrainRenderer;
         AngleOfReposeSimulator _slump;
+        TerrainDetail _detail;
 
         public TerrainGrid Grid { get; private set; }
 
@@ -71,10 +94,30 @@ namespace TinyDiggers.Presentation
             DiscRadius = TerrainGenerator.DiscRadius(Grid);
             var generated = stopwatch.Elapsed.TotalMilliseconds;
 
+            var material = _material;
+            if (_textures != null)
+            {
+                var origin = new Vector2(transform.position.x, transform.position.z);
+                try
+                {
+                    _detail = new TerrainDetail(Grid, _textures, origin);
+                    PushTuning();
+                    material = _detail.Material;
+                }
+                catch (System.Exception error)
+                {
+                    // A missing shader or an unreadable texture should not cost the whole scene;
+                    // the flat material still shows the terrain.
+                    Debug.LogError($"TerrainView: material detail is off. {error.Message}");
+                    _detail?.Dispose();
+                    _detail = null;
+                }
+            }
+
             stopwatch.Restart();
             _terrainRenderer = _renderer == TerrainRendererKind.Walled
-                ? new WalledTerrainRenderer(Grid, transform, _material, _chunkSize)
-                : new SmoothedTerrainRenderer(Grid, transform, _material, _chunkSize);
+                ? new WalledTerrainRenderer(Grid, transform, material, _chunkSize)
+                : new SmoothedTerrainRenderer(Grid, transform, material, _chunkSize);
             var built = stopwatch.Elapsed.TotalMilliseconds;
 
             // Created after generation, so the freshly generated map is not queued for slumping;
@@ -101,12 +144,21 @@ namespace TinyDiggers.Presentation
         {
             using (RebuildMarker.Auto())
                 _terrainRenderer.Rebuild();
+
+            if (_detail == null)
+                return;
+            PushTuning();
+            _detail.Flush();
         }
+
+        void PushTuning() =>
+            _detail.SetTuning(AlbedoRepeat, DetailRepeat, DetailStrength, MottleRepeat, MottleStrength, BlendWidth);
 
         void OnDestroy()
         {
             _slump?.Dispose();
             _terrainRenderer?.Dispose();
+            _detail?.Dispose();
         }
     }
 }

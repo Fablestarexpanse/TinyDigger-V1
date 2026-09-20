@@ -217,8 +217,14 @@ MonoBehaviour:
   _seed: 1
   _material: {fileID: 2100000, guid: 4fd8fa78ded655542ae757b61b907654, type: 2}
   _renderer: 0
+  _textures: {fileID: 11400000, guid: 4c25006ba99936d4ebe9286ad5b4000f, type: 2}
+  AlbedoRepeat: 0.5
+  DetailRepeat: 0.25
+  DetailStrength: 1
+  MottleRepeat: 12
+  MottleStrength: 0.1
+  BlendWidth: 0.5
   HeightStep: 1
-  BrushRadius: 2
   SlumpTilesPerTick: 1000
 --- !u!4 &551060600
 Transform:

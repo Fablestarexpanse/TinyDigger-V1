@@ -1,0 +1,78 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c196568d4f262e6479494bbec2f7dbd6, type: 3}
+  m_Name: TerrainTextures
+  m_EditorClassIdentifier: TinyDiggers.Presentation::TinyDiggers.Presentation.TerrainTextureSet
+  _entries:
+  - MaterialId: 1
+    Name: Bedrock
+    Albedo: {fileID: 2800000, guid: 2099b9b796ac4144ba950b7dd6e14910, type: 3}
+    Normal: {fileID: 2800000, guid: 8b2bf83a232e43b46b46ac22bdcef207, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    Smoothness: 0.02
+  - MaterialId: 2
+    Name: Granite
+    Albedo: {fileID: 2800000, guid: 90c672a3e2d817d43ac7fb9c12fee00a, type: 3}
+    Normal: {fileID: 2800000, guid: 9efe4bb9f30e44c4185898975e0f1d3d, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    Smoothness: 0.12
+  - MaterialId: 3
+    Name: Rock
+    Albedo: {fileID: 2800000, guid: b28802e2831e73040879fb3bb755ddda, type: 3}
+    Normal: {fileID: 2800000, guid: 4c9d9c8cdd2b4bb4e83e8821db766f9d, type: 3}
+    CutAlbedo: {fileID: 2800000, guid: 6783c8130b3e36b4191f47a674522ecd, type: 3}
+    CutNormal: {fileID: 2800000, guid: cf55f2bbf925a3549b984dff33dffce2, type: 3}
+    Smoothness: 0.05
+  - MaterialId: 4
+    Name: Clay
+    Albedo: {fileID: 2800000, guid: d2339c30e80146d4fa1ecc14ff6459a1, type: 3}
+    Normal: {fileID: 2800000, guid: 74af6a7f2c79ef745ad53296e242a478, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    Smoothness: 0.2
+  - MaterialId: 5
+    Name: Dirt
+    Albedo: {fileID: 2800000, guid: 750f1952f77890248b653c848acca3a8, type: 3}
+    Normal: {fileID: 2800000, guid: da0a233321f714e479ccdd82160069d1, type: 3}
+    CutAlbedo: {fileID: 2800000, guid: a08b2d8b9f181d7448fd7ba735b3f6c7, type: 3}
+    CutNormal: {fileID: 2800000, guid: 37792e34bcd043649bdc3050fa730e48, type: 3}
+    Smoothness: 0.04
+  - MaterialId: 6
+    Name: Sand
+    Albedo: {fileID: 2800000, guid: b65e2bacf92016b458dde5dffa15bead, type: 3}
+    Normal: {fileID: 2800000, guid: 0d8605595fa01754c81c757cd4ddf4ee, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    Smoothness: 0.25
+  - MaterialId: 7
+    Name: Grass
+    Albedo: {fileID: 2800000, guid: 85d8c69db0e11a04a8267cd87ae5270c, type: 3}
+    Normal: {fileID: 2800000, guid: 8027ee8e3f0fe124c9ce8aa4e3987848, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    Smoothness: 0.1
+  - MaterialId: 8
+    Name: RockLoose
+    Albedo: {fileID: 2800000, guid: c77a8702b4feeb7449dc7aca757a911c, type: 3}
+    Normal: {fileID: 2800000, guid: 43899e453f538b24a912219bd12926a6, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    Smoothness: 0.06
+  - MaterialId: 9
+    Name: DirtLoose
+    Albedo: {fileID: 2800000, guid: 7eaa45e9c8c1a5b478d2f93b73f9de50, type: 3}
+    Normal: {fileID: 2800000, guid: b50f71e6794c1af42986d9a7bf57e694, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    Smoothness: 0.04

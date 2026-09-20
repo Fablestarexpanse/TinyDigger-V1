@@ -145,6 +145,26 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
   rendering, 4× less memory.)
 - Triplanar-mapped material textures; weathered vs freshly-cut rock variants.
 
+### Material detail (built, slice 7)
+Everything is in the fragment shader; the mesh and the terrain data are untouched.
+- One texel per cell carries the material on top and what a cut would expose
+  (`TerrainCellMap`); only changed cells are rewritten.
+- The material set is two texture arrays indexed by material id, with cut
+  variants appended (`TerrainMaterialAtlas`), so a chunk is one draw call
+  whatever it is made of.
+- The four nearest cells' materials are blended over half a cell, widened to the
+  fragment's own footprint when a cell is smaller than a pixel. This is what
+  keeps a material edge a soft line instead of a stair of cell edges.
+- Albedo (~0.5 m) and a finer detail normal (~0.25 m) are sampled triplanar from
+  world position; one slow ~12 m mottle varies brightness by ±10%.
+- Faces past 40° are a cut: exposed material, its cut variant where there is one,
+  darkened 15%.
+- Derivatives are taken once in uniform flow: a texture read inside the per-cell
+  loop has no mip to pick and flattens whole surfaces to one colour.
+- Tuning is public on `TerrainView`; the texture set is a ScriptableObject filled
+  by **TinyDiggers > Generate Placeholder Terrain Textures**, so real PNGs can
+  replace the placeholders without a code change.
+
 ## 6. Things we deliberately do NOT copy
 - 4×4 designation blocks.
 - Mine Control Tower as a hard requirement — in the sandbox the crew itself is

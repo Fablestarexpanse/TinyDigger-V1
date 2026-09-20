@@ -5,11 +5,11 @@ this records why.
 
 ---
 
-**NEXT:** Vertical Slice 6 (camera, toolbar, turntable) is done, green (238/238) and pushed on
-`main`. Nothing is in flight. Terrain rendering stays closed apart from the disc, plinth and
-backdrop added here. Still owed: a frame-time check on a mid-range machine (the ~9 ms region
-rebuild after a change in open ground is the thing to watch), and the optional tilt-shift blur,
-which is a public toggle but not implemented; then Ronan's call on the next slice.
+**NEXT:** Vertical Slice 7 (material detail) is done, green (245/245) and pushed on `main`.
+Nothing is in flight. Still owed: a frame-time check on a mid-range machine (this machine draws
+the whole disc at 1440p in about 2 ms, so the numbers below are a ceiling, not a guide), and the
+optional tilt-shift blur, which is a public toggle but not implemented; then Ronan's call on the
+next slice.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1051,3 +1051,66 @@ toward the cursor, pitch follows zoom and the nudges, and Home re-centres.
 
 The generator tests now skip void cells, and the "most of the land is terrace tops" threshold came
 down from 80% to 55% of the square grid, because the disc only covers about 78% of it.
+
+
+---
+
+## Slice 7 — material detail (2026-09-20)
+
+Ground now reads as gravel, soil and grass instead of flat colour, entirely in the fragment
+shader. The terrain data and the mesh are untouched.
+
+### How it is put together
+- `TerrainTextureSet` (ScriptableObject) names, per material, an albedo, a normal and optionally a
+  "cut" pair for freshly exposed faces. **TinyDiggers > Generate Placeholder Terrain Textures**
+  writes tileable 1024² procedural PNGs and links them. Dropping real PNGs in over them needs no
+  code change.
+- Deviation from the brief: the textures live in `Assets/TinyDiggers/Terrain/Textures/`, not
+  `Assets/Terrain/Textures/`, to match where everything else in the project lives.
+- `TerrainMaterialAtlas` packs the set into two `Texture2DArray`s (albedo sRGB, normal linear),
+  slice = material id, cut variants appended after the last id. One material for every chunk, so
+  the map is still one draw call per chunk whatever it is made of.
+- `TerrainCellMap` is one texel per cell: red the material on top, green what a cut would expose.
+  Only changed cells are rewritten and at most one upload happens per frame.
+- `TerrainTriplanar.shader` blends the four nearest cells' materials, samples triplanar from world
+  position, adds a fine detail normal over the albedo and a slow ~12 m mottle, darkens steep faces
+  and takes their exposed/cut material, and lights it with URP's own `UniversalFragmentPBR`.
+- `TerrainDetail` holds the three together and hands `TerrainView` one material; the tuning
+  (repeat scales, detail and mottle strength, blend width) is public on `TerrainView`.
+
+### Two things that were wrong and are worth remembering
+- **Texture reads inside the four-cell loop had no derivatives.** A texture sample in branchy flow
+  cannot pick a mip, which flattened whole surfaces to a single colour and made the rest crawl.
+  The derivatives are now taken once, in uniform flow, and the samples use `SAMPLE_*_GRAD`.
+- **The blend has to widen with distance.** A half-cell transition is narrower than a pixel once
+  the camera is far enough away, which is exactly when the sawtooth appears. The blend width is
+  now `max(_BlendWidth, fwidth(cell) * 1.5)`.
+
+### A defect found while shooting the screenshots: the plinth's lid
+The Slice 6 plinth was a solid cylinder whose top sat 0.75 m under the rim. Anything below that —
+a pit floor, or simply low-lying ground — was drawn in plinth cream instead of terrain. It had
+been read as terrain colour until a deep pit made it obvious. The plinth is now a ring: an outer
+wall, a collar across the top from the ragged edge of the land out to the clean circle, and a
+floor. Nothing of the plinth appears inside the land any more, however deep the digging goes.
+
+### The sawtooth rim item
+The material-boundary blend closes the part of it that was material edges: at every distance a
+boundary between two materials is now a soft line across the ground rather than a stair of cell
+edges (compare the disc shot before and after). What is left on a pit rim is the mesh itself
+stepping by one height step — geometry, not shading — and that is not this slice's to fix.
+
+### Perf at 2560x1440 (this machine, editor play mode, still scene)
+| view | frame | worst | draw calls | triangles | set-pass |
+|------|-------|-------|-----------|-----------|----------|
+| the Slice 0 pit, 70 m out | 2.00 ms | 2.62 ms | 51 | 65,090 | 12 |
+| a cut face, 16 m out | 1.74 ms | 2.48 ms | 33 | 11,938 | 14 |
+| the whole disc, 620 m out | 1.99 ms | 3.36 ms | 243 | 408,824 | 12 |
+
+243 draw calls for 240 visible chunks: one per chunk, as intended. Measured by
+**TinyDiggers > Slice 7 Capture** (play mode), which also writes the three screenshots to
+`Screenshots/Slice7/`.
+
+### Tests (245/245 green)
+New: the cell map is one texel per cell, red is the material on top, green is what a cut exposes
+under a thin top layer and the top material itself under a thick one, a changed cell is uploaded
+on the next flush, a flush with nothing changed uploads nothing, and void cells hold no material.
