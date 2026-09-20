@@ -5,12 +5,11 @@ this records why.
 
 ---
 
-**NEXT:** Vertical Slice 7 (material detail) is done, green (245/245) and pushed on `main`, and
-the texture set has since been rebuilt to Ronan's written brief.
-Nothing is in flight. Still owed: a frame-time check on a mid-range machine (this machine draws
-the whole disc at 1440p in about 2 ms, so the numbers below are a ceiling, not a guide), and the
-optional tilt-shift blur, which is a public toggle but not implemented; then Ronan's call on the
-next slice.
+**NEXT:** Slice 7 (material detail) is done and pushed, the texture set has been rebuilt to
+Ronan's brief, and the camera now has a free tilt, an adjustable lens and a preset asset
+(250/250 green). Nothing is in flight. Still owed: a frame-time check on a mid-range machine, and
+the optional tilt-shift blur, which is a public toggle but not implemented; then Ronan's call on
+the next slice.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1159,3 +1158,40 @@ Menu item renamed **TinyDiggers > Generate Terrain Textures** (it is no longer w
 placeholders), and it now deletes PNGs it no longer produces, so the rename from `dirtcut`/
 `rockcut` left no litter. 11 looks for 9 materials. Tests still 245/245 green; frame time at 1440p
 is unchanged (1.87–1.88 ms).
+
+
+---
+
+## Camera — free tilt, lens, and presets (2026-09-20)
+
+Ronan's ruling: the pitch is the player's, not the zoom's.
+
+- **Tilt is free between 10° and 89°.** R and F tilt while held rather than nudging in steps, and
+  a middle-button drag now tilts with vertical motion as well as turning with horizontal. Dragging
+  up pulls the camera over the map.
+- **The old zoom-driven pitch curve is a toggle**, `RtsCameraRig.PitchFollowsZoom`, off by
+  default. With it on, the camera behaves exactly as it did before, `PitchOffset` and all; with it
+  off, the zoom only changes how far back the camera sits.
+- **The lens is adjustable**: Shift and the wheel moves the field of view between 15° and 60°. A
+  narrow lens from further back is where the tilt-shift feel comes from, without any post effect.
+- **Presets.** `CameraPreset` is a ScriptableObject holding pitch, FOV, zoom distance and the
+  pitch-follows-zoom flag — a way of looking at the map, deliberately not a place on it, so the
+  pivot and heading are not in it. F5 saves the live camera to
+  `Assets/TinyDiggers/Camera/Default.asset`, F6 loads it back, Home re-centres using it, and it is
+  what the game starts with. The default is pitch 50°, FOV 40°, 450 m, which frames most of the
+  disc.
+- **The F3 readout** now carries pitch, yaw, FOV and zoom distance, refreshed with the frame-time
+  line twice a second rather than every frame.
+- Saving writes an asset, which only the editor can do; in a build F5 keeps the preset for the
+  session and says so rather than pretending.
+
+Nothing else about the camera changed: panning, turning, zoom-toward-cursor, the disc clamp and
+the easing are as they were.
+
+Tests (250/250 green): the zoom leaves the pitch alone by default and drives it when told to, the
+tilt clamps at 10° and 89°, the lens clamps at 15° and 60°, a preset carries the way the camera
+looks but not where it is, and Home takes the preset when there is one.
+
+Worth remembering for play-mode checks: `EditorApplication.ExitPlaymode()` does not take effect
+until the end of the frame, so a command that exits play and immediately reads the scene is still
+reading the old session. Two readings of the camera looked like a bug that was not there.

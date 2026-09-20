@@ -14,9 +14,13 @@ namespace TinyDiggers.Interaction
     ///   further out the camera is.
     /// - Q and E turn, as does dragging with the middle mouse button. The turn is about the
     ///   pivot, so from far out it reads as turning the table the map sits on.
-    /// - The wheel zooms toward whatever is under the cursor, in even steps.
-    /// - Pitch follows the zoom, low down when close and looking down when far out; R and F nudge
-    ///   it either way. Home returns to the middle of the map, fully zoomed out.
+    /// - The wheel zooms toward whatever is under the cursor, in even steps. Shift and the wheel
+    ///   changes the lens instead: narrow and far back is what reads as a model on a table.
+    /// - The tilt is the player's. R and F tilt while held, and dragging the middle button up and
+    ///   down tilts as well as turning, anywhere from 10° to 89°. The old zoom-driven pitch curve
+    ///   is still there behind <see cref="RtsCameraRig.PitchFollowsZoom"/>, off by default.
+    /// - F5 saves the way the camera is looking to the preset asset, F6 loads it back, and Home
+    ///   re-centres on the map using it — so the preset is also what the game starts with.
     /// - Edge panning is off unless <see cref="EdgePan"/> is set.
     /// </summary>
     [RequireComponent(typeof(Camera))]
@@ -26,6 +30,9 @@ namespace TinyDiggers.Interaction
         public const float ClickTravelPixels = 6f;
 
         [SerializeField] TerrainView _terrain;
+
+        [Tooltip("The camera the game starts with, and what F5 saves to, F6 loads and Home uses.")]
+        [SerializeField] CameraPreset _preset;
 
         [Header("Pan")]
         [Tooltip("Cells a second at the closest zoom; scaled up with distance.")]
@@ -50,17 +57,24 @@ namespace TinyDiggers.Interaction
         [Tooltip("Fraction of the distance one scroll notch covers.")]
         public float ZoomStep = 0.15f;
 
+        [Tooltip("Degrees of field of view one scroll notch covers, held with Shift.")]
+        public float FovStep = 2f;
+
         [Header("Turn and pitch")]
         public float TurnSpeed = 90f;
 
         public float DragTurnSpeed = 0.25f;
 
-        [Range(5f, 89f)] public float ClosePitch = 35f;
+        [Tooltip("Degrees a second R and F tilt while held.")]
+        public float TiltSpeed = 45f;
 
-        [Range(5f, 89f)] public float FarPitch = 60f;
+        [Tooltip("Degrees of tilt per pixel of vertical middle-drag. Dragging up looks further down.")]
+        public float DragTiltSpeed = 0.2f;
 
-        [Tooltip("Degrees R and F add to the pitch the zoom asks for.")]
-        public float PitchNudge = 10f;
+        [Header("Pitch follows zoom (off by default)")]
+        [Range(RtsCameraRig.MinPitch, RtsCameraRig.MaxPitch)] public float ClosePitch = 35f;
+
+        [Range(RtsCameraRig.MinPitch, RtsCameraRig.MaxPitch)] public float FarPitch = 60f;
 
         [Header("Easing")]
         public float PanSmoothing = 0.12f;
@@ -80,6 +94,8 @@ namespace TinyDiggers.Interaction
         float _yawVelocity;
         float _pitch;
         float _pitchVelocity;
+        float _fov;
+        float _fovVelocity;
         Vector2 _middlePressedAt;
         bool _turning;
 
@@ -90,6 +106,18 @@ namespace TinyDiggers.Interaction
         public Vector3 Pivot => _pivot;
 
         public float Distance => _distance;
+
+        /// <summary>Degrees below the horizon, as the camera is drawn this frame.</summary>
+        public float Pitch => _pitch;
+
+        /// <summary>Degrees clockwise from +z, as the camera is drawn this frame.</summary>
+        public float Yaw => _yaw;
+
+        /// <summary>Vertical field of view, as the camera is drawn this frame.</summary>
+        public float Fov => _fov;
+
+        /// <summary>The preset F5 writes to and F6 reads back. May be unset.</summary>
+        public CameraPreset Preset => _preset;
 
         /// <summary>Whether a middle-button press has turned into a turn rather than a click.</summary>
         public bool IsTurning => _turning;
@@ -107,15 +135,53 @@ namespace TinyDiggers.Interaction
             _distance = _rig.Distance;
             _yaw = _rig.Yaw;
             _pitch = _rig.Pitch;
+            _fov = _rig.Fov;
             Place();
         }
 
-        /// <summary>Puts the camera back over the middle of the map, fully zoomed out.</summary>
+        /// <summary>Puts the camera back over the middle of the map, looking the way the preset says.</summary>
         public void GoHome()
         {
             ApplySettings();
-            _rig.GoHome();
+            _rig.GoHome(_preset);
             _rig.Pivot = new Vector3(_rig.Pivot.x, GroundHeightAt(_rig.Pivot), _rig.Pivot.z);
+        }
+
+        /// <summary>
+        /// Writes how the camera is looking now to the preset asset. Only the editor can write an
+        /// asset, so in a build this reports rather than pretending to have saved.
+        /// </summary>
+        public void SavePreset()
+        {
+            if (_preset == null)
+            {
+                Debug.LogWarning("Camera: no preset asset is assigned, so F5 has nothing to save to.");
+                return;
+            }
+
+            _preset.CaptureFrom(_rig);
+#if UNITY_EDITOR
+            UnityEditor.EditorUtility.SetDirty(_preset);
+            UnityEditor.AssetDatabase.SaveAssetIfDirty(_preset);
+            Debug.Log($"Camera saved to {UnityEditor.AssetDatabase.GetAssetPath(_preset)}: " +
+                $"pitch {_preset.Pitch:0.#}°, FOV {_preset.Fov:0.#}°, {_preset.Distance:0} m" +
+                (_preset.PitchFollowsZoom ? ", pitch follows zoom." : "."));
+#else
+            Debug.Log("Camera preset held for this session; saving it to the asset needs the editor.");
+#endif
+        }
+
+        /// <summary>Puts the camera back the way the preset says, without moving the pivot.</summary>
+        public void LoadPreset()
+        {
+            if (_preset == null)
+            {
+                Debug.LogWarning("Camera: no preset asset is assigned, so F6 has nothing to load.");
+                return;
+            }
+
+            ApplySettings();
+            _preset.ApplyTo(_rig);
         }
 
         void ApplySettings()
@@ -143,16 +209,24 @@ namespace TinyDiggers.Interaction
             var deltaTime = Time.unscaledDeltaTime;
 
             ReadTurn(keyboard, mouse, deltaTime);
-            ReadZoom(mouse);
+            ReadZoom(keyboard, mouse);
             ReadPan(keyboard, mouse, deltaTime);
-            if (keyboard != null && keyboard.homeKey.wasPressedThisFrame)
-                GoHome();
+            if (keyboard != null)
+            {
+                if (keyboard.homeKey.wasPressedThisFrame)
+                    GoHome();
+                if (keyboard.f5Key.wasPressedThisFrame)
+                    SavePreset();
+                if (keyboard.f6Key.wasPressedThisFrame)
+                    LoadPreset();
+            }
 
             _rig.Pivot = new Vector3(_rig.Pivot.x, GroundHeightAt(_rig.Pivot), _rig.Pivot.z);
             _pivot = Vector3.SmoothDamp(_pivot, _rig.Pivot, ref _pivotVelocity, PanSmoothing, Mathf.Infinity, deltaTime);
             _distance = Mathf.SmoothDamp(_distance, _rig.Distance, ref _distanceVelocity, ZoomSmoothing, Mathf.Infinity, deltaTime);
             _yaw = Mathf.SmoothDampAngle(_yaw, _rig.Yaw, ref _yawVelocity, TurnSmoothing, Mathf.Infinity, deltaTime);
             _pitch = Mathf.SmoothDamp(_pitch, _rig.Pitch, ref _pitchVelocity, TurnSmoothing, Mathf.Infinity, deltaTime);
+            _fov = Mathf.SmoothDamp(_fov, _rig.Fov, ref _fovVelocity, ZoomSmoothing, Mathf.Infinity, deltaTime);
             Place();
         }
 
@@ -164,10 +238,11 @@ namespace TinyDiggers.Interaction
                     _rig.Turn(-TurnSpeed * deltaTime);
                 if (keyboard.eKey.isPressed)
                     _rig.Turn(TurnSpeed * deltaTime);
-                if (keyboard.rKey.wasPressedThisFrame)
-                    _rig.NudgePitch(PitchNudge);
-                if (keyboard.fKey.wasPressedThisFrame)
-                    _rig.NudgePitch(-PitchNudge);
+                // Held, not tapped: the tilt is continuous now.
+                if (keyboard.rKey.isPressed)
+                    _rig.Tilt(TiltSpeed * deltaTime);
+                if (keyboard.fKey.isPressed)
+                    _rig.Tilt(-TiltSpeed * deltaTime);
             }
 
             if (mouse == null)
@@ -183,14 +258,20 @@ namespace TinyDiggers.Interaction
                 if ((mouse.position.ReadValue() - _middlePressedAt).magnitude >= ClickTravelPixels)
                     _turning = true;
                 if (_turning)
-                    _rig.Turn(mouse.delta.ReadValue().x * DragTurnSpeed);
+                {
+                    var drag = mouse.delta.ReadValue();
+                    _rig.Turn(drag.x * DragTurnSpeed);
+                    // Dragging up pulls the camera over the map; dragging down lowers it toward
+                    // the horizon.
+                    _rig.Tilt(drag.y * DragTiltSpeed);
+                }
             }
 
             if (mouse.middleButton.wasReleasedThisFrame)
                 _turning = false;
         }
 
-        void ReadZoom(Mouse mouse)
+        void ReadZoom(Keyboard keyboard, Mouse mouse)
         {
             if (mouse == null)
                 return;
@@ -201,6 +282,15 @@ namespace TinyDiggers.Interaction
             var notches = Mathf.Clamp(scroll / 120f, -3f, 3f);
             if (Mathf.Abs(notches) < 0.01f)
                 notches = Mathf.Sign(scroll);
+
+            // Shift and the wheel is the lens rather than the distance: a narrow lens from further
+            // back flattens the map out, which is where the tilt-shift look comes from.
+            if (keyboard != null && keyboard.shiftKey.isPressed)
+            {
+                _rig.ChangeFov(-notches * FovStep);
+                return;
+            }
+
             _rig.Zoom(notches, TryGroundPointUnder(mouse.position.ReadValue(), out var under) ? under : (Vector3?)null);
         }
 
@@ -237,6 +327,8 @@ namespace TinyDiggers.Interaction
 
         void Place()
         {
+            if (_camera != null && !_camera.orthographic)
+                _camera.fieldOfView = _fov;
             var rotation = Quaternion.Euler(_pitch, _yaw, 0f);
             var position = _pivot - rotation * Vector3.forward * _distance;
             var terrain = _terrain != null ? _terrain.transform : null;

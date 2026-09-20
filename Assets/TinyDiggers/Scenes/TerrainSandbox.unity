@@ -527,6 +527,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: TinyDiggers.Interaction::TinyDiggers.Interaction.RtsCamera
   _terrain: {fileID: 551060599}
+  _preset: {fileID: 11400000, guid: 8e02e36804029d4468dcee9e67c93317, type: 2}
   PanSpeed: 14
   PanSpeedAtFar: 7
   EdgePan: 0
@@ -534,11 +535,13 @@ MonoBehaviour:
   MinDistance: 4
   MaxDistance: 700
   ZoomStep: 0.15
+  FovStep: 2
   TurnSpeed: 90
   DragTurnSpeed: 0.25
+  TiltSpeed: 45
+  DragTiltSpeed: 0.2
   ClosePitch: 35
   FarPitch: 60
-  PitchNudge: 10
   PanSmoothing: 0.12
   ZoomSmoothing: 0.15
   TurnSmoothing: 0.1
@@ -716,6 +719,7 @@ MonoBehaviour:
   _tool: {fileID: 1679163891}
   _crew: {fileID: 170383080}
   _designations: {fileID: 1108996318}
+  _camera: {fileID: 907044676}
   Visible: 0
 --- !u!4 &2023474833
 Transform:

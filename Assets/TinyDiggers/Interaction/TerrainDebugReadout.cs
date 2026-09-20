@@ -19,6 +19,7 @@ namespace TinyDiggers.Interaction
         [SerializeField] PlayerTools _tool;
         [SerializeField] CrewView _crew;
         [SerializeField] DesignationsView _designations;
+        [SerializeField] RtsCamera _camera;
 
         readonly TerrainCellReport _report = new TerrainCellReport();
         readonly InventoryReport _loadReport = new InventoryReport();
@@ -36,6 +37,7 @@ namespace TinyDiggers.Interaction
         string _panel = "";
         string _cell = "";
         string _frameTime = "";
+        string _cameraLine = "";
         string _shownAction;
         int _shownRadius = -1;
         bool _shownHover;
@@ -84,6 +86,7 @@ namespace TinyDiggers.Interaction
                 var milliseconds = _frameTimeAccumulated / _framesCounted * 1000f;
                 _frameTime = $"{milliseconds:0.0} ms/frame ({1000f / milliseconds:0} fps), {_terrain.TriangleCount:N0} triangles, " +
                     $"slump queue {_terrain.SlumpPending}";
+                _cameraLine = DescribeCamera();
                 _frameTimeAccumulated = 0f;
                 _framesCounted = 0;
                 _panelChanged = true;
@@ -202,7 +205,9 @@ namespace TinyDiggers.Interaction
                     .Append("Brush ").Append(_tool.BrushRadius)
                     .AppendLine("   tools 1-7   LMB apply   RMB cancel/clear   Esc select")
                     .AppendLine("PgUp/PgDn H -/+ 1 step (locks)   [ ] brush or road width   F3 hides this")
-                    .AppendLine("WASD pan   Q/E or MMB drag turn   R/F pitch   scroll zoom   Home centre")
+                    .AppendLine("WASD pan   Q/E or MMB drag-x turn   R/F or MMB drag-y tilt   scroll zoom")
+                    .AppendLine("Shift+scroll FOV   Home centre   F5 save camera   F6 load camera")
+                    .AppendLine(_cameraLine)
                     .AppendLine()
                     .AppendLine(_unitBlock)
                     .AppendLine()
@@ -213,6 +218,18 @@ namespace TinyDiggers.Interaction
                 _panelChanged = false;
                 _contentChanged = true;
             }
+        }
+
+        /// <summary>Where the camera is looking: the numbers worth having while setting a preset up.</summary>
+        string DescribeCamera()
+        {
+            if (_camera == null)
+                return "Camera: not wired to the readout";
+            var rig = _camera.Rig;
+            return $"Camera: pitch {_camera.Pitch:0.#}°   yaw {_camera.Yaw:0.#}°   FOV {_camera.Fov:0.#}°   " +
+                $"zoom {_camera.Distance:0.#} m" +
+                (rig.PitchFollowsZoom ? "   pitch follows zoom" : "") +
+                (_camera.Preset == null ? "   (no preset asset)" : "");
         }
 
         /// <summary>Whether the panel is shown. F3 toggles it; the toolbar is the everyday UI.</summary>

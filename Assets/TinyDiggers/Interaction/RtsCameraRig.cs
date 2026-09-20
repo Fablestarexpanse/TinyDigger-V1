@@ -11,6 +11,16 @@ namespace TinyDiggers.Interaction
     /// </summary>
     public sealed class RtsCameraRig
     {
+        /// <summary>Degrees below the horizon at the flattest the camera will go.</summary>
+        public const float MinPitch = 10f;
+
+        /// <summary>Degrees below the horizon looking as near straight down as it will go.</summary>
+        public const float MaxPitch = 89f;
+
+        public const float MinFov = 15f;
+
+        public const float MaxFov = 60f;
+
         /// <summary>The ground point the camera orbits, in cells.</summary>
         public Vector3 Pivot;
 
@@ -22,6 +32,16 @@ namespace TinyDiggers.Interaction
 
         /// <summary>Degrees the player has nudged the pitch away from what the zoom asks for.</summary>
         public float PitchOffset;
+
+        /// <summary>
+        /// Whether the zoom drives the pitch, low down when close and looking down when far out.
+        /// Off by default: the tilt is the player's, and the zoom only changes how far back the
+        /// camera sits. <see cref="PitchOffset"/> still nudges the curve when this is on.
+        /// </summary>
+        public bool PitchFollowsZoom;
+
+        /// <summary>Vertical field of view, in degrees. Narrow and far back reads as a model.</summary>
+        public float Fov = 40f;
 
         public float MinDistance = 4f;
 
@@ -49,8 +69,17 @@ namespace TinyDiggers.Interaction
         /// <summary>How far out the camera is, 0 closest and 1 furthest.</summary>
         public float ZoomFraction => Mathf.InverseLerp(MinDistance, MaxDistance, Distance);
 
-        /// <summary>The pitch the current zoom asks for, plus whatever the player has nudged it by.</summary>
-        public float Pitch => Mathf.Clamp(Mathf.Lerp(ClosePitch, FarPitch, ZoomFraction) + PitchOffset, 5f, 89f);
+        /// <summary>Degrees below the horizon when the pitch is the player's rather than the zoom's.</summary>
+        float _pitch = 45f;
+
+        /// <summary>
+        /// How far over the camera is tilted: the player's own angle, or, with
+        /// <see cref="PitchFollowsZoom"/> on, what the zoom asks for plus whatever they have
+        /// nudged it by.
+        /// </summary>
+        public float Pitch => PitchFollowsZoom
+            ? Mathf.Clamp(Mathf.Lerp(ClosePitch, FarPitch, ZoomFraction) + PitchOffset, MinPitch, MaxPitch)
+            : _pitch;
 
         public Quaternion Rotation => Quaternion.Euler(Pitch, Yaw, 0f);
 
@@ -76,9 +105,33 @@ namespace TinyDiggers.Interaction
             Yaw += degrees;
         }
 
-        public void NudgePitch(float degrees)
+        /// <summary>
+        /// Tilts by <paramref name="degrees"/>, positive toward looking straight down. Free
+        /// between <see cref="MinPitch"/> and <see cref="MaxPitch"/>; with
+        /// <see cref="PitchFollowsZoom"/> on it moves the nudge away from the zoom's curve instead,
+        /// which is what it always used to do.
+        /// </summary>
+        public void Tilt(float degrees)
         {
-            PitchOffset = Mathf.Clamp(PitchOffset + degrees, -30f, 30f);
+            if (PitchFollowsZoom)
+            {
+                PitchOffset = Mathf.Clamp(PitchOffset + degrees, -40f, 40f);
+                return;
+            }
+
+            SetPitch(_pitch + degrees);
+        }
+
+        /// <summary>Puts the free pitch at an angle, clamped to the range the camera allows.</summary>
+        public void SetPitch(float degrees)
+        {
+            _pitch = Mathf.Clamp(degrees, MinPitch, MaxPitch);
+        }
+
+        /// <summary>Widens or narrows the lens, clamped to <see cref="MinFov"/>..<see cref="MaxFov"/>.</summary>
+        public void ChangeFov(float degrees)
+        {
+            Fov = Mathf.Clamp(Fov + degrees, MinFov, MaxFov);
         }
 
         /// <summary>
@@ -97,13 +150,22 @@ namespace TinyDiggers.Interaction
                 Pivot = ClampToDisc(Vector3.Lerp(Pivot, towards.Value, Mathf.Clamp01(closed)));
         }
 
-        /// <summary>Puts the camera over the middle of the map, fully zoomed out.</summary>
-        public void GoHome()
+        /// <summary>
+        /// Puts the camera over the middle of the map. With a preset it takes that preset's way of
+        /// looking at the map; without one it falls back to fully zoomed out, as it used to.
+        /// </summary>
+        public void GoHome(CameraPreset preset = null)
         {
             Pivot = new Vector3(DiscCentre.x, Pivot.y, DiscCentre.y);
-            Distance = MaxDistance;
             Yaw = 45f;
             PitchOffset = 0f;
+            if (preset != null)
+            {
+                preset.ApplyTo(this);
+                return;
+            }
+
+            Distance = MaxDistance;
         }
 
         /// <summary>Keeps a point on the disc, so the land can never be pushed off the table.</summary>

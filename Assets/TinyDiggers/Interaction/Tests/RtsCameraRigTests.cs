@@ -110,9 +110,10 @@ namespace TinyDiggers.Interaction.Tests
         }
 
         [Test]
-        public void PitchFollowsTheZoomAndTheNudges()
+        public void PitchFollowsTheZoomAndTheNudgesWhenItIsToldTo()
         {
             var rig = NewRig();
+            rig.PitchFollowsZoom = true;
             rig.ClosePitch = 35f;
             rig.FarPitch = 60f;
 
@@ -122,8 +123,113 @@ namespace TinyDiggers.Interaction.Tests
             rig.Distance = rig.MaxDistance;
             Assert.That(rig.Pitch, Is.EqualTo(60f).Within(0.01f));
 
-            rig.NudgePitch(-10f);
+            rig.Tilt(-10f);
             Assert.That(rig.Pitch, Is.EqualTo(50f).Within(0.01f));
+        }
+
+        [Test]
+        public void TheZoomLeavesThePitchAloneByDefault()
+        {
+            var rig = NewRig();
+            rig.ClosePitch = 35f;
+            rig.FarPitch = 60f;
+            rig.SetPitch(42f);
+
+            rig.Distance = rig.MinDistance;
+            Assert.That(rig.Pitch, Is.EqualTo(42f).Within(0.01f));
+            rig.Distance = rig.MaxDistance;
+            Assert.That(rig.Pitch, Is.EqualTo(42f).Within(0.01f));
+        }
+
+        [Test]
+        public void TiltIsFreeBetweenTenAndEightyNineDegrees()
+        {
+            var rig = NewRig();
+            rig.SetPitch(45f);
+
+            rig.Tilt(12f);
+            Assert.That(rig.Pitch, Is.EqualTo(57f).Within(0.01f));
+
+            rig.Tilt(1000f);
+            Assert.That(rig.Pitch, Is.EqualTo(RtsCameraRig.MaxPitch).Within(0.01f));
+
+            rig.Tilt(-1000f);
+            Assert.That(rig.Pitch, Is.EqualTo(RtsCameraRig.MinPitch).Within(0.01f));
+        }
+
+        [Test]
+        public void TheLensIsClampedToFifteenAndSixtyDegrees()
+        {
+            var rig = NewRig();
+            rig.Fov = 40f;
+
+            rig.ChangeFov(-5f);
+            Assert.That(rig.Fov, Is.EqualTo(35f).Within(0.01f));
+
+            rig.ChangeFov(-100f);
+            Assert.That(rig.Fov, Is.EqualTo(RtsCameraRig.MinFov).Within(0.01f));
+
+            rig.ChangeFov(100f);
+            Assert.That(rig.Fov, Is.EqualTo(RtsCameraRig.MaxFov).Within(0.01f));
+        }
+
+        [Test]
+        public void APresetCarriesTheWayTheCameraLooksButNotWhereItIs()
+        {
+            var rig = NewRig();
+            rig.SetPitch(63f);
+            rig.Fov = 22f;
+            rig.Distance = 210f;
+            rig.PitchFollowsZoom = false;
+
+            var preset = ScriptableObject.CreateInstance<CameraPreset>();
+            try
+            {
+                preset.CaptureFrom(rig);
+
+                var other = NewRig();
+                other.Pivot = new Vector3(7f, 0f, 9f);
+                other.Yaw = 123f;
+                preset.ApplyTo(other);
+
+                Assert.That(other.Pitch, Is.EqualTo(63f).Within(0.01f));
+                Assert.That(other.Fov, Is.EqualTo(22f).Within(0.01f));
+                Assert.That(other.Distance, Is.EqualTo(210f).Within(0.01f));
+                Assert.That(other.PitchFollowsZoom, Is.False);
+                Assert.That(other.Pivot, Is.EqualTo(new Vector3(7f, 0f, 9f)), "a preset is a way of looking, not a place");
+                Assert.That(other.Yaw, Is.EqualTo(123f).Within(0.01f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(preset);
+            }
+        }
+
+        [Test]
+        public void HomeTakesThePresetWhenThereIsOne()
+        {
+            var rig = NewRig();
+            rig.Pivot = new Vector3(10f, 0f, 10f);
+            rig.Distance = 20f;
+
+            var preset = ScriptableObject.CreateInstance<CameraPreset>();
+            try
+            {
+                preset.Pitch = 55f;
+                preset.Fov = 25f;
+                preset.Distance = 180f;
+
+                rig.GoHome(preset);
+
+                Assert.That(rig.Pivot.x, Is.EqualTo(rig.DiscCentre.x).Within(Tolerance));
+                Assert.That(rig.Distance, Is.EqualTo(180f).Within(Tolerance));
+                Assert.That(rig.Pitch, Is.EqualTo(55f).Within(0.01f));
+                Assert.That(rig.Fov, Is.EqualTo(25f).Within(0.01f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(preset);
+            }
         }
 
         [Test]
