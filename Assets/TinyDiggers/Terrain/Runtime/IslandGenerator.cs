@@ -129,7 +129,7 @@ namespace TinyDiggers.Terrain
 
             // --- 5: the river ----------------------------------------------------------------
             var map = new IslandMap();
-            var path = CarveRiver(map, heights, width, depth, grid, random, settings, step);
+            var path = CarveRiver(map, heights, width, depth, grid, random, settings, step, centre);
 
             // Carving only ever lowers ground, so relaxing again can only lower it further: this
             // takes out the steps the channel's own banks leave where the river bends and one cut
@@ -144,10 +144,17 @@ namespace TinyDiggers.Terrain
             var floor = float.MaxValue;
             foreach (var point in path)
             {
-                floor = Mathf.Min(floor, heights[point.y * width + point.x]);
-                map.River.Add(new Vector3(point.x + 0.5f, floor, point.y + 0.5f));
-                if (floor < World.SeaLevel - 1f)
+                var ground = heights[point.y * width + point.x];
+                floor = Mathf.Min(floor, ground);
+                if (ground <= World.SeaLevel)
+                {
+                    // The mouth: the last point goes under the surface, because that is where a
+                    // river ends - below the sea, not level with it.
+                    map.River.Add(new Vector3(point.x + 0.5f, Mathf.Min(floor, World.SeaLevel - 0.5f), point.y + 0.5f));
                     break;
+                }
+
+                map.River.Add(new Vector3(point.x + 0.5f, floor, point.y + 0.5f));
             }
 
             // --- 6: strata -------------------------------------------------------------------
@@ -296,17 +303,37 @@ namespace TinyDiggers.Terrain
             return true;
         }
 
-        /// <summary>The biggest step to a neighbour, in metres. Used to decide what a face is made of.</summary>
+        /// <summary>
+        /// How steep the ground is here, in metres a cell, averaged over a three by three window.
+        ///
+        /// Averaged rather than the worst single step on purpose: on quantised land a gentle slope
+        /// is a row of one-metre steps with flats between them, so the worst step alternates cell
+        /// by cell and anything keyed to it comes out as a checkerboard of materials.
+        /// </summary>
         static float Steepness(float[] heights, int width, int depth, int x, int z, float step)
         {
-            var cell = z * width + x;
-            var height = heights[cell];
-            var worst = 0f;
-            if (x > 0) worst = Mathf.Max(worst, Mathf.Abs(height - heights[cell - 1]));
-            if (x < width - 1) worst = Mathf.Max(worst, Mathf.Abs(height - heights[cell + 1]));
-            if (z > 0) worst = Mathf.Max(worst, Mathf.Abs(height - heights[cell - width]));
-            if (z < depth - 1) worst = Mathf.Max(worst, Mathf.Abs(height - heights[cell + width]));
-            return worst;
+            var sum = 0f;
+            var count = 0;
+            for (var dz = -1; dz <= 1; dz++)
+            {
+                for (var dx = -1; dx <= 1; dx++)
+                {
+                    var ax = x + dx;
+                    var az = z + dz;
+                    var bx = ax + 1;
+                    if (ax < 0 || az < 0 || bx >= width || az >= depth)
+                        continue;
+                    sum += Mathf.Abs(heights[az * width + ax] - heights[az * width + bx]);
+                    count++;
+                    var bz = az + 1;
+                    if (bz >= depth)
+                        continue;
+                    sum += Mathf.Abs(heights[az * width + ax] - heights[bz * width + ax]);
+                    count++;
+                }
+            }
+
+            return count == 0 ? 0f : sum / count;
         }
 
         // --- the river -----------------------------------------------------------------------
@@ -317,7 +344,7 @@ namespace TinyDiggers.Terrain
         /// only ever descends, so a river mesh laid on the polyline never runs uphill.
         /// </summary>
         static List<Vector2Int> CarveRiver(IslandMap map, float[] heights, int width, int depth, TerrainGrid grid,
-            System.Random random, TerrainGenSettings settings, float step)
+            System.Random random, TerrainGenSettings settings, float step, Vector2 centre)
         {
             var peak = -1;
             for (var cell = 0; cell < heights.Length; cell++)
@@ -360,9 +387,14 @@ namespace TinyDiggers.Terrain
                         var nz = at.y + dz;
                         if (!grid.InBounds(nx, nz) || visited.Contains(nz * width + nx))
                             continue;
-                        // The wander is part of the score, not a separate coin flip, so the river
-                        // leans off the steepest line without ever turning back uphill.
-                        var score = heights[nz * width + nx] + (float)random.NextDouble() * settings.RiverWander;
+                        // The score is the height it would run to, plus a little wander so the
+                        // river leans off the steepest line, minus a pull toward the coast so a
+                        // hollow in the middle of the island does not swallow it: a river that
+                        // stops in a bowl is a lake, and we want it to reach the sea.
+                        var outward = Vector2.Distance(new Vector2(nx, nz), centre);
+                        var score = heights[nz * width + nx]
+                            + (float)random.NextDouble() * settings.RiverWander
+                            - outward * 0.25f;
                         if (score >= bestScore)
                             continue;
                         bestScore = score;
@@ -387,6 +419,11 @@ namespace TinyDiggers.Terrain
             {
                 var here = heights[point.y * width + point.x];
                 var target = Mathf.Min(floor, here - settings.RiverDepth);
+                // While there is still land around it, the channel floor stops at the waterline:
+                // otherwise a river coming down a mountainside cuts itself a trench below sea
+                // level halfway across the island, and what should be a river becomes an inlet.
+                if (here > World.SeaLevel)
+                    target = Mathf.Max(target, World.SeaLevel - 0.5f);
                 target = Mathf.Round(target / step) * step;
                 floor = target;
 
@@ -411,7 +448,8 @@ namespace TinyDiggers.Terrain
                     }
                 }
 
-                if (target < World.SeaLevel - 1f)
+                // The river ends where the land does.
+                if (here <= World.SeaLevel)
                     break;
             }
 
@@ -438,8 +476,9 @@ namespace TinyDiggers.Terrain
 
             var underwater = surface < World.SeaLevel;
             var coastal = Mathf.Abs(surface - World.SeaLevel) <= settings.SandBand;
-            // A face that steps a whole metre and a half to a neighbour will not hold topsoil.
-            var steep = steepness > 1.5f;
+            // Ground that averages better than two thirds of a metre a cell is too steep to
+            // hold soil: that is a slope of roughly thirty-five degrees.
+            var steep = steepness > 0.67f;
 
             var topsoil = underwater || coastal || steep ? 0f : settings.TopsoilThickness;
             var sand = underwater || coastal ? settings.SandThickness : 0f;

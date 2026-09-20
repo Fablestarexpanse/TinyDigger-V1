@@ -47,6 +47,25 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
   gradient instead of a sky, make it a model on a surface rather than a
   landscape.
 
+### Sea, depth and water cells (built, slice 8)
+- Heights are metres above **sea level, which is 0 m** and is the datum the
+  whole world reads against (`World.SeaLevel`). A grid also has a **datum**:
+  the height the bottom of every column sits at, well below the sea, so a
+  seabed can be 15 m under water and still be a stack of layers and so the
+  bedrock base has somewhere to be. Nothing can be dug through the disc.
+- A column holds up to **16 layers**: bedrock, granite, rock, clay, dirt, sand
+  and topsoil all fit before anything is dug or tipped on it.
+- A cell whose surface is below sea level is **water**: impassable, not
+  standable, and not diggable — the pathfinder, the flood fill and the regions
+  treat it exactly as they treat the void. It is still ground, so **fill
+  designations and dump zones are accepted on it**: reclaiming the shallows is
+  the point of having them.
+- Land starts **one whole step above the sea**, so tipping into the shallows
+  has to break the surface before anything can walk there, and cutting a cell
+  back to sea level gives it to the sea again.
+- The plinth wall's top stands a metre above the sea, so the water is held
+  inside the table rather than running off it.
+
 ### Materials (to add)
 - **Disturbed variants are separate materials**, not a flag:
   `Rock -> RockLoose`, `Dirt -> DirtLoose`, `Topsoil -> Dirt` (when dug or driven
@@ -144,6 +163,23 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
   the vertex shader; distance LOD; single instanced draw. (CoI: 9× faster
   rendering, 4× less memory.)
 - Triplanar-mapped material textures; weathered vs freshly-cut rock variants.
+
+### Water (built, slice 8)
+Ours, not a bought asset: all it has to be is a flat sheet that reads as water
+from an RTS camera.
+- One sheet over the sea, clipped to the disc and dropped onto the circle at
+  its outer ring; one ribbon down the river the generator cut.
+- **Depth is baked into the mesh** when the sheet is built, so the shallows are
+  pale, the channel is dark and the shoreline foams without a scene-depth read.
+  Distance down the channel is baked in too, so a river's surface runs
+  downstream rather than in one world direction.
+- The surface itself is two crossing sine ripples perturbing the normal, which
+  at this distance does the work of a normal map.
+- The sheets are rebuilt a moment after the land last changed, so reclaiming
+  the shallows pushes the shoreline back.
+- Wanted later, and not built: dynamic interaction (wakes and ripples around
+  units), shoreline waves that break, and waterfalls. That is a tool set of its
+  own; the sheets above are the surface it would drive.
 
 ### Material detail (built, slice 7)
 Everything is in the fragment shader; the mesh and the terrain data are untouched.

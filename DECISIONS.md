@@ -5,11 +5,13 @@ this records why.
 
 ---
 
-**NEXT:** Slice 7 (material detail) is done and pushed, the texture set has been rebuilt to
-Ronan's brief, and the camera now has a free tilt, an adjustable lens and a preset asset
-(250/250 green). Nothing is in flight. Still owed: a frame-time check on a mid-range machine, and
-the optional tilt-shift blur, which is a public toggle but not implemented; then Ronan's call on
-the next slice.
+**NEXT:** Slice 8 (island, sea, depth) is done, green (266/266) and pushed on `main`. Nothing is
+in flight. Known and deliberately left: the material boundaries dither into a diamond pattern on
+freshly dug slopes (the per-cell blend showing at close range), the island reads flatter than the
+brief's +60 m because the one-metre neighbour rule planes steep ground off, and the water has no
+dynamic effects yet (wakes, breaking shoreline waves, waterfalls) — Ronan has asked for those, and
+they are a tool set of their own. Still owed from before: a frame-time check on a mid-range
+machine, and the tilt-shift blur toggle.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1195,3 +1197,67 @@ looks but not where it is, and Home takes the preset when there is one.
 Worth remembering for play-mode checks: `EditorApplication.ExitPlaymode()` does not take effect
 until the end of the frame, so a command that exits play and immediately reads the scene is still
 reading the old session. Two readings of the camera looked like a bug that was not there.
+
+
+---
+
+## Slice 8 — island, sea and depth (2026-09-20)
+
+### The packages
+The project had only the **River Modeler extension** of Stylized Water 3, not the base asset: its
+assembly definition referenced `sc.stylizedwater3.runtime`, which did not exist, its own extension
+file carries a hard `#error` saying so, and it wanted `com.unity.splines` and VFX Graph, neither of
+which was in the manifest. Its river source is a Unity `SplineContainer`, not a polyline, and it
+asks the terrain for nothing — it builds its own mesh from the spline. Ronan removed it rather than
+buy the rest of the chain. **Ruling: we write our own water**, which for a flat sheet seen from an
+RTS camera is a smaller job than wiring someone else's.
+
+### Depth and datum
+Sea level is 0 m and is what every height is read against. A grid now carries a **datum** — the
+height the bottom of every column sits at, -45 m on the island — so a seabed can be under the sea
+and still be layers, and the bedrock base has somewhere to be. The layer cap went from 8 to 16,
+because an island column is bedrock, granite, rock, clay, dirt, sand and topsoil before anything is
+dug.
+
+### Water in the sim
+A cell under the sea is impassable and undiggable but still ground: fills and dump zones are
+accepted on it, because reclamation is the point. Land starts one whole step above the sea, so
+tipping into the shallows has to break the surface. The pathfinder, the flood fill and the regions
+read one cached array of "void or water" rather than two, so this cost nothing.
+
+### The island generator
+Domain-warped fBm at 120 m, a mountain and a valley or two placed by seed, a radial mask perturbed
+by noise for an irregular coastline, a shelf falling to a channel at the rim, a river traced from
+the peak to the coast, and strata that follow the land. Every number is on `TerrainGenSettings`;
+F2 shows the seed and a Regenerate button. The old plateau generator stays, and its tests still
+use it.
+
+Three things that had to be worked out:
+- **The neighbour-step rule has to be enforced, not hoped for.** Relaxing with a naive sweep moves
+  one cell a pass, which needs hundreds of sweeps on a 46 m mountain and quietly gave up at the
+  cap. Four directional passes a sweep — a chamfer distance transform — settles it in a handful.
+  It runs again after the river is cut, because the channel's own banks leave steps where the
+  river bends.
+- **A river must be stopped from digging itself under the sea.** Cutting two and a half metres
+  below the ground each step, with the floor held monotonically descending, takes the channel below
+  sea level halfway across the island: what should be a river becomes an inlet. The floor now
+  stops at the waterline while there is still land around it, and the river ends where the land
+  does, with its last point under the surface.
+- **Keying materials to the steepest single step gives a checkerboard.** On quantised land a gentle
+  slope is a row of one-metre steps with flats between them, so the worst step alternates cell by
+  cell. Steepness is now averaged over a three by three window.
+
+### Water rendering
+`WaterView` builds two sheets and `TinyDiggers/Water` draws them. Depth over each vertex is baked
+into the mesh when the sheet is built, so the shallows are pale, the channel is dark and the
+shoreline foams with no scene-depth read; distance down the channel is baked in too, so a river
+runs downstream. The sheets rebuild a moment after the land last changed.
+
+### Tests (266/266 green)
+New: the rim is under the sea and the middle above it; the coastline wanders rather than tracing a
+circle; the river only ever descends and ends below sea level; land never steps more than a metre
+to a neighbour; every surface lands on the height step; every column stands on bedrock; the same
+seed gives the same island and a different seed a different one; there is sand around sea level and
+topsoil well above it. Plus the water rules: depth, passability, the pathfinder and regions
+refusing water, dig refused and fill and dump zone accepted, filling a water cell into land, and
+cutting land back to sea level giving it to the sea.

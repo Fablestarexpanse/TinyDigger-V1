@@ -1,0 +1,46 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 934791ea661cec745b0ef9fe58960cfb, type: 3}
+  m_Name: IslandSettings
+  m_EditorClassIdentifier: TinyDiggers.Terrain::TinyDiggers.Terrain.TerrainGenSettings
+  Seed: 1
+  Datum: -45
+  FeatureSize: 120
+  BaseRelief: 26
+  BaseHeight: 14
+  MediumSize: 40
+  MediumRelief: 1.5
+  WarpSize: 45
+  WarpStrength: 14
+  ShelfCells: 40
+  ShelfNearDepth: -3
+  ShelfFarDepth: -8
+  ChannelDepth: -15
+  ChannelCells: 8
+  CoastNoiseSize: 70
+  CoastNoiseCells: 16
+  MountainHeight: 46
+  MountainRadius: 70
+  Valleys: 2
+  ValleyDepth: 10
+  ValleyRadius: 55
+  RiverWidth: 4
+  RiverDepth: 2.5
+  RiverWander: 1.4
+  TopsoilThickness: 0.3
+  DirtOnPlains: 2.2
+  DirtOnSlopes: 0.5
+  ClayInValleys: 1.6
+  SandThickness: 0.8
+  SandBand: 6
+  GraniteShare: 0.55
+  RockCover: 4

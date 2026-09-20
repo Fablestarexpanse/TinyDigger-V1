@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using System.Text;
+using TinyDiggers.Presentation;
 using TinyDiggers.Units;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace TinyDiggers.Interaction
@@ -18,6 +20,9 @@ namespace TinyDiggers.Interaction
     {
         [SerializeField] PlayerTools _tools;
         [SerializeField] CrewView _crew;
+
+        [Tooltip("The land, for the F2 settings panel's seed and Regenerate.")]
+        [SerializeField] TerrainView _terrain;
         [SerializeField] Color _idleColor = new Color(0.16f, 0.17f, 0.19f, 0.9f);
         [SerializeField] Color _activeColor = new Color(0.95f, 0.78f, 0.25f, 0.95f);
         [SerializeField] Color _warningColor = new Color(1f, 0.55f, 0.2f);
@@ -40,6 +45,10 @@ namespace TinyDiggers.Interaction
         Text _status;
         Font _font;
         string _shown = "";
+
+        RectTransform _settingsPanel;
+        InputField _seedField;
+        Text _settingsSummary;
 
         void Start()
         {
@@ -67,9 +76,83 @@ namespace TinyDiggers.Interaction
             foreach (var tool in Tools)
                 AddButton(bar.transform, tool.Mode, tool.Label);
 
+            BuildSettingsPanel(canvasObject.transform);
+
             var statusPanel = NewPanel(canvasObject.transform, "Status", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
                 new Vector2(0f, 74f), new Vector2(Tools.Length * 150f + 16f, 30f), new Color(0.08f, 0.09f, 0.1f, 0.6f));
             _status = NewText(statusPanel.transform, "", 16, TextAnchor.MiddleCenter);
+        }
+
+        /// <summary>
+        /// The F2 panel: the seed the island came from, and a button to make another one. Hidden
+        /// until F2 is pressed, because it is a setup tool rather than something used while playing.
+        /// </summary>
+        void BuildSettingsPanel(Transform parent)
+        {
+            _settingsPanel = NewPanel(parent, "Settings", new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(12f, -12f), new Vector2(320f, 132f), new Color(0.08f, 0.09f, 0.1f, 0.85f));
+            _settingsPanel.pivot = new Vector2(0f, 1f);
+            _settingsPanel.anchoredPosition = new Vector2(12f, -12f);
+
+            var title = NewText(_settingsPanel.transform, "Island  (F2)", 16, TextAnchor.UpperLeft);
+            title.rectTransform.offsetMax = new Vector2(-6f, -6f);
+
+            var fieldObject = new GameObject("Seed", typeof(RectTransform)) { hideFlags = HideFlags.DontSave };
+            fieldObject.transform.SetParent(_settingsPanel.transform, false);
+            var fieldRect = fieldObject.GetComponent<RectTransform>();
+            fieldRect.anchorMin = new Vector2(0f, 1f);
+            fieldRect.anchorMax = new Vector2(0f, 1f);
+            fieldRect.pivot = new Vector2(0f, 1f);
+            fieldRect.anchoredPosition = new Vector2(10f, -34f);
+            fieldRect.sizeDelta = new Vector2(180f, 28f);
+            var fieldImage = fieldObject.AddComponent<Image>();
+            fieldImage.color = new Color(0.16f, 0.17f, 0.19f, 0.95f);
+            _seedField = fieldObject.AddComponent<InputField>();
+            _seedField.textComponent = NewText(fieldObject.transform, "", 16, TextAnchor.MiddleLeft);
+            _seedField.contentType = InputField.ContentType.IntegerNumber;
+
+            var buttonObject = new GameObject("Regenerate", typeof(RectTransform)) { hideFlags = HideFlags.DontSave };
+            buttonObject.transform.SetParent(_settingsPanel.transform, false);
+            var buttonRect = buttonObject.GetComponent<RectTransform>();
+            buttonRect.anchorMin = new Vector2(0f, 1f);
+            buttonRect.anchorMax = new Vector2(0f, 1f);
+            buttonRect.pivot = new Vector2(0f, 1f);
+            buttonRect.anchoredPosition = new Vector2(198f, -34f);
+            buttonRect.sizeDelta = new Vector2(112f, 28f);
+            var buttonImage = buttonObject.AddComponent<Image>();
+            buttonImage.color = _activeColor;
+            var regenerate = buttonObject.AddComponent<Button>();
+            regenerate.onClick.AddListener(Regenerate);
+            var buttonLabel = NewText(buttonObject.transform, "Regenerate", 15, TextAnchor.MiddleCenter);
+            buttonLabel.color = Color.black;
+
+            _settingsSummary = NewText(_settingsPanel.transform, "", 14, TextAnchor.LowerLeft);
+            _settingsSummary.rectTransform.offsetMin = new Vector2(10f, 8f);
+            _settingsSummary.rectTransform.offsetMax = new Vector2(-10f, -70f);
+
+            _settingsPanel.gameObject.SetActive(false);
+        }
+
+        /// <summary>Builds the island again from whatever seed is in the box.</summary>
+        void Regenerate()
+        {
+            if (_terrain == null)
+                return;
+            if (!int.TryParse(_seedField.text, out var seed))
+                seed = _terrain.Seed + 1;
+            _terrain.Regenerate(seed);
+            RefreshSettings();
+        }
+
+        void RefreshSettings()
+        {
+            if (_terrain == null || _settingsSummary == null)
+                return;
+            _seedField.text = _terrain.Seed.ToString();
+            var island = _terrain.Island;
+            _settingsSummary.text = island == null
+                ? "The old plateau generator is in use; there is no island."
+                : $"Seed {_terrain.Seed}   peak ({island.Peak.x}, {island.Peak.y})   river {island.River.Count} points";
         }
 
         void AddButton(Transform parent, ToolMode mode, string label)
@@ -121,6 +204,15 @@ namespace TinyDiggers.Interaction
 
         void Update()
         {
+            var keyboard = Keyboard.current;
+            if (keyboard != null && keyboard.f2Key.wasPressedThisFrame && _settingsPanel != null)
+            {
+                var showing = !_settingsPanel.gameObject.activeSelf;
+                _settingsPanel.gameObject.SetActive(showing);
+                if (showing)
+                    RefreshSettings();
+            }
+
             if (_tools == null || _status == null)
                 return;
 

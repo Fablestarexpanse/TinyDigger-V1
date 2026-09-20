@@ -22,7 +22,10 @@ namespace TinyDiggers.Terrain
             if (!grid.InBounds(x, z))
                 return "No cell under the cursor";
 
-            _builder.Append("Cell (").Append(x).Append(", ").Append(z).Append(')').AppendLine();
+            _builder.Append("Cell (").Append(x).Append(", ").Append(z).Append(')');
+            if (grid.IsWater(x, z))
+                _builder.Append("   Water (depth ").Append(grid.WaterDepth(x, z).ToString("0.0")).Append(" m)");
+            _builder.AppendLine();
             _builder.Append("Surface ").Append(grid.GetSurfaceHeight(x, z).ToString("0.00")).Append(" m").AppendLine();
             _builder.Append("Layers, top to bottom:");
 
