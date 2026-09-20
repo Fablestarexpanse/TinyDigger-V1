@@ -162,7 +162,7 @@ Everything is in the fragment shader; the mesh and the terrain data are untouche
 - Derivatives are taken once in uniform flow: a texture read inside the per-cell
   loop has no mip to pick and flattens whole surfaces to one colour.
 - Tuning is public on `TerrainView`; the texture set is a ScriptableObject filled
-  by **TinyDiggers > Generate Placeholder Terrain Textures**, so real PNGs can
+  by **TinyDiggers > Generate Terrain Textures**, so real PNGs can
   replace the placeholders without a code change.
 
 ## 6. Things we deliberately do NOT copy

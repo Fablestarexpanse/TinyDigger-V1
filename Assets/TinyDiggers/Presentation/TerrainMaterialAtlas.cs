@@ -32,7 +32,7 @@ namespace TinyDiggers.Presentation
 
             var reference = FindReference(set);
             if (reference == null)
-                throw new InvalidOperationException("The terrain texture set has no albedo textures. Run TinyDiggers > Generate Placeholder Terrain Textures.");
+                throw new InvalidOperationException("The terrain texture set has no albedo textures. Run TinyDiggers > Generate Terrain Textures.");
 
             Size = reference.width;
             var slices = table.MaxId + 1;

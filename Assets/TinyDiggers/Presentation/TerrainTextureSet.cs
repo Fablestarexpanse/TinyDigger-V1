@@ -8,7 +8,7 @@ namespace TinyDiggers.Presentation
     /// The textures the terrain shader samples, one entry per material, plus an optional "cut"
     /// variant used on faces steep enough to be a fresh cut.
     ///
-    /// The asset is filled in by <c>TinyDiggers > Generate Placeholder Terrain Textures</c>, which
+    /// The asset is filled in by <c>TinyDiggers > Generate Terrain Textures</c>, which
     /// writes procedural PNGs and links them here. Dropping real PNGs in over them, with the same
     /// names, needs no code change: the asset points at the files, not at what is in them.
     /// </summary>

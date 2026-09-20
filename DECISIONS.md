@@ -5,7 +5,8 @@ this records why.
 
 ---
 
-**NEXT:** Vertical Slice 7 (material detail) is done, green (245/245) and pushed on `main`.
+**NEXT:** Vertical Slice 7 (material detail) is done, green (245/245) and pushed on `main`, and
+the texture set has since been rebuilt to Ronan's written brief.
 Nothing is in flight. Still owed: a frame-time check on a mid-range machine (this machine draws
 the whole disc at 1440p in about 2 ms, so the numbers below are a ceiling, not a guide), and the
 optional tilt-shift blur, which is a public toggle but not implemented; then Ronan's call on the
@@ -1114,3 +1115,47 @@ stepping by one height step — geometry, not shading — and that is not this s
 New: the cell map is one texel per cell, red is the material on top, green is what a cut exposes
 under a thin top layer and the top material itself under a thick one, a changed cell is uploaded
 on the next flush, a flush with nothing changed uploads nothing, and void cells hold no material.
+
+
+---
+
+## Slice 7 follow-up — the texture set to Ronan's brief (2026-09-20)
+
+Ronan wrote a texture brief: 1024² seamless, one tile covers 0.5 m, matte and muted (Tiny Glade,
+not photoreal), no shadow baked into the albedo because the lighting comes from the normal map,
+and even luminance so a repeat grid does not show. Ten named looks: grass, topsoil, dirt,
+dirt_loose, sand, rock, rock_loose, rock_cut, granite, bedrock.
+
+**Ruling: the generator stays procedural** rather than moving to AI image generation — it costs
+nothing, is deterministic, regenerates on demand, and the ScriptableObject slots still take real
+PNGs later without a code change. **Ruling: `rock_cut` is a cut variant of Rock**, not its own
+material id, so steep freshly-dug faces pick it up automatically and nothing in the sim changes.
+
+How the brief turned into code:
+- Feature sizes are written in pixels at 0.5 m a tile (`Feature(px)`), so "a pebble is 10–30 px"
+  and "a clod is 20–60 px" are in the recipes rather than in a comment.
+- The albedo moves the material's colour by about ±10% and no more; relief lives in the normal map.
+- Every pattern is flattened before use: hard blur, subtract, put the mean back. That is what
+  keeps luminance even across a tile and stops the repeat showing at RTS distance.
+- A second colour is flecked through each look where it belongs — clover in the turf, roots in the
+  topsoil, small stones in the dirt, lichen in the hollows of weathered rock, dark minerals in the
+  granite.
+- Rubble and fresh fractures use a square-metric Worley (`Angular`) so they read as broken stone
+  rather than pebbles.
+
+Two senses were inverted on the first pass and are worth remembering: Worley is **0 at a feature
+point**, so a lump (a clod, a boulder, a piece of rubble) is `1 - Worley`, and the shadowed gap
+between pieces is where Worley is **high**. The first run had rubble with sunken centres and proud
+gaps, which reads as a stamped pattern rather than as stone.
+
+The material ids' own colours in `MaterialTable` are left alone: those are what a material reads
+as in one flat pixel (designations, a minimap later); the brief's colours are what it reads as
+under a metre of texture.
+
+Clay is not in the brief but the material exists, so it gets a look rather than the flat-colour
+fallback.
+
+Menu item renamed **TinyDiggers > Generate Terrain Textures** (it is no longer writing
+placeholders), and it now deletes PNGs it no longer produces, so the rename from `dirtcut`/
+`rockcut` left no litter. 11 looks for 9 materials. Tests still 245/245 green; frame time at 1440p
+is unchanged (1.87–1.88 ms).
