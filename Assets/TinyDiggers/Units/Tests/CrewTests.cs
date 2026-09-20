@@ -17,6 +17,7 @@ namespace TinyDiggers.Units.Tests
         DesignationMap _map;
         GridPathfinder _pathfinder;
         JobDispatcher _dispatcher;
+        AngleOfReposeSimulator _slump;
         readonly List<CrewUnit> _units = new List<CrewUnit>();
 
         [SetUp]
@@ -37,12 +38,16 @@ namespace TinyDiggers.Units.Tests
             foreach (var unit in _units)
                 unit.Dispose();
             _units.Clear();
+            _slump?.Dispose();
             _dispatcher.Dispose();
             _map.Dispose();
         }
 
         void SetHeight(int x, int z, float height) =>
             _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, 2f), new Layer(MaterialTable.Dirt, height - 2f) });
+
+        /// <summary>Lets tipped material settle, as it does in play.</summary>
+        void WithSlump() => _slump = new AngleOfReposeSimulator(_grid);
 
         CrewUnit Spawn(int x, int z)
         {
@@ -60,6 +65,7 @@ namespace TinyDiggers.Units.Tests
                 _dispatcher.Tick(TickSeconds);
                 foreach (var unit in _units)
                     unit.Tick(TickSeconds);
+                _slump?.RunUntilStable();
                 elapsed += TickSeconds;
                 eachTick?.Invoke();
             }
@@ -116,8 +122,12 @@ namespace TinyDiggers.Units.Tests
         [Test]
         public void UnitsNeverShareACell()
         {
+            WithSlump();
             for (var i = 0; i < 4; i++)
                 Spawn(3 + i % 2 * 2, 10 + i / 2 * 2);
+            for (var z = 2; z <= 5; z++)
+                for (var x = 2; x <= 5; x++)
+                    _map.SetDumpZone(x, z, true, 12f);
             for (var z = 10; z <= 13; z++)
                 for (var x = 14; x <= 17; x++)
                     _map.Designate(x, z, DesignationKind.Dig, 7f);
@@ -181,6 +191,7 @@ namespace TinyDiggers.Units.Tests
         [Test]
         public void FourUnitsTakeTheMoundDownTogether()
         {
+            WithSlump();
             for (var z = 0; z < Size; z++)
             {
                 for (var x = 0; x < Size; x++)
@@ -193,6 +204,9 @@ namespace TinyDiggers.Units.Tests
 
             for (var i = 0; i < 4; i++)
                 Spawn(3 + i % 2 * 2, 12 + i / 2 * 2);
+            for (var z = 1; z <= 8; z++)
+                for (var x = 1; x <= 8; x++)
+                    _map.SetDumpZone(x, z, true, 16f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     if (_grid.GetSurfaceHeight(x, z) > 8f)
@@ -208,9 +222,10 @@ namespace TinyDiggers.Units.Tests
 
             Assert.That(_map.Count, Is.EqualTo(0), $"after {took:0} s: {_units[0].Status}");
             for (var z = 0; z < Size; z++)
-                for (var x = 0; x < Size; x++)
+                for (var x = 12; x < Size; x++)
                     if (Math.Max(Math.Abs(x - 12), Math.Abs(z - 12)) <= 3)
-                        Assert.That(_grid.GetSurfaceHeight(x, z), Is.LessThanOrEqualTo(8f + Tolerance), $"({x}, {z})");
+                        Assert.That(_grid.GetSurfaceHeight(x, z), Is.LessThanOrEqualTo(8f + Tolerance),
+                            $"({x}, {z}) — the half of the mound away from the Dump Zone and its overspill");
             // A unit may idle for a tick between jobs; sitting out whole seconds is the bug.
             Assert.That(idleWithWork * TickSeconds, Is.LessThan(took * 0.5f), "units sat idle with work left");
         }
@@ -220,12 +235,12 @@ namespace TinyDiggers.Units.Tests
         [Test]
         public void SpoilStopsAtTheDumpZoneCap()
         {
+            // Four zone cells with 1 m of room each: enough for one 2 m cut of dirt (2.5 m³).
             for (var z = 9; z <= 10; z++)
                 for (var x = 5; x <= 6; x++)
                     _map.SetDumpZone(x, z, true, 9f);
             Spawn(10, 10);
-            for (var x = 14; x <= 19; x++)
-                _map.Designate(x, 10, DesignationKind.Dig, 6f);
+            _map.Designate(14, 10, DesignationKind.Dig, 6f);
 
             var took = Run(900f, () => _map.Count == 0);
 
@@ -236,7 +251,7 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
-        public void AFullDumpZoneIsReportedAndTheOldRuleTakesOver()
+        public void AFullDumpZoneIsReportedAndTheUnitStops()
         {
             // One zone cell, capped where it already is: it can never take anything.
             _map.SetDumpZone(5, 10, true, 8f);
@@ -244,12 +259,13 @@ namespace TinyDiggers.Units.Tests
             for (var x = 14; x <= 19; x++)
                 _map.Designate(x, 10, DesignationKind.Dig, 6f);
 
-            var reported = false;
-            var took = Run(900f, () => _map.Count == 0, () => reported |= unit.DumpZoneFull);
+            var took = Run(900f, () => unit.State == CrewUnitState.NeedsSomewhereToTip);
 
-            Assert.That(_map.Count, Is.EqualTo(0), $"after {took:0} s: {unit.Status}");
-            Assert.That(reported, Is.True, "the full Dump Zone was never reported");
+            Assert.That(unit.State, Is.EqualTo(CrewUnitState.NeedsSomewhereToTip), $"after {took:0} s: {unit.Status}");
+            Assert.That(unit.DumpZoneFull, Is.True, "the full Dump Zone was never reported");
+            Assert.That(unit.Status, Does.Contain("no room"));
             Assert.That(_grid.GetSurfaceHeight(5, 10), Is.EqualTo(8f).Within(Tolerance), "nothing went on the capped cell");
         }
+
     }
 }

@@ -15,6 +15,7 @@ namespace TinyDiggers.Units.Tests
         DesignationMap _map;
         GridPathfinder _pathfinder;
         CrewUnit _unit;
+        AngleOfReposeSimulator _slump;
 
         [SetUp]
         public void SetUp()
@@ -32,8 +33,12 @@ namespace TinyDiggers.Units.Tests
         public void TearDown()
         {
             _unit?.Dispose();
+            _slump?.Dispose();
             _map.Dispose();
         }
+
+        /// <summary>Lets tipped material settle, as it does in play. Off by default to keep tests plain.</summary>
+        void WithSlump() => _slump = new AngleOfReposeSimulator(_grid);
 
         void SetHeight(int x, int z, float height) =>
             _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, 2f), new Layer(MaterialTable.Dirt, height - 2f) });
@@ -47,6 +52,7 @@ namespace TinyDiggers.Units.Tests
             while (elapsed < maxSeconds && !done())
             {
                 _unit.Tick(TickSeconds);
+                _slump?.RunUntilStable();
                 elapsed += TickSeconds;
             }
 
@@ -85,6 +91,7 @@ namespace TinyDiggers.Units.Tests
         [Test]
         public void FinishesATwoCellDigToHeightAndAMatchingFill()
         {
+            WithSlump();
             Spawn(3, 10);
             _map.Designate(10, 10, DesignationKind.Dig, 7f);
             _map.Designate(11, 10, DesignationKind.Dig, 7f);
@@ -96,10 +103,10 @@ namespace TinyDiggers.Units.Tests
             Assert.That(_map.Count, Is.EqualTo(0), $"designations left after {took:0.0} s; unit: {_unit.Status}");
             Assert.That(_grid.GetSurfaceHeight(10, 10), Is.EqualTo(7f).Within(Tolerance));
             Assert.That(_grid.GetSurfaceHeight(11, 10), Is.EqualTo(7f).Within(Tolerance));
-            Assert.That(_grid.GetSurfaceHeight(10, 4), Is.EqualTo(9f).Within(Tolerance));
-            Assert.That(_grid.GetSurfaceHeight(11, 4), Is.EqualTo(9f).Within(Tolerance));
-            // Two 1 m cuts of dirt bulk to 2.5 m³; two 1 m fills use 2; half a step stays in the load.
-            Assert.That(_unit.Inventory.Total, Is.EqualTo(0.5f).Within(Tolerance));
+            Assert.That(_grid.GetSurfaceHeight(10, 4), Is.GreaterThanOrEqualTo(9f - Tolerance));
+            Assert.That(_grid.GetSurfaceHeight(11, 4), Is.GreaterThanOrEqualTo(9f - Tolerance));
+            // Two 1 m cuts of dirt bulk to 2.5 m³; the fills take 2, and under a step stays in the load.
+            Assert.That(_unit.Inventory.Total, Is.LessThan(1f));
             Assert.That(_unit.State, Is.EqualTo(CrewUnitState.Idle));
         }
 
@@ -122,11 +129,14 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
-        public void NeverStallsWithAFullLoad()
+        public void WithADumpZoneItKeepsDiggingAndTipping()
         {
-            // Six 1 m cuts of dirt is 7.5 m³ loose: more than one 5 m³ load, and nowhere designated
-            // to put it. The unit has to dump somewhere and come back.
+            // Six 1 m cuts of dirt is 7.5 m³ loose: more than one 5 m³ load, so it has to empty
+            // the scoop into the zone and come back.
             Spawn(3, 10);
+            for (var z = 3; z <= 4; z++)
+                for (var x = 3; x <= 4; x++)
+                    _map.SetDumpZone(x, z, true, 10f);
             for (var x = 10; x < 16; x++)
                 _map.Designate(x, 10, DesignationKind.Dig, 7f);
 
@@ -138,11 +148,46 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
+        public void AFullLoadWithNowhereToTipStopsAndAsks()
+        {
+            // No Dump Zone and no fill: spoil may not go on open ground, so it stops and says so.
+            Spawn(3, 10);
+            for (var x = 10; x < 16; x++)
+                _map.Designate(x, 10, DesignationKind.Dig, 7f);
+            var before = Heights();
+
+            Run(120f, () => _unit.State == CrewUnitState.NeedsSomewhereToTip);
+
+            Assert.That(_unit.State, Is.EqualTo(CrewUnitState.NeedsSomewhereToTip), _unit.Status);
+            Assert.That(_unit.Status, Does.Contain("Dump Zone"));
+            Assert.That(_unit.Inventory.Total, Is.GreaterThan(4f), "it stopped with a full scoop");
+            var after = Heights();
+            for (var z = 0; z < Size; z++)
+                for (var x = 0; x < Size; x++)
+                    if (_map.GetKind(x, z) == DesignationKind.None && (x < 10 || x > 15 || z != 10))
+                        Assert.That(after[z * Size + x], Is.EqualTo(before[z * Size + x]).Within(Tolerance),
+                            $"({x}, {z}) changed outside the dig");
+        }
+
+        float[] Heights()
+        {
+            var heights = new float[Size * Size];
+            for (var z = 0; z < Size; z++)
+                for (var x = 0; x < Size; x++)
+                    heights[z * Size + x] = _grid.GetSurfaceHeight(x, z);
+            return heights;
+        }
+
+        [Test]
         public void TheLoadNeverOverflows()
         {
             Spawn(3, 10);
+            for (var z = 3; z <= 4; z++)
+                for (var x = 3; x <= 4; x++)
+                    _map.SetDumpZone(x, z, true, 12f);
             for (var x = 10; x < 16; x++)
                 _map.Designate(x, 10, DesignationKind.Dig, 6f);
+
 
             var worst = 0f;
             Run(240f, () =>
@@ -201,6 +246,9 @@ namespace TinyDiggers.Units.Tests
             for (var z = 9; z <= 11; z++)
                 for (var x = 9; x <= 11; x++)
                     _map.Designate(x, z, DesignationKind.Dig, 7f);
+            for (var z = 2; z <= 5; z++)
+                for (var x = 2; x <= 5; x++)
+                    _map.SetDumpZone(x, z, true, 12f);
             Spawn(10, 10);
 
             var digSteps = 0;
@@ -226,25 +274,30 @@ namespace TinyDiggers.Units.Tests
         public void WithoutAutoRampUpperTerracesAreUnreachableUntilAStepIsLeft()
         {
             // A 4-terrace mound, one cell per terrace: centre 12, then rings at 11, 10, 9 on 8 m ground.
+            // No slump here: the point is terraces that stay put until the unit cuts them.
             BuildMound(10, 10, 8f);
             Spawn(2, 10);
             _unit.AutoRamp = false;
             _unit.Benching = false;
+            for (var z = 14; z <= 20; z++)
+                for (var x = 1; x <= 10; x++)
+                    _map.SetDumpZone(x, z, true, 16f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     if (_grid.GetSurfaceHeight(x, z) > 8f)
                         _map.Designate(x, z, DesignationKind.Dig, 8f);
 
-            Run(600f, () => _unit.State == CrewUnitState.Unreachable || _map.Count == 0);
+            // Hauling every scoop to the Dump Zone and back takes a while.
+            Run(3000f, () => _unit.State == CrewUnitState.Unreachable || _map.Count == 0);
 
             // The two lower terraces are dug; the top two stand 3-4 m above ground now and cannot
             // be worked from it.
             Assert.That(_unit.State, Is.EqualTo(CrewUnitState.Unreachable), _unit.Status);
+            Assert.That(_unit.CanWorkFromSomewhereReachable(10, 9), Is.False, "the third terrace is out of reach");
             Assert.That(_grid.GetSurfaceHeight(10, 7), Is.EqualTo(8f).Within(Tolerance), "first terrace dug");
             Assert.That(_grid.GetSurfaceHeight(10, 8), Is.EqualTo(8f).Within(Tolerance), "second terrace dug");
             Assert.That(_grid.GetSurfaceHeight(10, 9), Is.EqualTo(11f).Within(Tolerance), "third terrace out of reach");
             Assert.That(_grid.GetSurfaceHeight(10, 10), Is.EqualTo(12f).Within(Tolerance), "top untouched");
-            Assert.That(_unit.UnreachableCount, Is.GreaterThan(0));
         }
 
         /// <summary>Concentric one-cell terraces up to 4 m above <paramref name="ground"/>.</summary>

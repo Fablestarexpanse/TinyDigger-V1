@@ -120,17 +120,27 @@ namespace TinyDiggers.Interaction
                 _shownLocked = _tool.HeightLocked;
                 _shownUnit = shown;
 
-                _unitText.Clear().Append("Crew: ").Append(units.Count).AppendLine(" units (click one to select, Escape to clear)");
+                var stuck = 0;
+                foreach (var member in units)
+                    if (member.State == CrewUnitState.NeedsSomewhereToTip)
+                        stuck++;
+                _unitText.Clear();
+                if (stuck > 0)
+                    _unitText.Append("!! ").Append(stuck).Append(stuck == 1 ? " unit is" : " units are")
+                        .AppendLine(" loaded with nowhere to tip: mark a Dump Zone (Shift+RMB) or a fill");
+                _unitText.Append("Crew: ").Append(units.Count).AppendLine(" units (click one to select, Escape to clear)");
                 foreach (var member in units)
                 {
                     _unitText.Append(ReferenceEquals(member, _crew.Selected) ? " >" : "  ")
-                        .Append(member.Id).Append(": ").Append(member.State).Append("  ")
-                        .Append(member.Inventory.Total.ToString("0.0")).Append(" m³  ")
+                        .Append(member.Id).Append(' ').Append(member.Role).Append(": ").Append(member.State).Append("  ")
+                        .Append(member.Inventory.Total.ToString("0.0")).Append('/')
+                        .Append(member.Inventory.Capacity.ToString("0")).Append(" m³  ")
                         .AppendLine(member.Status);
                 }
 
                 _unitText.AppendLine()
-                    .Append(ReferenceEquals(shown, _crew.Selected) ? "Selected unit " : "Unit ").Append(shown.Id)
+                    .Append(ReferenceEquals(shown, _crew.Selected) ? "Selected " : "Unit ").Append(shown.Role)
+                    .Append(' ').Append(shown.Id)
                     .Append(": ").AppendLine(shown.Status)
                     .Append("  at (").Append(shown.Cell.x).Append(", ").Append(shown.Cell.y).Append("), dig reach ±")
                     .Append(shown.DigReachLevels).Append(" levels, path ").Append(Mathf.Max(0, shown.Path.Count - shown.PathIndex))
@@ -143,6 +153,14 @@ namespace TinyDiggers.Interaction
                     _unitText.Append(shown.Job).Append(" (").Append(shown.JobTarget.x).Append(", ").Append(shown.JobTarget.y).Append(')')
                         .Append(" from (").Append(shown.JobStand.x).Append(", ").Append(shown.JobStand.y).Append(')');
                 _unitText.AppendLine(shown.OnAutoRamp ? "   ON AUTO RAMP" : "");
+                if (shown.Role == UnitRole.Digger)
+                    _unitText.Append("Hauler: ").Append(shown.Partner >= 0 ? shown.Partner.ToString() : "none")
+                        .Append("   waited for one ").Append(shown.WaitedForHauler.ToString("0.0")).Append(" s over ")
+                        .Append(shown.HaulerWaits).AppendLine(" waits");
+                else
+                    _unitText.Append("Serving digger: ").Append(shown.Partner >= 0 ? shown.Partner.ToString() : "none")
+                        .Append("   carried ").Append(shown.Transferred.ToString("0.0")).AppendLine(" m³ so far");
+
                 _unitText.Append("Benching ").Append(_crew.benching ? "on" : "off")
                     .Append(", auto ramp ").Append(_crew.autoRamp ? "on" : "off")
                     .Append(": ").Append(map.AutoCount).Append(" Auto designation").Append(map.AutoCount == 1 ? "" : "s");

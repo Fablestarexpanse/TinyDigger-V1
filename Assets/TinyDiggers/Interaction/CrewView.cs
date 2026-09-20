@@ -20,14 +20,20 @@ namespace TinyDiggers.Interaction
         [SerializeField] Material _pathMaterial;
         [SerializeField] Vector2Int _spawnCell = new Vector2Int(256, 256);
 
-        [Tooltip("How many units to spawn, side by side across the spawn cell.")]
-        [SerializeField, Min(1)] int _unitCount = 4;
+        [Tooltip("How many diggers to spawn, side by side across the spawn cell.")]
+        [SerializeField, Min(0)] int _diggerCount = 2;
+
+        [Tooltip("How many haulers to spawn.")]
+        [SerializeField, Min(0)] int _haulerCount = 2;
 
         [Tooltip("Cells per second.")]
         [SerializeField, Min(0.1f)] float _speed = 3f;
 
-        [Tooltip("Loose m³ a unit can carry.")]
+        [Tooltip("Loose m³ a digger's scoop holds.")]
         [SerializeField, Min(0.1f)] float _capacity = MaterialInventory.DefaultCapacity;
+
+        [Tooltip("Loose m³ a hauler's bed holds.")]
+        [SerializeField, Min(0.1f)] float _haulerCapacity = 20f;
 
         [Tooltip("Seconds per height step dug, or per tip.")]
         [SerializeField, Min(0.01f)] float _workInterval = 0.4f;
@@ -45,7 +51,9 @@ namespace TinyDiggers.Interaction
         public bool autoRamp = true;
 
         [SerializeField] Vector3 _bodySize = new Vector3(1f, 0.8f, 2f);
+        [SerializeField] Vector3 _haulerBodySize = new Vector3(1.4f, 1f, 2.8f);
         [SerializeField] Color _bodyColor = new Color(1f, 0.78f, 0.1f);
+        [SerializeField] Color _haulerColor = new Color(0.35f, 0.55f, 0.9f);
         [SerializeField] Color _selectedColor = new Color(1f, 1f, 1f);
 
         readonly List<CrewUnit> _units = new List<CrewUnit>();
@@ -75,24 +83,26 @@ namespace TinyDiggers.Interaction
 
             var spawnX = Mathf.Clamp(_spawnCell.x, 0, grid.Width - 1);
             var spawnZ = Mathf.Clamp(_spawnCell.y, 0, grid.Height - 1);
-            for (var i = 0; i < _unitCount; i++)
+            var total = _diggerCount + _haulerCount;
+            for (var i = 0; i < total; i++)
             {
                 // Side by side, so no two start on the same cell.
                 var x = Mathf.Clamp(spawnX + i % 2 * 2 - 1, 0, grid.Width - 1);
                 var z = Mathf.Clamp(spawnZ + i / 2 * 2 - 1, 0, grid.Height - 1);
-                _units.Add(new CrewUnit(Dispatcher, x, z, _capacity));
+                var role = i < _diggerCount ? UnitRole.Digger : UnitRole.Hauler;
+                _units.Add(new CrewUnit(Dispatcher, x, z, role, role == UnitRole.Digger ? _capacity : _haulerCapacity));
 
                 var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                body.name = $"Crew Unit {i} Body";
+                body.name = $"{role} {i} Body";
                 body.hideFlags = HideFlags.DontSave;
                 body.transform.SetParent(transform, false);
-                body.transform.localScale = _bodySize;
+                body.transform.localScale = role == UnitRole.Digger ? _bodySize : _haulerBodySize;
                 var bodyRenderer = body.GetComponent<MeshRenderer>();
-                bodyRenderer.material.color = _bodyColor;
+                bodyRenderer.material.color = role == UnitRole.Digger ? _bodyColor : _haulerColor;
                 _bodies.Add(body.transform);
                 _renderers.Add(bodyRenderer);
 
-                var line = new GameObject($"Crew Unit {i} Path") { hideFlags = HideFlags.DontSave };
+                var line = new GameObject($"{role} {i} Path") { hideFlags = HideFlags.DontSave };
                 line.transform.SetParent(transform, false);
                 var pathLine = line.AddComponent<LineRenderer>();
                 pathLine.sharedMaterial = _pathMaterial;
@@ -148,10 +158,13 @@ namespace TinyDiggers.Interaction
             {
                 var unit = _units[i];
                 var position = unit.Position;
+                var size = unit.Role == UnitRole.Digger ? _bodySize : _haulerBodySize;
                 _bodies[i].SetPositionAndRotation(
-                    terrainTransform.TransformPoint(new Vector3(position.x, unit.Height + _bodySize.y * 0.5f, position.y)),
+                    terrainTransform.TransformPoint(new Vector3(position.x, unit.Height + size.y * 0.5f, position.y)),
                     terrainTransform.rotation * Quaternion.Euler(0f, unit.Heading, 0f));
-                _renderers[i].material.color = i == _selected ? _selectedColor : _bodyColor;
+                _renderers[i].material.color = i == _selected ? _selectedColor
+                    : unit.Role == UnitRole.Digger ? _bodyColor : _haulerColor;
+
 
                 // The path still ahead: from the body to each remaining waypoint's centre.
                 var path = unit.Path;

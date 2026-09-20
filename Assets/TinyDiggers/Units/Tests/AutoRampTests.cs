@@ -17,6 +17,7 @@ namespace TinyDiggers.Units.Tests
         DesignationMap _map;
         GridPathfinder _pathfinder;
         CrewUnit _unit;
+        AngleOfReposeSimulator _slump;
 
         [SetUp]
         public void SetUp()
@@ -34,6 +35,7 @@ namespace TinyDiggers.Units.Tests
         public void TearDown()
         {
             _unit?.Dispose();
+            _slump?.Dispose();
             _map.Dispose();
         }
 
@@ -42,12 +44,16 @@ namespace TinyDiggers.Units.Tests
 
         CrewUnit Spawn(int x, int z) => _unit = new CrewUnit(_grid, _map, _pathfinder, x, z);
 
+        /// <summary>Lets tipped material settle, as it does in play.</summary>
+        void WithSlump() => _slump = new AngleOfReposeSimulator(_grid);
+
         float Run(float maxSeconds, Func<bool> done, Action eachTick = null)
         {
             var elapsed = 0f;
             while (elapsed < maxSeconds && !done())
             {
                 _unit.Tick(TickSeconds);
+                _slump?.RunUntilStable();
                 elapsed += TickSeconds;
                 eachTick?.Invoke();
             }
@@ -144,9 +150,13 @@ namespace TinyDiggers.Units.Tests
         {
             BuildTwoTiers();
             Spawn(3, 10);
+            for (var z = 2; z <= 4; z++)
+                for (var x = 2; x <= 4; x++)
+                    _map.SetDumpZone(x, z, true, 12f);
             _map.Designate(16, 10, DesignationKind.Dig, 11f);
 
             var autosMade = new HashSet<Vector2Int>();
+
             var took = Run(300f, () => _map.Count == 0, () =>
             {
                 foreach (var cell in _map.ActiveCells)
@@ -299,6 +309,7 @@ namespace TinyDiggers.Units.Tests
         [Test]
         public void TakesAFourTerraceMoundDownWithoutGettingStuck()
         {
+            WithSlump();
             // Centre 12, rings at 11, 10, 9 on 8 m ground; everything above ground to 8.
             for (var z = 0; z < Size; z++)
             {
@@ -311,6 +322,10 @@ namespace TinyDiggers.Units.Tests
             }
 
             Spawn(3, 12);
+            // Somewhere for the spoil: nothing may be tipped on open ground.
+            for (var z = 1; z <= 8; z++)
+                for (var x = 1; x <= 8; x++)
+                    _map.SetDumpZone(x, z, true, 16f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     if (_grid.GetSurfaceHeight(x, z) > 8f)
@@ -326,9 +341,10 @@ namespace TinyDiggers.Units.Tests
 
             Assert.That(_map.Count, Is.EqualTo(0), $"after {took:0} s: {_unit.Status} at {_unit.Cell} load {_unit.Inventory.Total} free {_unit.Inventory.Remaining}\n{Picture(12, 12, 11)}");
             for (var z = 0; z < Size; z++)
-                for (var x = 0; x < Size; x++)
+                for (var x = 12; x < Size; x++)
                     if (Math.Max(Math.Abs(x - 12), Math.Abs(z - 12)) <= 3)
-                        Assert.That(_grid.GetSurfaceHeight(x, z), Is.LessThanOrEqualTo(8f + Tolerance), $"({x}, {z})");
+                        Assert.That(_grid.GetSurfaceHeight(x, z), Is.LessThanOrEqualTo(8f + Tolerance),
+                            $"({x}, {z}) — the half of the mound away from the Dump Zone and its overspill");
             Assert.That(longestUnreachable, Is.LessThan(3f), "never stuck UNREACHABLE for more than a few seconds");
         }
 
@@ -337,6 +353,7 @@ namespace TinyDiggers.Units.Tests
         [Test]
         public void SpoilGoesIntoTheDumpZoneFirst()
         {
+            WithSlump();
             // A 2 m dip marked as Dump Zone, and three cells to dig 2 m down: 7.5 m³ of loose dirt.
             for (var z = 3; z <= 5; z++)
             {
@@ -360,9 +377,14 @@ namespace TinyDiggers.Units.Tests
             {
                 for (var x = 0; x < Size; x++)
                 {
-                    var raised = after[z * Size + x] > before[z * Size + x] + Tolerance;
-                    if (raised)
-                        Assert.That(_map.IsDumpZone(x, z), Is.True, $"spoil landed outside the zone at ({x}, {z})");
+                    if (after[z * Size + x] <= before[z * Size + x] + Tolerance)
+                        continue;
+                    // Tipped into the zone, or slumped from it onto the cells next door.
+                    var nearZone = false;
+                    for (var dz = -1; dz <= 1 && !nearZone; dz++)
+                        for (var dx = -1; dx <= 1 && !nearZone; dx++)
+                            nearZone = _grid.InBounds(x + dx, z + dz) && _map.IsDumpZone(x + dx, z + dz);
+                    Assert.That(nearZone, Is.True, $"spoil landed away from the zone at ({x}, {z})");
                 }
             }
 

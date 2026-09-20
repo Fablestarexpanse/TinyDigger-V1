@@ -48,6 +48,8 @@ namespace TinyDiggers.Units.Tests
             _map.Changed += (x, z) => changes.Add((x, z));
 
             _grid.Add(2, 3, MaterialTable.Dirt, 1f);
+            // Met designations are dropped on the next Prune, so that slump has had its say first.
+            _map.Prune();
 
             Assert.That(_map.GetKind(2, 3), Is.EqualTo(DesignationKind.None));
             Assert.That(_map.Count, Is.EqualTo(0));
@@ -64,6 +66,7 @@ namespace TinyDiggers.Units.Tests
             Assert.That(_map.GetKind(2, 3), Is.EqualTo(DesignationKind.Dig), "4 m is not yet 3 m");
 
             _grid.Remove(2, 3, 1f, removed);
+            _map.Prune();
             Assert.That(_map.GetKind(2, 3), Is.EqualTo(DesignationKind.None));
         }
 

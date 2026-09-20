@@ -39,6 +39,8 @@ namespace TinyDiggers.Units
         readonly bool[] _auto;
         readonly int[] _slot;
         readonly List<int> _active = new List<int>();
+        readonly List<int> _pendingMet = new List<int>();
+        readonly bool[] _pending;
         readonly int[] _dumpSlot;
         readonly float[] _dumpCap;
         readonly List<int> _dumpCells = new List<int>();
@@ -52,6 +54,7 @@ namespace TinyDiggers.Units
             _targets = new float[cells];
             _auto = new bool[cells];
             _slot = new int[cells];
+            _pending = new bool[cells];
             _dumpSlot = new int[cells];
             _dumpCap = new float[cells];
             for (var i = 0; i < cells; i++)
@@ -250,11 +253,34 @@ namespace TinyDiggers.Units
             _grid.CellChanged -= OnCellChanged;
         }
 
+        /// <summary>
+        /// Drops designations whose cells have met their targets and still meet them. Tipping and
+        /// digging are followed by slump, which can undo what a single change looked like it had
+        /// achieved, so a designation is only met once the ground has settled: the dispatcher
+        /// calls this once a frame, after the last frame's slumping.
+        /// </summary>
+        public void Prune()
+        {
+            for (var i = 0; i < _pendingMet.Count; i++)
+            {
+                var cell = _pendingMet[i];
+                _pending[cell] = false;
+                var x = cell % _grid.Width;
+                var z = cell / _grid.Width;
+                if (_kinds[cell] != DesignationKind.None && Satisfies(x, z, _kinds[cell], _targets[cell]))
+                    Clear(x, z);
+            }
+
+            _pendingMet.Clear();
+        }
+
         void OnCellChanged(int x, int z)
         {
             var cell = z * _grid.Width + x;
-            if (_kinds[cell] != DesignationKind.None && Satisfies(x, z, _kinds[cell], _targets[cell]))
-                Clear(x, z);
+            if (_kinds[cell] == DesignationKind.None || _pending[cell] || !Satisfies(x, z, _kinds[cell], _targets[cell]))
+                return;
+            _pending[cell] = true;
+            _pendingMet.Add(cell);
         }
 
         void SetAuto(int cell, bool auto)

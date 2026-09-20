@@ -5,6 +5,16 @@ using UnityEngine;
 
 namespace TinyDiggers.Units
 {
+    /// <summary>What a unit is for. Both carry a <see cref="MaterialInventory"/>.</summary>
+    public enum UnitRole
+    {
+        /// <summary>Digs and fills the ground, and empties its scoop into a hauler or an area to tip in.</summary>
+        Digger,
+
+        /// <summary>Carries spoil: it never touches the ground itself, only takes loads and tips them.</summary>
+        Hauler,
+    }
+
     public enum CrewUnitState
     {
         Idle,
@@ -12,11 +22,23 @@ namespace TinyDiggers.Units
         Digging,
         Tipping,
 
+        /// <summary>Emptying a scoop into a hauler standing next to it.</summary>
+        Transferring,
+
+        /// <summary>A hauler standing beside its digger, taking whatever it digs.</summary>
+        Parked,
+
+        /// <summary>A digger with a full scoop, waiting for its hauler to arrive.</summary>
+        WaitingForHauler,
+
         /// <summary>There is work designated, but none of it can be reached and worked from.</summary>
         Unreachable,
 
         /// <summary>Held up by another unit on the next cell of its path.</summary>
         Waiting,
+
+        /// <summary>Loaded, with nowhere it is allowed to tip. The player needs to say where.</summary>
+        NeedsSomewhereToTip,
     }
 
     public enum CrewJobKind
@@ -25,46 +47,57 @@ namespace TinyDiggers.Units
         Dig,
         Fill,
 
-        /// <summary>Tipping a full load somewhere undesignated because no fill can take it.</summary>
-        Dump,
-
         /// <summary>Tipping a load on a player-marked Dump Zone.</summary>
         DumpZone,
+
+        /// <summary>Emptying a scoop into a hauler.</summary>
+        Transfer,
+
+        /// <summary>A hauler driving to, or standing at, a digger it serves.</summary>
+        Serve,
 
         /// <summary>Driving out of another unit's way, having given its job up.</summary>
         Yield,
     }
 
     /// <summary>
-    /// One digger that has to physically reach its work. Plain C#: the scene side calls
-    /// <see cref="Tick"/> and draws the body at <see cref="Position"/>, <see cref="Height"/> and
-    /// <see cref="Heading"/>.
+    /// One member of the crew: a digger or a hauler (<see cref="UnitRole"/>). Plain C#: the scene
+    /// side calls <see cref="Tick"/> and draws the body at <see cref="Position"/>,
+    /// <see cref="Height"/> and <see cref="Heading"/>.
     ///
-    /// Everything shared by a crew belongs to the <see cref="JobDispatcher"/>: the designations,
-    /// which of them each unit has claimed, reachability, benching, Auto ramps and who is
-    /// standing where. A unit asks it what it may work, and takes the nearest of those by path
-    /// cost.
+    /// Everything shared by the crew belongs to the <see cref="JobDispatcher"/>: the designations,
+    /// which of them each unit has claimed, reachability, benching, Auto ramps, who is standing
+    /// where, and which hauler serves which digger.
     ///
-    /// Job loop:
-    /// - With room in the load: go to the nearest cell from which an unclaimed Dig designation is
-    ///   within dig reach, and take one height step at a time until it is met or the load is full.
-    /// - With at least a step of load and no reachable dig (or a full load): go to the nearest
-    ///   reachable Fill and tip, never past its target or out of reach.
-    /// - With a full load and no reachable Fill: tip on the nearest Dump Zone cell under its cap;
-    ///   with none, on the nearest cell that is not its own, not lower than where it stands (so
-    ///   never back into a pit it dug), not beside any designation or finished work, and not
-    ///   where another unit stands or is heading.
-    /// - Nothing reachable to dig: ask the dispatcher for a ramp. Failing that, a part load goes
-    ///   to a Dump Zone if there is one; then idle, or UNREACHABLE.
+    /// **Nothing is ever tipped on undesignated ground.** A load can only go into a hauler, a Fill
+    /// designation or a Dump Zone. A unit that is loaded with nowhere it may tip stops in state
+    /// <see cref="CrewUnitState.NeedsSomewhereToTip"/> and says so; that is a question for the
+    /// player, not a fault.
     ///
-    /// Dig reach (TERRAIN_REFERENCE.md section 4): a cell can be dug or filled only from an
-    /// adjacent cell whose surface is within <see cref="DigReachLevels"/> height steps of it.
-    /// A unit never works from a cell that is still to be dug (it would dig the ground out from
-    /// under itself), unless benching has left that cell at its floor; it may drive across one.
+    /// **Tipping is done from the rim** (TERRAIN_REFERENCE.md section 4). To tip into an area, a
+    /// unit stands on any reachable cell beside any cell of it and tips onto that cell. The cell
+    /// may be any depth below the unit — dig reach only limits how far *up* it can tip — and slump
+    /// carries the material on into the area. Rims above the cell they tip onto are preferred, so
+    /// material runs in rather than having to be pushed. A Fill designation is met when every cell
+    /// of it is at or above its height, however the material got there.
+    ///
+    /// Digger job loop:
+    /// - Dig the nearest unclaimed Dig designation it can reach, one height step at a time, until
+    ///   it is met or the scoop is full.
+    /// - Full, with a hauler beside it: empty into the hauler (<see cref="TransferRate"/>).
+    /// - Full, with a hauler assigned or one in the crew to ask for: wait for it.
+    /// - No hauler to wait for: tip into a Fill designation or Dump Zone itself, from the rim.
+    ///
+    /// Hauler job loop:
+    /// - Loaded: tip into the nearest Fill designation it can reach the rim of, else the nearest
+    ///   Dump Zone with room under its cap.
+    /// - Empty (or part loaded with nothing to tip into): serve the reachable digger with the
+    ///   fullest load that has no hauler, parking beside it. It leaves when full, when the digger
+    ///   has nothing left to give, or after <see cref="ParkPatience"/> with nothing received.
     ///
     /// Traffic: units never share a cell. One whose next path cell is taken waits up to
-    /// <see cref="TrafficWaitSeconds"/>, then re-paths around the units in the way, and gives the
-    /// job up if there is no way round.
+    /// <see cref="TrafficWaitSeconds"/>, then re-paths around the units in the way, and stands
+    /// aside if there is no way round.
     /// </summary>
     public sealed class CrewUnit : IDisposable
     {
@@ -75,11 +108,20 @@ namespace TinyDiggers.Units
         /// <summary>Cells per second.</summary>
         public float Speed = 3f;
 
-        /// <summary>How many height steps above or below its own cell the unit can dig or fill.</summary>
+        /// <summary>How many height steps above its own cell the unit can dig, or tip up to.</summary>
         public int DigReachLevels = 2;
 
         /// <summary>Seconds per height step dug, or per tip.</summary>
         public float WorkInterval = 0.4f;
+
+        /// <summary>Loose m³ a second moved from a digger's scoop into a hauler.</summary>
+        public float TransferRate = 5f;
+
+        /// <summary>Seconds a parked hauler waits for something to be tipped into it before leaving.</summary>
+        public float ParkPatience = 10f;
+
+        /// <summary>How far from its digger a hauler may park when there is no room right beside it.</summary>
+        public int ParkRadius = 3;
 
         /// <summary>Degrees per second the body turns toward its direction of travel.</summary>
         public float TurnRate = 360f;
@@ -89,6 +131,9 @@ namespace TinyDiggers.Units
 
         /// <summary>Seconds between re-checks for work while idle or unreachable, in case the world changed.</summary>
         public float IdleRethinkInterval = 1f;
+
+        /// <summary>Seconds between a waiting digger's looks for its hauler.</summary>
+        public float HaulerCheckInterval = 0.25f;
 
         /// <summary>Seconds a unit waits for another one to move off its next cell before going round.</summary>
         public float TrafficWaitSeconds = 1f;
@@ -110,21 +155,28 @@ namespace TinyDiggers.Units
         float _rethinkTimer;
         float _workTimer;
         float _waitTimer;
+        float _parkTimer;
+        int _parkLoadVersion;
         bool _loadFull;
-        bool _zoneBelowOnly;
+        bool _tipHighRimsOnly;
         bool _disposed;
 
         public CrewUnit(TerrainGrid grid, DesignationMap designations, GridPathfinder pathfinder, int startX, int startZ, float capacity = MaterialInventory.DefaultCapacity)
-            : this(new JobDispatcher(grid, designations, pathfinder), startX, startZ, capacity, ownsDispatcher: true)
+            : this(new JobDispatcher(grid, designations, pathfinder), startX, startZ, UnitRole.Digger, capacity, ownsDispatcher: true)
         {
         }
 
         public CrewUnit(JobDispatcher dispatcher, int startX, int startZ, float capacity = MaterialInventory.DefaultCapacity)
-            : this(dispatcher, startX, startZ, capacity, ownsDispatcher: false)
+            : this(dispatcher, startX, startZ, UnitRole.Digger, capacity, ownsDispatcher: false)
         {
         }
 
-        CrewUnit(JobDispatcher dispatcher, int startX, int startZ, float capacity, bool ownsDispatcher)
+        public CrewUnit(JobDispatcher dispatcher, int startX, int startZ, UnitRole role, float capacity)
+            : this(dispatcher, startX, startZ, role, capacity, ownsDispatcher: false)
+        {
+        }
+
+        CrewUnit(JobDispatcher dispatcher, int startX, int startZ, UnitRole role, float capacity, bool ownsDispatcher)
         {
             _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
             _ownsDispatcher = ownsDispatcher;
@@ -134,6 +186,7 @@ namespace TinyDiggers.Units
             if (!_grid.InBounds(startX, startZ))
                 throw new ArgumentOutOfRangeException(nameof(startX), "The unit must start on the map.");
 
+            Role = role;
             Inventory = new MaterialInventory(capacity);
             Position = new Vector2(startX + 0.5f, startZ + 0.5f);
             Height = TerrainSurface.SampleHeight(_grid, Position.x, Position.y);
@@ -148,6 +201,8 @@ namespace TinyDiggers.Units
 
         /// <summary>This unit's place in the crew; the dispatcher's key for it.</summary>
         public int Id { get; }
+
+        public UnitRole Role { get; }
 
         public JobDispatcher Dispatcher => _dispatcher;
 
@@ -170,7 +225,7 @@ namespace TinyDiggers.Units
 
         public CrewJobKind Job { get; private set; }
 
-        /// <summary>The cell being dug or filled.</summary>
+        /// <summary>The cell being dug, tipped onto, or the unit being served.</summary>
         public Vector2Int JobTarget { get; private set; }
 
         /// <summary>The cell the unit works from.</summary>
@@ -190,8 +245,17 @@ namespace TinyDiggers.Units
         /// <summary>The unreachable designation closest to the unit, described; empty if none.</summary>
         public string NearestUnreachable { get; private set; } = "";
 
-        /// <summary>Whether the last look for somewhere to tip found Dump Zone cells but no room in them.</summary>
+        /// <summary>Whether the last look for somewhere to tip found Dump Zone cells but no room under their caps.</summary>
         public bool DumpZoneFull { get; private set; }
+
+        /// <summary>Seconds this digger has spent with a full scoop waiting for a hauler.</summary>
+        public float WaitedForHauler { get; private set; }
+
+        /// <summary>How many times it has had to stop and wait for a hauler.</summary>
+        public int HaulerWaits { get; private set; }
+
+        /// <summary>Loose m³ this unit has handed to haulers, or taken from diggers.</summary>
+        public float Transferred { get; private set; }
 
         /// <summary>Changes whenever state, job or status changes, so displays redraw only then.</summary>
         public int Version { get; private set; }
@@ -201,6 +265,14 @@ namespace TinyDiggers.Units
 
         /// <summary>How long it has been held up by another unit, in seconds.</summary>
         public float WaitingFor => _waitTimer;
+
+        /// <summary>Whether this hauler has room and somewhere to take a load: worth waiting for.</summary>
+        public bool CanTakeALoad => Role == UnitRole.Hauler
+            && Inventory.Remaining > Epsilon
+            && State != CrewUnitState.NeedsSomewhereToTip;
+
+        /// <summary>The hauler serving this digger, or the digger this hauler serves; -1 for neither.</summary>
+        public int Partner => Role == UnitRole.Digger ? _dispatcher.HaulerFor(Id) : _dispatcher.DiggerFor(Id);
 
         // Crew-wide settings and state live on the dispatcher; these reach them for convenience.
 
@@ -268,7 +340,14 @@ namespace TinyDiggers.Units
             if (_ownsDispatcher)
                 _dispatcher.Tick(deltaTime);
 
-            if (State == CrewUnitState.Idle || State == CrewUnitState.Unreachable)
+            if (State == CrewUnitState.WaitingForHauler)
+            {
+                WaitedForHauler += deltaTime;
+                _rethinkTimer -= deltaTime;
+                if (_rethinkTimer <= 0f)
+                    _rethink = true;
+            }
+            else if (State == CrewUnitState.Idle || State == CrewUnitState.Unreachable || State == CrewUnitState.NeedsSomewhereToTip)
             {
                 _rethinkTimer -= deltaTime;
                 if (_rethinkTimer <= 0f)
@@ -287,6 +366,12 @@ namespace TinyDiggers.Units
                 case CrewUnitState.Digging:
                 case CrewUnitState.Tipping:
                     Work(deltaTime);
+                    break;
+                case CrewUnitState.Transferring:
+                    TransferStep(deltaTime);
+                    break;
+                case CrewUnitState.Parked:
+                    ParkStep(deltaTime);
                     break;
             }
 
@@ -317,34 +402,123 @@ namespace TinyDiggers.Units
             ClearPath();
             var start = Cell;
             UpdateUnreachable();
+            if (Role == UnitRole.Hauler)
+                ChooseHaulerJob(start);
+            else
+                ChooseDiggerJob(start);
+        }
 
+        void ChooseDiggerJob(Vector2Int start)
+        {
             var step = Step;
             var full = _loadFull || Inventory.Remaining + Epsilon < step;
             if (!full && TryPlan(CrewJobKind.Dig, start))
                 return;
-            if (Inventory.Total + Epsilon >= step && TryPlan(CrewJobKind.Fill, start))
-                return;
-            // Dump only a full load, on a Dump Zone if the player has marked one: a part load with
-            // nothing to do stays in the bucket for the next fill rather than going on whatever
-            // ground is nearest.
-            if (full && (TryPlanDumpZone(start) || TryPlan(CrewJobKind.Dump, start)))
-                return;
-            if (!full && _dispatcher.RequestRamp(this, _unreachableDigs) && TryPlan(CrewJobKind.Dig, start))
-                return;
-            // Nothing left it can dig: a part load goes to the Dump Zone, so it idles empty.
-            if (!full && Inventory.Total + Epsilon >= step && TryPlanDumpZone(start))
+
+            // Cutting a ramp is digging, so it only happens with room in the scoop.
+            if (!full && _unreachableDigs.Count > 0 && _dispatcher.RequestRamp(this, _unreachableDigs) && TryPlan(CrewJobKind.Dig, start))
                 return;
 
+            var loaded = Inventory.Total + Epsilon >= step;
+            if (loaded)
+            {
+                // A hauler already beside it takes the load without either of them moving.
+                if (TryTransferToAdjacentHauler())
+                    return;
+
+                // Waiting for a hauler beats driving the spoil anywhere itself, which is the point
+                // of having haulers; a crew with no haulers falls through and tips it itself.
+                var mine = _dispatcher.UnitOf(_dispatcher.HaulerFor(Id));
+                if (mine != null && mine.CanTakeALoad)
+                {
+                    // Benching takes diggers onto the designated ground, where a hauler has
+                    // nowhere clear to park beside them, so the digger walks the last few cells
+                    // out to it.
+                    if (mine.State == CrewUnitState.Parked && TryPlanTransferTo(mine, start))
+                        return;
+                    WaitForHauler($"hauler {mine.Id}");
+                    return;
+                }
+
+                if (_dispatcher.RequestHauler(this))
+                {
+                    WaitForHauler("a hauler");
+                    return;
+                }
+
+                if (TryPlanTip(start))
+                    return;
+                if (full)
+                {
+                    Stop();
+                    return;
+                }
+            }
+
+            Idle();
+        }
+
+        void ChooseHaulerJob(Vector2Int start)
+        {
+            var step = Step;
+            var full = Inventory.Remaining + Epsilon < step;
+            var loaded = Inventory.Total + Epsilon >= step;
+            if (full)
+            {
+                if (TryPlanTip(start))
+                    return;
+                Stop();
+                return;
+            }
+
+            var digger = _dispatcher.DiggerFor(Id);
+            if (digger < 0)
+                digger = _dispatcher.AssignDigger(this);
+            if (digger >= 0 && TryPlanServe(start, digger))
+                return;
+
+            if (loaded && TryPlanTip(start))
+                return;
+            if (loaded)
+            {
+                Stop();
+                return;
+            }
+
+            Idle();
+        }
+
+        void Idle()
+        {
             Job = CrewJobKind.None;
             _dispatcher.Release(Id);
             var note = _dispatcher.AutoRamp && _dispatcher.RampNote.Length > 0 ? $"; {_dispatcher.RampNote}" : "";
             if (UnreachableCount > 0)
                 SetState(CrewUnitState.Unreachable, $"UNREACHABLE: {NearestUnreachable}"
                     + (UnreachableCount > 1 ? $" (+{UnreachableCount - 1} more)" : "") + note);
-            else if (DumpZoneFull && Inventory.Total + Epsilon >= step)
-                SetState(CrewUnitState.Idle, "Idle: Dump Zone full, nowhere to tip");
+            else if (Role == UnitRole.Hauler)
+                SetState(CrewUnitState.Idle, Inventory.Total > Epsilon ? "Idle: nothing to serve, nowhere to tip" : "Idle: no digger to serve");
             else
                 SetState(CrewUnitState.Idle, _designations.Count == 0 ? "Idle: nothing designated" : "Idle: nothing it can do yet");
+        }
+
+        /// <summary>Loaded with nowhere it is allowed to tip: a question for the player.</summary>
+        void Stop()
+        {
+            Job = CrewJobKind.None;
+            _dispatcher.Release(Id);
+            SetState(CrewUnitState.NeedsSomewhereToTip, "Needs a Dump Zone or Fill designation"
+                + (DumpZoneFull ? " (no room it can reach in any Dump Zone)" : ""));
+        }
+
+        void WaitForHauler(string who)
+        {
+            Job = CrewJobKind.None;
+            _dispatcher.Release(Id);
+            if (State != CrewUnitState.WaitingForHauler)
+                HaulerWaits++;
+            _rethinkTimer = HaulerCheckInterval;
+            SetState(CrewUnitState.WaitingForHauler, $"Full: waiting for {who}");
         }
 
         bool TryPlan(CrewJobKind kind, Vector2Int start)
@@ -363,10 +537,10 @@ namespace TinyDiggers.Units
                 {
                     var x = standX + NeighbourX[n];
                     var z = standZ + NeighbourZ[n];
-                    if (!_grid.InBounds(x, z) || !IsJobCell(kind, standHeight, x, z))
+                    if (!_grid.InBounds(x, z) || !IsJobCell(kind, standX, standZ, standHeight, x, z))
                         continue;
-                    // On a Dump Zone, the lowest cell in reach fills first.
-                    var height = kind == CrewJobKind.DumpZone ? _grid.GetSurfaceHeight(x, z) : 0f;
+                    // Tipping fills the lowest cell in reach first.
+                    var height = kind == CrewJobKind.Dig ? 0f : _grid.GetSurfaceHeight(x, z);
                     if (height >= bestHeight)
                         continue;
                     bestHeight = height;
@@ -390,44 +564,137 @@ namespace TinyDiggers.Units
             return true;
         }
 
-        /// <summary>A Dump Zone cell below the stand first (fill the hole), then any with room under its cap.</summary>
-        bool TryPlanDumpZone(Vector2Int start)
+        /// <summary>
+        /// Plans a tip: into a Fill designation first, then a Dump Zone, and for each of those
+        /// preferring rim cells above the cell tipped onto, so the material runs in by itself.
+        /// </summary>
+        bool TryPlanTip(Vector2Int start)
         {
             DumpZoneFull = false;
+            if (_designations.Count > 0)
+            {
+                _tipHighRimsOnly = true;
+                if (TryPlan(CrewJobKind.Fill, start))
+                    return true;
+                _tipHighRimsOnly = false;
+                if (TryPlan(CrewJobKind.Fill, start))
+                    return true;
+            }
+
             if (_designations.DumpZoneCount == 0)
                 return false;
-            _zoneBelowOnly = true;
+
+            _tipHighRimsOnly = true;
             if (TryPlan(CrewJobKind.DumpZone, start))
                 return true;
-            _zoneBelowOnly = false;
+            _tipHighRimsOnly = false;
             if (TryPlan(CrewJobKind.DumpZone, start))
                 return true;
             DumpZoneFull = true;
             return false;
         }
 
+        /// <summary>Drives to a free cell beside the digger it serves, and parks there.</summary>
+        bool TryPlanServe(Vector2Int start, int diggerId)
+        {
+            var digger = _dispatcher.UnitOf(diggerId);
+            if (digger == null)
+            {
+                _dispatcher.ReleaseHauler(Id);
+                return false;
+            }
+
+            var at = digger.Cell;
+            if (!_dispatcher.Regions.CanReach(start.x, start.y, at.x, at.y))
+            {
+                _dispatcher.ReleaseHauler(Id);
+                return false;
+            }
+
+            var found = _pathfinder.TryFindNearest(start.x, start.y,
+                (x, z) => Math.Abs(x - at.x) <= 1 && Math.Abs(z - at.y) <= 1 && IsParkCell(x, z), _path);
+            if (!found)
+            {
+                // Nothing clear right beside it — it is probably standing on the ground it is
+                // digging — so wait as near as there is room for, and let it walk out.
+                found = _pathfinder.TryFindNearest(start.x, start.y,
+                    (x, z) => Math.Abs(x - at.x) <= ParkRadius && Math.Abs(z - at.y) <= ParkRadius && IsParkCell(x, z), _path);
+                if (!found)
+                    return false;
+            }
+
+            Job = CrewJobKind.Serve;
+            JobTarget = at;
+            JobStand = _path[_path.Count - 1];
+            _pathIndex = 0;
+            _waitTimer = 0f;
+            MarkPath();
+            SetState(CrewUnitState.Moving, $"Moving to serve digger {diggerId}");
+            return true;
+        }
+
+        /// <summary>Walks to a cell beside the hauler to empty the scoop into it.</summary>
+        bool TryPlanTransferTo(CrewUnit hauler, Vector2Int start)
+        {
+            var at = hauler.Cell;
+            if (!_dispatcher.Regions.CanReach(start.x, start.y, at.x, at.y))
+                return false;
+            var found = _pathfinder.TryFindNearest(start.x, start.y,
+                (x, z) => Math.Abs(x - at.x) <= 1 && Math.Abs(z - at.y) <= 1 && CanStandHere(x, z), _path);
+            if (!found)
+                return false;
+
+            Job = CrewJobKind.Transfer;
+            JobTarget = at;
+            JobStand = _path[_path.Count - 1];
+            _pathIndex = 0;
+            _waitTimer = 0f;
+            _dispatcher.Release(Id);
+            MarkPath();
+            SetState(CrewUnitState.Moving, "Moving to " + DescribeJob());
+            return true;
+        }
+
+        /// <summary>Haulers park clear of designated ground, other units and their routes.</summary>
+        bool IsParkCell(int x, int z) =>
+            _designations.GetKind(x, z) == DesignationKind.None
+            && !_designations.IsDumpZone(x, z)
+            && !_dispatcher.IsOccupiedByOther(x, z, Id)
+            && !_dispatcher.IsOnAnotherPath(x, z, Id);
+
+        /// <summary>Empties the scoop into a hauler already standing beside this digger, if one is.</summary>
+        bool TryTransferToAdjacentHauler()
+        {
+            var me = Cell;
+            for (var n = 0; n < 8; n++)
+            {
+                var x = me.x + NeighbourX[n];
+                var z = me.y + NeighbourZ[n];
+                if (!_grid.InBounds(x, z))
+                    continue;
+                var other = _dispatcher.UnitOn(x, z);
+                if (other == null || other.Role != UnitRole.Hauler || other.Inventory.Remaining <= Epsilon)
+                    continue;
+
+                Job = CrewJobKind.Transfer;
+                JobTarget = new Vector2Int(x, z);
+                JobStand = me;
+                _dispatcher.Release(Id);
+                SetState(CrewUnitState.Transferring, $"Loading hauler {other.Id}");
+                return true;
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// Whether any cell could be worked for this job from a reachable place to stand: set
         /// lookups only. A nearest-first search with no goal would expand every reachable cell on
-        /// the map; this is what keeps an UNREACHABLE unit cheap.
+        /// the map; this is what keeps a stuck unit cheap.
         /// </summary>
         bool AnyCandidate(CrewJobKind kind)
         {
-            IReadOnlyList<int> cells;
-            switch (kind)
-            {
-                case CrewJobKind.Dig:
-                case CrewJobKind.Fill:
-                    cells = _designations.ActiveCells;
-                    break;
-                case CrewJobKind.DumpZone:
-                    cells = _designations.DumpZoneCells;
-                    break;
-                default:
-                    // Undesignated ground to dump on is almost everywhere; the search ends quickly.
-                    return true;
-            }
-
+            var cells = kind == CrewJobKind.DumpZone ? _designations.DumpZoneCells : _designations.ActiveCells;
             var width = _grid.Width;
             var me = Cell;
             for (var i = 0; i < cells.Count; i++)
@@ -441,7 +708,7 @@ namespace TinyDiggers.Units
                     if (!_grid.InBounds(standX, standZ) || !CanStandHere(standX, standZ)
                         || !_dispatcher.Regions.CanReach(me.x, me.y, standX, standZ))
                         continue;
-                    if (IsJobCell(kind, _grid.GetSurfaceHeight(standX, standZ), x, z))
+                    if (IsJobCell(kind, standX, standZ, _grid.GetSurfaceHeight(standX, standZ), x, z))
                         return true;
                 }
             }
@@ -449,42 +716,74 @@ namespace TinyDiggers.Units
             return false;
         }
 
-        bool IsJobCell(CrewJobKind kind, float standHeight, int x, int z)
+        bool IsJobCell(CrewJobKind kind, int standX, int standZ, float standHeight, int x, int z)
         {
-            var height = _grid.GetSurfaceHeight(x, z);
-            if (!WithinReach(standHeight, height))
-                return false;
-
             switch (kind)
             {
                 case CrewJobKind.Dig:
-                    return !_dispatcher.IsClaimedByOther(x, z, Id) && CanDigStep(standHeight, x, z);
+                    return Role == UnitRole.Digger
+                        && WithinReach(standHeight, _grid.GetSurfaceHeight(x, z))
+                        && !_dispatcher.IsClaimedByOther(x, z, Id)
+                        && CanDigStep(standHeight, x, z);
                 case CrewJobKind.Fill:
-                    return !_dispatcher.IsClaimedByOther(x, z, Id)
-                        && _designations.GetKind(x, z) == DesignationKind.Fill
-                        && FillAmount(standHeight, x, z) + Epsilon >= Step;
-                case CrewJobKind.Dump:
-                    // Not its own cell, not into a hole (a pit it just dug is no longer designated,
-                    // so without this it would refill it), not beside open work, and not where
-                    // another unit is standing or heading.
-                    var own = Cell;
-                    return (x != own.x || z != own.y)
-                        && height + Epsilon >= standHeight
-                        && !_dispatcher.NearWork(x, z)
-                        && CanTipHere(x, z)
-                        && DumpAmount(standHeight, x, z) + Epsilon >= Step;
+                    return _designations.GetKind(x, z) == DesignationKind.Fill
+                        && !_dispatcher.IsClaimedByOther(x, z, Id)
+                        && CanTipOnto(standX, standZ, standHeight, x, z, FillCap(x, z));
                 case CrewJobKind.DumpZone:
-                    var self = Cell;
                     return _designations.IsDumpZone(x, z)
                         && _designations.GetKind(x, z) == DesignationKind.None
-                        && (x != self.x || z != self.y)
-                        && (!_zoneBelowOnly || height < standHeight - Epsilon)
-                        && CanTipHere(x, z)
-                        && ZoneAmount(standHeight, x, z) + Epsilon >= Step;
+                        && !_dispatcher.IsClaimedByOther(x, z, Id)
+                        && CanTipOnto(standX, standZ, standHeight, x, z, _designations.DumpZoneCap(x, z));
                 default:
                     return false;
             }
         }
+
+        /// <summary>
+        /// Whether a unit standing at <paramref name="standHeight"/> beside (x, z) may tip onto it:
+        /// the cell is not another unit's, nor on its way, the tip does not have to go further up
+        /// than dig reach (dropping into a hole is free), it stays under <paramref name="cap"/>,
+        /// and a whole height step of the load will land.
+        /// </summary>
+        bool CanTipOnto(int standX, int standZ, float standHeight, int x, int z, float cap)
+        {
+            var me = Cell;
+            if (x == me.x && z == me.y)
+                return false;
+            if (_tipHighRimsOnly && standHeight <= _grid.GetSurfaceHeight(x, z) + Epsilon)
+                return false;
+
+            // Standing on a heap, a unit only tips level with itself or higher. Tipping downhill
+            // from up there would bury the way it came and strand it on its own spoil.
+            if (_designations.IsDumpZone(standX, standZ) && _grid.GetSurfaceHeight(x, z) < standHeight - Epsilon)
+                return false;
+            return CanTipHere(x, z) && TipAmount(standHeight, x, z, cap) + Epsilon >= Step;
+        }
+
+        /// <summary>
+        /// How much of the load can go onto (x, z): whole height steps held, never leaving the
+        /// cell more than one climbable step above the unit, and never above
+        /// <paramref name="cap"/>. There is no lower limit: a unit can tip into a hole of any
+        /// depth beside it, which is what rim tipping is for.
+        ///
+        /// The upper limit is the climb, not dig reach: a heap two steps proud cannot be driven
+        /// onto, so a Dump Zone would wall itself off after one pass round its edge. Together with
+        /// the rim rule (a unit never stands in the area it tips into) that keeps every heap a
+        /// drivable staircase, and stops a unit heaping itself in.
+        /// </summary>
+        float TipAmount(float standHeight, int x, int z, float cap)
+        {
+            var height = _grid.GetSurfaceHeight(x, z);
+            return Math.Min(Math.Min(standHeight + _dispatcher.Climb - height, cap - height), WholeStepsHeld());
+        }
+
+        /// <summary>
+        /// A fill cell may be heaped one climbable step above its target, no more: that step is
+        /// what slump spreads into the rest of the area, which is how cells no rim touches get
+        /// filled. Without the overfill an area is only ever filled around its edge; with more,
+        /// the crew would pile spoil on a finished fill.
+        /// </summary>
+        float FillCap(int x, int z) => _designations.GetTarget(x, z) + _dispatcher.Climb;
 
         /// <summary>No tipping where another unit stands, or on a cell it is about to drive over.</summary>
         bool CanTipHere(int x, int z) =>
@@ -518,6 +817,11 @@ namespace TinyDiggers.Units
         {
             if (_dispatcher.IsOccupiedByOther(x, z, Id))
                 return false;
+            // Never stand on ground that is to be filled: the fill would go on under the unit.
+            // Dump Zones are different — a heap has to be driven onto to grow — and the tipping
+            // rule below keeps that safe.
+            if (_designations.GetKind(x, z) == DesignationKind.Fill)
+                return false;
             if (_designations.GetKind(x, z) != DesignationKind.Dig)
                 return true;
             if (!_dispatcher.Benching)
@@ -537,42 +841,12 @@ namespace TinyDiggers.Units
             return true;
         }
 
-        /// <summary>How much to tip on a fill: up to its target, never out of reach, whole steps of load.</summary>
-        float FillAmount(float standHeight, int x, int z)
-        {
-            var height = _grid.GetSurfaceHeight(x, z);
-            var toTarget = _designations.GetTarget(x, z) - height;
-            return Math.Min(toTarget, Math.Min(ReachHeadroom(standHeight, height), WholeStepsHeld()));
-        }
-
-        /// <summary>
-        /// Spoil heaps only go one climbable step above where the unit stands. Heaping up to dig
-        /// reach (2 m) was tried first: on the mound test the unit ringed its work with 2 m heaps
-        /// it could not drive over, and then had nowhere left to dump.
-        /// </summary>
-        float DumpAmount(float standHeight, int x, int z) =>
-            Math.Min(standHeight + _dispatcher.Climb - _grid.GetSurfaceHeight(x, z), WholeStepsHeld());
-
-        /// <summary>
-        /// On a Dump Zone: a cell below the stand is filled up to it, one level with it takes a
-        /// heap one climbable step high, and nothing goes above the zone's cap.
-        /// </summary>
-        float ZoneAmount(float standHeight, int x, int z)
-        {
-            var height = _grid.GetSurfaceHeight(x, z);
-            var room = height < standHeight - Epsilon ? standHeight - height : standHeight + _dispatcher.Climb - height;
-            return Math.Min(Math.Min(room, _designations.DumpZoneCap(x, z) - height), WholeStepsHeld());
-        }
-
-        float ReachHeadroom(float standHeight, float cellHeight) => standHeight + DigReachLevels * Step - cellHeight;
-
         float WholeStepsHeld() => (float)Math.Floor((Inventory.Total + Epsilon) / Step) * Step;
 
         /// <summary>
-        /// Counts designations that no reachable cell can work, and lists the unreachable digs for
-        /// the ramp planner. Runs at each job choice, so the readout can say which designations
-        /// are cut off even while the unit is busy with others. A dig cell held up by its bench
-        /// floor is waiting, not unreachable.
+        /// Counts designations this unit could work but cannot reach, and lists the unreachable
+        /// digs for the ramp planner. A dig cell held up by its bench floor is waiting, not
+        /// unreachable. Haulers only care about fills; digs are none of their business.
         /// </summary>
         void UpdateUnreachable()
         {
@@ -589,8 +863,19 @@ namespace TinyDiggers.Units
                 var x = cell % width;
                 var z = cell / width;
                 var kind = _designations.GetKind(x, z);
-                if (kind == DesignationKind.Dig && _grid.GetSurfaceHeight(x, z) - Step < _dispatcher.DigFloor(x, z) - Epsilon)
+                if (kind == DesignationKind.Dig)
+                {
+                    if (Role != UnitRole.Digger)
+                        continue;
+                    if (_grid.GetSurfaceHeight(x, z) - Step < _dispatcher.DigFloor(x, z) - Epsilon)
+                        continue;
+                }
+                else if (Inventory.Total + Epsilon < Step)
+                {
+                    // An empty unit is not held up by a fill it has nothing to put in.
                     continue;
+                }
+
                 if (CanWorkFromSomewhereReachable(x, z))
                     continue;
 
@@ -616,19 +901,29 @@ namespace TinyDiggers.Units
             if (kind == DesignationKind.None)
                 return false;
             var me = Cell;
-            var height = _grid.GetSurfaceHeight(x, z);
-            for (var n = 0; n < 8; n++)
+            var wasHighOnly = _tipHighRimsOnly;
+            _tipHighRimsOnly = false;
+            try
             {
-                var standX = x + NeighbourX[n];
-                var standZ = z + NeighbourZ[n];
-                if (!_grid.InBounds(standX, standZ) || !_dispatcher.Regions.CanReach(me.x, me.y, standX, standZ) || !CanStandHere(standX, standZ))
-                    continue;
-                var standHeight = _grid.GetSurfaceHeight(standX, standZ);
-                if (kind == DesignationKind.Dig ? CanDigStep(standHeight, x, z) : WithinReach(standHeight, height))
-                    return true;
-            }
+                for (var n = 0; n < 8; n++)
+                {
+                    var standX = x + NeighbourX[n];
+                    var standZ = z + NeighbourZ[n];
+                    if (!_grid.InBounds(standX, standZ) || !_dispatcher.Regions.CanReach(me.x, me.y, standX, standZ) || !CanStandHere(standX, standZ))
+                        continue;
+                    var standHeight = _grid.GetSurfaceHeight(standX, standZ);
+                    if (kind == DesignationKind.Dig
+                        ? Role == UnitRole.Digger && WithinReach(standHeight, _grid.GetSurfaceHeight(x, z)) && CanDigStep(standHeight, x, z)
+                        : CanTipOnto(standX, standZ, standHeight, x, z, FillCap(x, z)))
+                        return true;
+                }
 
-            return false;
+                return false;
+            }
+            finally
+            {
+                _tipHighRimsOnly = wasHighOnly;
+            }
         }
 
         // --- moving -----------------------------------------------------------------------------
@@ -765,15 +1060,27 @@ namespace TinyDiggers.Units
             var toTarget = new Vector2(JobTarget.x + 0.5f, JobTarget.y + 0.5f) - Position;
             if (toTarget.sqrMagnitude > 1e-6f)
                 Heading = (float)(Math.Atan2(toTarget.x, toTarget.y) * 180.0 / Math.PI);
-            if (Job == CrewJobKind.Yield)
+            switch (Job)
             {
-                _rethink = true;
-                SetState(CrewUnitState.Idle, "Stood aside; looking for work");
+                case CrewJobKind.Yield:
+                    _rethink = true;
+                    SetState(CrewUnitState.Idle, "Stood aside; looking for work");
+                    break;
+                case CrewJobKind.Dig:
+                    SetState(CrewUnitState.Digging, "Digging " + DescribeJob());
+                    break;
+                case CrewJobKind.Transfer:
+                    SetState(CrewUnitState.Transferring, "Loading " + DescribeJob());
+                    break;
+                case CrewJobKind.Serve:
+                    _parkTimer = 0f;
+                    _parkLoadVersion = Inventory.Version;
+                    SetState(CrewUnitState.Parked, $"Parked by digger {_dispatcher.DiggerFor(Id)}");
+                    break;
+                default:
+                    SetState(CrewUnitState.Tipping, (Job == CrewJobKind.Fill ? "Filling " : "Dumping ") + DescribeJob());
+                    break;
             }
-            else if (Job == CrewJobKind.Dig)
-                SetState(CrewUnitState.Digging, "Digging " + DescribeJob());
-            else
-                SetState(CrewUnitState.Tipping, (Job == CrewJobKind.Fill ? "Filling " : "Dumping ") + DescribeJob());
         }
 
         // --- working ----------------------------------------------------------------------------
@@ -813,7 +1120,6 @@ namespace TinyDiggers.Units
                 return;
             }
 
-            _dispatcher.MarkWorked(target.x, target.y);
             var report = Excavation.Dig(_grid, Inventory, target.x, target.y, 0, Step);
             if (report.WasFull)
             {
@@ -837,27 +1143,17 @@ namespace TinyDiggers.Units
         {
             var target = JobTarget;
             var standHeight = _grid.GetSurfaceHeight(JobStand.x, JobStand.y);
-            float amount;
-            switch (Job)
+            var cap = Job == CrewJobKind.DumpZone ? _designations.DumpZoneCap(target.x, target.y) : FillCap(target.x, target.y);
+            var stillThere = Job == CrewJobKind.DumpZone
+                ? _designations.IsDumpZone(target.x, target.y)
+                : _designations.GetKind(target.x, target.y) == DesignationKind.Fill;
+            if (!stillThere)
             {
-                case CrewJobKind.Fill:
-                    if (_designations.GetKind(target.x, target.y) != DesignationKind.Fill)
-                    {
-                        _rethink = true;
-                        return;
-                    }
-
-                    amount = FillAmount(standHeight, target.x, target.y);
-                    _dispatcher.MarkWorked(target.x, target.y);
-                    break;
-                case CrewJobKind.DumpZone:
-                    amount = _designations.IsDumpZone(target.x, target.y) ? ZoneAmount(standHeight, target.x, target.y) : 0f;
-                    break;
-                default:
-                    amount = DumpAmount(standHeight, target.x, target.y);
-                    break;
+                _rethink = true;
+                return;
             }
 
+            var amount = TipAmount(standHeight, target.x, target.y, cap);
             if (amount + Epsilon >= Step && CanTipHere(target.x, target.y))
             {
                 var report = Excavation.Tip(_grid, Inventory, target.x, target.y, amount);
@@ -867,6 +1163,80 @@ namespace TinyDiggers.Units
 
             Version++;
             _rethink = true;
+        }
+
+        void TransferStep(float deltaTime)
+        {
+            var hauler = _dispatcher.UnitOn(JobTarget.x, JobTarget.y);
+            if (hauler == null || hauler.Role != UnitRole.Hauler || hauler.Inventory.Remaining <= Epsilon || Inventory.Total <= Epsilon)
+            {
+                _rethink = true;
+                return;
+            }
+
+            var moved = Excavation.Transfer(Inventory, hauler.Inventory, TransferRate * deltaTime);
+            if (moved <= 0f)
+            {
+                _rethink = true;
+                return;
+            }
+
+            Transferred += moved;
+            hauler.Transferred += moved;
+            _loadFull = false;
+            if (Inventory.Total <= Epsilon)
+                _rethink = true;
+        }
+
+        /// <summary>
+        /// A parked hauler waits for its digger to fill it. It leaves when it is full, when the
+        /// digger has gone or has nothing more to give, or after <see cref="ParkPatience"/> with
+        /// nothing tipped into it.
+        /// </summary>
+        void ParkStep(float deltaTime)
+        {
+            if (Inventory.Version != _parkLoadVersion)
+            {
+                _parkLoadVersion = Inventory.Version;
+                _parkTimer = 0f;
+                Version++;
+            }
+            else
+            {
+                _parkTimer += deltaTime;
+            }
+
+            if (Inventory.Remaining <= Epsilon)
+            {
+                LeavePark("full");
+                return;
+            }
+
+            var digger = _dispatcher.UnitOf(_dispatcher.DiggerFor(Id));
+            if (digger == null)
+            {
+                LeavePark("its digger has gone");
+                return;
+            }
+
+            var at = digger.Cell;
+            var me = Cell;
+            if (Math.Abs(at.x - me.x) > ParkRadius + 1 || Math.Abs(at.y - me.y) > ParkRadius + 1)
+            {
+                // The digger has moved on: park by it again, or find another digger.
+                _rethink = true;
+                return;
+            }
+
+            if (_parkTimer >= ParkPatience)
+                LeavePark($"nothing tipped in for {ParkPatience:0} s");
+        }
+
+        void LeavePark(string why)
+        {
+            _dispatcher.ReleaseHauler(Id);
+            _rethink = true;
+            SetState(CrewUnitState.Idle, "Leaving: " + why);
         }
 
         // --- bookkeeping --------------------------------------------------------------------------
@@ -879,9 +1249,9 @@ namespace TinyDiggers.Units
 
         void OnDesignationChanged(int x, int z)
         {
-            if (State == CrewUnitState.Idle || State == CrewUnitState.Unreachable)
+            if (State == CrewUnitState.Idle || State == CrewUnitState.Unreachable || State == CrewUnitState.NeedsSomewhereToTip)
                 _rethink = true;
-            else if (x == JobTarget.x && z == JobTarget.y && Job != CrewJobKind.Dump)
+            else if (x == JobTarget.x && z == JobTarget.y && Job != CrewJobKind.Serve)
                 _rethink = true;
         }
 
@@ -957,13 +1327,14 @@ namespace TinyDiggers.Units
                     return $"dig ({JobTarget.x}, {JobTarget.y}) to {_jobHeight:0.#} m";
                 case CrewJobKind.Fill:
                     return $"fill ({JobTarget.x}, {JobTarget.y}) to {_jobHeight:0.#} m";
-                case CrewJobKind.Dump:
-                    return $"spoil at ({JobTarget.x}, {JobTarget.y})";
                 case CrewJobKind.DumpZone:
                     return $"spoil at ({JobTarget.x}, {JobTarget.y}) (dump zone)";
+                case CrewJobKind.Transfer:
+                    return $"hauler at ({JobTarget.x}, {JobTarget.y})";
+                case CrewJobKind.Serve:
+                    return $"digger at ({JobTarget.x}, {JobTarget.y})";
                 case CrewJobKind.Yield:
                     return $"({JobTarget.x}, {JobTarget.y})";
-
                 default:
                     return "nothing";
             }

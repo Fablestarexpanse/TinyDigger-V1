@@ -5,10 +5,10 @@ this records why.
 
 ---
 
-**NEXT:** Vertical Slice 4 (a crew) is done, green (218/218) and pushed on `main`. Nothing is in
-flight. Terrain rendering stays closed. Still owed: a frame-time check on a mid-range machine (the
-~9 ms region rebuild after a change in open ground is the thing to watch); then Ronan's call on
-the next slice.
+**NEXT:** Vertical Slice 5 (loader and dump truck) is done, green (228/228) and pushed on `main`.
+Nothing is in flight. Terrain rendering stays closed. Still owed: a frame-time check on a
+mid-range machine (the ~9 ms region rebuild after a change in open ground is the thing to watch);
+then Ronan's call on the next slice.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -832,3 +832,90 @@ never share a cell and never tip under one another; two units sharing a one-cell
 without deadlocking and never wait more than a few seconds; four units take a mound down without
 sitting idle; regions rebuild only after a change and only touch the region that changed; spoil
 stops at the Dump Zone cap; a full zone is reported and the old rule takes over.
+
+## 2026-09-20 — Vertical Slice 5: loader and dump truck
+
+Two rulings from Ronan drove this: nothing is ever tipped on undesignated ground, and the crew
+splits into two roles. `TERRAIN_REFERENCE.md` section 4 now carries the tipping rule and the
+roles.
+
+### Nowhere to tip is a question, not a fault
+The open-ground fallback is gone. A load can only go into a hauler, a Fill designation or a Dump
+Zone. A unit that is loaded with nowhere it may tip stops in `NeedsSomewhereToTip` and says
+"Needs a Dump Zone or Fill designation"; the crew list carries a warning line while any unit is
+in that state. With no Dump Zone, `WithNowhereToTipEveryUnitStopsAndTheGroundOutsideIsUntouched`
+checks that the ground outside the dig is exactly as it was.
+
+The worked-cell memory and the "not beside open work" dump rules went with the fallback: there is
+no longer anywhere for a unit to put spoil that it has to be kept away from.
+
+### Tipping from the rim
+To tip into an area, a unit stands on a cell beside *any* cell of it and tips onto that cell. The
+cell can be any depth below; dig reach only limits tipping up. Rims above the cell come first, so
+the material runs in. The rest is slump's job.
+
+Three rules keep that from going wrong, each found by a test or a play run:
+- **A heap is never left more than one climbable step above the unit.** Tipping up to dig reach
+  (2 m) built heaps that could not be driven onto, and a Dump Zone walled itself off after one
+  pass round its edge.
+- **A unit never stands on ground that is to be filled.** Otherwise a hauler drove into the pit
+  it was filling and worked from inside it.
+- **Standing on a Dump Zone heap, a unit only tips level with itself or higher.** Tipping downhill
+  from up there buried the way it had come, and the unit ended stranded on its own spoil. Tipping
+  *into* a zone from outside is still unrestricted downward, which is what fills a dip.
+
+A Fill designation may be heaped one step above its target (`FillCap`): that step is what slump
+spreads into the cells no rim touches. Without it an area is only ever filled around its edge.
+
+**Met means settled.** A single tip could take a cell to H and slump could take it back below in
+the same frame, and the designation had already cleared itself. `DesignationMap.Prune` now drops
+met designations one tick later, from `JobDispatcher.Tick`, after the last frame's slumping.
+
+### Roles
+- **`UnitRole.Digger`:** dig reach as before, 5 m³ scoop. Digs; empties into a hauler beside it at
+  `TransferRate` (5 m³/s, so a full scoop reads as a second of work); tips into a Fill or Dump
+  Zone itself only when there is no hauler worth waiting for.
+- **`UnitRole.Hauler`:** never digs or fills the ground; 20 m³ of mixed material. Serves the
+  reachable digger with the fullest load that has no hauler, parks by it, and leaves when full,
+  when the digger has nothing left to give, or after `ParkPatience` (10 s) with nothing tipped in.
+- `Excavation.Transfer` moves material from the top of one inventory into another, conserving
+  volume and material.
+- The dispatcher holds the links: one hauler per digger, one digger per hauler, released when
+  either finishes or is removed. A digger only waits for a hauler that has room and is not itself
+  stuck for somewhere to tip.
+
+**Haulers park as near as there is room, and the digger walks out to them.** Parking beside the
+digger, as specced, deadlocked the first play run: benching takes diggers onto the designated
+ground, where every neighbouring cell is designated and no cell is a legal park. Haulers now park
+within `ParkRadius` (3) and a full digger walks the last few cells to meet one.
+
+### Readout
+Each crew line carries the unit's role, load and capacity. A selected digger shows its hauler and
+how long it has waited for one; a selected hauler shows the digger it serves and how much it has
+carried. The warning line sits above the crew list.
+
+### Verified in play (screenshots in the session scratchpad)
+Rock mound, dig to 20 m, Dump Zone in a dip **40 cells away**, `autoRamp` and `benching` on, hands
+off, 2 diggers + 2 haulers.
+- **Finished in 554 s** of game time, mound flat at 20.00.
+- **The same job with 4 diggers and no haulers took 672 s**, so the loader-and-truck crew is about
+  18% quicker, and it is the haul length that makes the difference: in Slice 4, with the zone 12
+  cells away, four diggers did it in 102 s.
+- **Haulers carried 86 m³** of the roughly 126 m³ dug. The rest the diggers took themselves, when
+  both haulers were away.
+- **Diggers waited 72.6 s in total over 45 waits**, about 6.5% of the run: that is how often a
+  hauler was not yet back when a scoop filled.
+- **No spoil landed anywhere but the Dump Zone and its slump overspill** (0 stray cells), and no
+  unit ever stopped for want of somewhere to tip.
+
+### Tests (228/228 green)
+New: transfer conserves volume and empties into a hauler beside the digger; a hauler leaves when
+full and when its patience runs out; a digger with a full scoop and no hauler in reach waits and
+changes nothing; two haulers never serve one digger; a hauler fills a 2 m deep 5×5 pit from the
+rim without standing on ground it is filling; a 2+2 crew takes a mound down; with nowhere to tip
+every unit stops and the ground outside is untouched.
+
+Several older tests now need somewhere for the spoil to go, and the mound tests run the slump
+simulator, because with rim tipping it is slump that moves material into the middle of a zone.
+The Slice 2 terrace test runs *without* slump on purpose: its point is terraces that stay put
+until a unit cuts them, and dirt terraces 3 m proud do not stay put.

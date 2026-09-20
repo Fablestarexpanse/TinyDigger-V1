@@ -72,9 +72,48 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
 - Ramps are built by digging up into a slope or dumping up onto it. CoI players
   hand-build ~4-tile ramps; the most popular CoI mod auto-generates ramps and
   switchback corridors. We auto-ramp by default, player can override.
-- Units have a slope limit and a scoop size. Later: mixed cargo (one load holds
-  several materials) so haulers don't run half-empty.
+- Units have a slope limit and a scoop size. Mixed cargo is in: one load holds
+  several materials, so haulers do not run half-empty.
 - Dumping into water makes land.
+
+### Where a load may be tipped (built, slice 5)
+
+- **Nowhere undesignated.** A load only ever goes into a hauler, a Fill
+  designation or a Dump Zone. A unit that is loaded with nowhere it may tip
+  stops and says "Needs a Dump Zone or Fill designation". That is a prompt for
+  the player, not a fault.
+- **Tipping is done from the rim.** To tip into an area, a unit stands on a cell
+  it can drive to beside *any* cell of that area (8 neighbours) and tips onto
+  that cell. It does not need to stand inside the area or beside its lowest
+  cell.
+- **Down is free, up is limited.** The cell tipped onto may be any depth below
+  the unit; dig reach only limits tipping upward, and a heap is never left more
+  than one climbable step above the unit, so it can always be driven over.
+- **Rims above the cell come first,** so material runs in by itself, and among
+  those the nearest by path cost.
+- **Slump does the rest.** It carries material on into the area, which is how
+  cells no rim touches are filled at all.
+- **A Fill designation is met when every cell of it is at or above H once the
+  ground has settled,** not when the cell tipped onto reaches H. Met
+  designations are therefore dropped a tick later, after slump has had its say.
+- **A Dump Zone has a cap** (by default the height it was marked at plus 3 m,
+  moved with Q/E). The cap applies to the cell tipped onto; slump may still
+  carry material past it. A zone with no room left in reach is reported.
+- A unit never stands on ground that is itself to be filled, and while standing
+  on a Dump Zone heap it only tips level with itself or higher, so it cannot
+  bury its own way down.
+
+### Roles (built, slice 5)
+
+- **Digger:** dig reach as above, a 5 m³ scoop. It digs, and empties into a
+  hauler beside it (1 s per 5 m³). It tips into a Fill or Dump Zone itself only
+  when there is no hauler worth waiting for.
+- **Hauler:** never touches the ground itself; a 20 m³ bed of mixed material. It
+  serves the reachable digger with the fullest load that has no hauler yet,
+  parks beside it (or as near as there is clear room, and the digger walks out),
+  and leaves when full, when its digger has nothing left to give, or after 10 s
+  with nothing tipped in.
+- One hauler per digger at a time; the dispatcher hands them out.
 
 ## 5. Rendering plan
 

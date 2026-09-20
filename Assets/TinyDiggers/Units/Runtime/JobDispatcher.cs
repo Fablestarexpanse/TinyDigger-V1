@@ -50,11 +50,13 @@ namespace TinyDiggers.Units
         readonly List<CrewUnit> _units = new List<CrewUnit>();
         readonly List<Vector2Int> _corridor = new List<Vector2Int>();
         readonly Dictionary<int, float> _rampSuppressedUntil = new Dictionary<int, float>();
-        readonly bool[] _worked;
         readonly int[] _claimedBy;
         readonly int[] _occupant;
         readonly int[] _pathUsers;
         readonly List<int> _claimOf = new List<int>();
+        readonly List<int> _haulerOfDigger = new List<int>();
+        readonly List<int> _diggerOfHauler = new List<int>();
+        readonly List<bool> _wantsHauler = new List<bool>();
         readonly List<int> _cellOf = new List<int>();
         readonly List<List<int>> _pathOf = new List<List<int>>();
         float _clock;
@@ -68,7 +70,6 @@ namespace TinyDiggers.Units
             _designations = designations ?? throw new ArgumentNullException(nameof(designations));
             _pathfinder = pathfinder ?? throw new ArgumentNullException(nameof(pathfinder));
             var cells = grid.Width * grid.Height;
-            _worked = new bool[cells];
             _claimedBy = new int[cells];
             _occupant = new int[cells];
             _pathUsers = new int[cells];
@@ -125,6 +126,7 @@ namespace TinyDiggers.Units
         public void Tick(float deltaTime)
         {
             _clock += deltaTime;
+            _designations.Prune();
             UpdateRamp();
         }
 
@@ -133,6 +135,9 @@ namespace TinyDiggers.Units
             var id = _units.Count;
             _units.Add(unit);
             _claimOf.Add(-1);
+            _haulerOfDigger.Add(-1);
+            _diggerOfHauler.Add(-1);
+            _wantsHauler.Add(false);
             _cellOf.Add(-1);
             _pathOf.Add(new List<int>());
             return id;
@@ -145,6 +150,8 @@ namespace TinyDiggers.Units
             if (id < 0 || id >= _units.Count || _units[id] != unit)
                 return;
             Release(id);
+            ReleaseHauler(id);
+
             SetPath(id, null, 0);
             if (_cellOf[id] >= 0)
             {
@@ -156,33 +163,107 @@ namespace TinyDiggers.Units
             _units[id] = null;
         }
 
-        // --- finished work ------------------------------------------------------------------------
+        // --- haulers ------------------------------------------------------------------------------
+
+        /// <summary>The hauler serving this digger, or -1.</summary>
+        public int HaulerFor(int diggerId) => Lookup(_haulerOfDigger, diggerId);
+
+        /// <summary>The digger this hauler is serving, or -1.</summary>
+        public int DiggerFor(int haulerId) => Lookup(_diggerOfHauler, haulerId);
 
         /// <summary>
-        /// Remembers that some unit has dug or filled this cell, so no unit tips spoil back onto
-        /// the crew's finished work. Met designations clear themselves, so without this a finished
-        /// pit at ground level looks like any other flat ground to dump on. The memory is the
-        /// crew's, not the unit's: with one memory per unit, one unit dumped on what another had
-        /// just finished.
+        /// Whether the crew has a hauler with room that is not itself stuck for somewhere to tip,
+        /// so a full digger knows whether waiting is worth it.
         /// </summary>
-        public void MarkWorked(int x, int z) => _worked[z * _grid.Width + x] = true;
-
-        /// <summary>Whether (x, z) or any of its eight neighbours is designated or has been worked by the crew.</summary>
-        public bool NearWork(int x, int z)
+        public bool HasUsableHauler
         {
-            for (var dz = -1; dz <= 1; dz++)
+            get
             {
-                for (var dx = -1; dx <= 1; dx++)
-                {
-                    if (!_grid.InBounds(x + dx, z + dz))
-                        continue;
-                    if (_designations.GetKind(x + dx, z + dz) != DesignationKind.None || _worked[(z + dz) * _grid.Width + x + dx])
+                foreach (var unit in _units)
+                    if (unit != null && unit.CanTakeALoad)
                         return true;
-                }
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// A digger with a full scoop asks for a hauler. It is only worth waiting if the crew has
+        /// one; the hauler picks its digger itself, fullest load first.
+        /// </summary>
+        public bool RequestHauler(CrewUnit digger)
+        {
+            if (digger.Id < _wantsHauler.Count)
+                _wantsHauler[digger.Id] = true;
+            return HasUsableHauler;
+        }
+
+        /// <summary>
+        /// Gives this hauler a digger to serve: the one it can reach with the fullest load that
+        /// has no hauler yet, diggers asking for one first. -1 when there is nobody to serve.
+        /// One hauler per digger, one digger per hauler.
+        /// </summary>
+        public int AssignDigger(CrewUnit hauler)
+        {
+            var already = DiggerFor(hauler.Id);
+            if (already >= 0)
+                return already;
+
+            var here = hauler.Cell;
+            var best = -1;
+            var bestScore = float.MinValue;
+            foreach (var unit in _units)
+            {
+                if (unit == null || unit.Role != UnitRole.Digger || HaulerFor(unit.Id) >= 0)
+                    continue;
+                var there = unit.Cell;
+                if (!Regions.CanReach(here.x, here.y, there.x, there.y))
+                    continue;
+                var score = unit.Inventory.Total + (_wantsHauler[unit.Id] ? 1000f : 0f);
+                if (score <= bestScore)
+                    continue;
+                bestScore = score;
+                best = unit.Id;
             }
 
-            return false;
+            if (best < 0)
+                return -1;
+            _haulerOfDigger[best] = hauler.Id;
+            _diggerOfHauler[hauler.Id] = best;
+            _wantsHauler[best] = false;
+            return best;
         }
+
+        /// <summary>Breaks the link between a hauler and its digger, from either side.</summary>
+        public void ReleaseHauler(int unitId)
+        {
+            var digger = Lookup(_diggerOfHauler, unitId);
+            if (digger >= 0)
+            {
+                _diggerOfHauler[unitId] = -1;
+                if (Lookup(_haulerOfDigger, digger) == unitId)
+                    _haulerOfDigger[digger] = -1;
+            }
+
+            var hauler = Lookup(_haulerOfDigger, unitId);
+            if (hauler >= 0)
+            {
+                _haulerOfDigger[unitId] = -1;
+                if (Lookup(_diggerOfHauler, hauler) == unitId)
+                    _diggerOfHauler[hauler] = -1;
+            }
+        }
+
+        /// <summary>The crew member with this id, or null if there is none (or it has gone).</summary>
+        public CrewUnit UnitOf(int id) => id >= 0 && id < _units.Count ? _units[id] : null;
+
+        /// <summary>The unit standing on this cell, or null.</summary>
+        public CrewUnit UnitOn(int x, int z)
+        {
+            var id = _occupant[z * _grid.Width + x];
+            return id >= 0 && id < _units.Count ? _units[id] : null;
+        }
+
+        static int Lookup(List<int> links, int id) => id >= 0 && id < links.Count ? links[id] : -1;
 
         // --- claims -------------------------------------------------------------------------------
 

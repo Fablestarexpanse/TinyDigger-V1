@@ -90,6 +90,36 @@ namespace TinyDiggers.Units
         /// materials. Whatever is left stays in the load, oldest material. Nothing is tipped if the
         /// cell's layer stack has no room.
         /// </summary>
+        /// <summary>
+        /// Moves up to <paramref name="volume"/> m³ from the top of <paramref name="from"/> into
+        /// <paramref name="to"/>, stopping when the receiver is full: a digger emptying its scoop
+        /// into a hauler. Volume is conserved, and the material keeps its identity.
+        /// Returns how much moved.
+        /// </summary>
+        public static float Transfer(MaterialInventory from, MaterialInventory to, float volume)
+        {
+            if (from == null)
+                throw new ArgumentNullException(nameof(from));
+            if (to == null)
+                throw new ArgumentNullException(nameof(to));
+            if (!(volume > 0f))
+                return 0f;
+
+            const float epsilon = 1e-4f;
+            var moved = 0f;
+            while (moved + epsilon < volume && to.Remaining > epsilon && from.TryPeekTop(out var top))
+            {
+                var take = Math.Min(Math.Min(volume - moved, top.Volume), to.Remaining);
+                var taken = from.RemoveFromTop(take);
+                if (taken <= epsilon)
+                    break;
+                to.Add(top.Material, taken);
+                moved += taken;
+            }
+
+            return moved;
+        }
+
         public static TipReport Tip(TerrainGrid grid, MaterialInventory inventory, int x, int z, float maxVolume = float.PositiveInfinity)
         {
             if (grid == null)
