@@ -289,6 +289,57 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
+        public void AHaulerEmptiesItsBedBeforeGoingBackToItsDigger()
+        {
+            for (var z = 2; z <= 5; z++)
+                for (var x = 2; x <= 5; x++)
+                    _map.SetDumpZone(x, z, true, 12f);
+            var hauler = Spawn(10, 10, UnitRole.Hauler, 20f);
+            hauler.Inventory.Add(MaterialTable.DirtLoose, 20f);
+            Spawn(18, 18);
+            for (var x = 19; x <= 22; x++)
+                _map.Designate(x, 18, DesignationKind.Dig, 7f);
+
+            // Once it starts tipping it should not leave with a bedful still on board.
+            var leftLoaded = 0;
+            Run(600f, () => hauler.Inventory.Total < 1f, () =>
+            {
+                // Driving back to a digger with a load still on board is the fault; standing
+                // parked while a digger fills it is not.
+                if (hauler.Job == CrewJobKind.Serve && hauler.State == CrewUnitState.Moving && hauler.Inventory.Total > 1f)
+                    leftLoaded++;
+            });
+
+            Assert.That(hauler.Inventory.Total, Is.LessThan(1f), $"still holding {hauler.Inventory.Total:0.0} m³: {hauler.Status}");
+            Assert.That(leftLoaded, Is.EqualTo(0), "it went back to its digger with a load still on board");
+        }
+
+        [Test]
+        public void ADiggerLeavesTheHaulingToTheHaulers()
+        {
+            // The Dump Zone is right across the map. With a hauler in the crew the digger should
+            // never make that trip itself, however long it has to wait between loads.
+            for (var z = 2; z <= 5; z++)
+                for (var x = 2; x <= 5; x++)
+                    _map.SetDumpZone(x, z, true, 12f);
+            var digger = Spawn(18, 18);
+            Spawn(17, 18, UnitRole.Hauler, 20f);
+            for (var x = 19; x <= 22; x++)
+                _map.Designate(x, 18, DesignationKind.Dig, 6f);
+
+            var diggerTipped = 0;
+            var took = Run(900f, () => _map.Count == 0, () =>
+            {
+                if (digger.State == CrewUnitState.Tipping)
+                    diggerTipped++;
+            });
+
+            Assert.That(_map.Count, Is.EqualTo(0), $"after {took:0} s: {digger.Status}");
+            Assert.That(diggerTipped, Is.EqualTo(0), "the digger hauled its own spoil");
+            Assert.That(_units[1].Transferred, Is.GreaterThan(0f), "the hauler did the carrying");
+        }
+
+        [Test]
         public void WithNowhereToTipEveryUnitStopsAndTheGroundOutsideIsUntouched()
         {
             for (var z = 0; z < Size; z++)

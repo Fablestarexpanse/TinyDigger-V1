@@ -5,10 +5,11 @@ this records why.
 
 ---
 
-**NEXT:** Vertical Slice 5 (loader and dump truck) is done, green (228/228) and pushed on `main`.
-Nothing is in flight. Terrain rendering stays closed. Still owed: a frame-time check on a
-mid-range machine (the ~9 ms region rebuild after a change in open ground is the thing to watch);
-then Ronan's call on the next slice.
+**NEXT:** Vertical Slice 5 (loader and dump truck) is done, green (230/230) and pushed on `main`,
+with three corrections from Ronan watching it run (diggers hauling, haulers leaving part loaded,
+units overlapping). Nothing is in flight. Terrain rendering stays closed. Still owed: a frame-time
+check on a mid-range machine (the ~9 ms region rebuild after a change in open ground is the thing
+to watch); then Ronan's call on the next slice.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -919,3 +920,49 @@ Several older tests now need somewhere for the spoil to go, and the mound tests 
 simulator, because with rim tipping it is slump that moves material into the middle of a zone.
 The Slice 2 terrace test runs *without* slump on purpose: its point is terraces that stay put
 until a unit cuts them, and dirt terraces 3 m proud do not stay put.
+
+## 2026-09-20 — Slice 5 corrections, from watching it run
+
+Three things Ronan spotted in play, each fixed and covered by a test.
+
+### Diggers were hauling
+A digger fell through to carrying its own spoil whenever no hauler was *usable at that moment*,
+which on the 40-cell haul meant most of the time: both haulers were away, so both diggers drove
+off too. A digger now waits whenever the crew has **any** hauler that is not itself stuck, rather
+than one that happens to be free. Only a crew with no haulers at all does its own hauling.
+
+`ADiggerLeavesTheHaulingToTheHaulers` pins it: with a hauler in the crew and the Dump Zone across
+the map, the digger never enters Tipping.
+
+### Haulers went back half full
+The hauler loop served a digger whenever it was not *completely* full. So a hauler tipped one
+metre into the zone, stopped being full, and drove all 40 cells back to its digger with 19 of
+20 m³ still in the bed. A load is now delivered in full before a hauler goes back to serving
+(`AHaulerEmptiesItsBedBeforeGoingBackToItsDigger`).
+
+That one change took the same job from **842 s to 147 s**.
+
+### Units drove through each other
+Cell occupancy only changes as a unit crosses a cell's edge, so two units could overlap on a
+boundary or clip past each other on a diagonal. Two attempts did not survive contact:
+- **Reserving the cell being driven into** deadlocked the crew: reservations are visible to the
+  planning checks too, so parked haulers blocked the stands and paths their own diggers needed.
+- **Refusing diagonal steps past an occupied corner** deadlocked a unit against a parked hauler:
+  the path stayed the same, so it was blocked, re-planned the same route, and blocked again.
+
+What works is a plain clearance test on the movement itself: a unit will not move to a position
+that closes to within `Clearance` (0.7 cells) of another unit. Units already parked closer than
+that may still move, as long as they are not getting closer, so a hauler can sit beside its
+digger. 0.7 is just under the 0.707 of a corner-to-corner pass, so units can still drive past one
+another diagonally, and nothing closer is allowed. Blocked units use the existing wait, re-path
+and stand-aside machinery.
+
+Placeholder bodies now fit inside a single cell (0.95 long). Anything longer overlaps its
+neighbour when two units work side by side, which is exactly what looked wrong.
+
+### Verified in play again (2 diggers + 2 haulers, zone 40 cells away)
+- **147 s**, against 554 s before these fixes and 672 s for four diggers with no haulers.
+- **Closest approach between units: 0.71 cells** — the diagonal-pass limit, so no overlap.
+- **Diggers never tipped** (0 frames in Tipping) and never left the cut.
+- Haulers carried **117 m³** of the ~126 m³ dug; diggers waited 165.6 s in total, which is the
+  cost of two trucks on a 40-cell round trip.

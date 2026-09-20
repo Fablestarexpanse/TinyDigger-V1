@@ -172,8 +172,7 @@ namespace TinyDiggers.Units
         public int DiggerFor(int haulerId) => Lookup(_diggerOfHauler, haulerId);
 
         /// <summary>
-        /// Whether the crew has a hauler with room that is not itself stuck for somewhere to tip,
-        /// so a full digger knows whether waiting is worth it.
+        /// Whether the crew has a hauler with room that is not itself stuck for somewhere to tip.
         /// </summary>
         public bool HasUsableHauler
         {
@@ -187,6 +186,22 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
+        /// Whether the crew has any hauler that is not stuck for somewhere to tip, full or not.
+        /// A digger with haulers in the crew waits for one rather than carrying spoil itself:
+        /// hauling is what they are for, and a digger that drives off leaves the cut idle.
+        /// </summary>
+        public bool HasHaulers
+        {
+            get
+            {
+                foreach (var unit in _units)
+                    if (unit != null && unit.Role == UnitRole.Hauler && unit.State != CrewUnitState.NeedsSomewhereToTip)
+                        return true;
+                return false;
+            }
+        }
+
+        /// <summary>
         /// A digger with a full scoop asks for a hauler. It is only worth waiting if the crew has
         /// one; the hauler picks its digger itself, fullest load first.
         /// </summary>
@@ -194,7 +209,7 @@ namespace TinyDiggers.Units
         {
             if (digger.Id < _wantsHauler.Count)
                 _wantsHauler[digger.Id] = true;
-            return HasUsableHauler;
+            return HasHaulers;
         }
 
         /// <summary>
@@ -318,10 +333,36 @@ namespace TinyDiggers.Units
             _occupant[cell] = unitId;
         }
 
+        /// <summary>Whether another unit is standing on this cell.</summary>
         public bool IsOccupiedByOther(int x, int z, int unitId)
         {
             var owner = _occupant[z * _grid.Width + x];
             return owner >= 0 && owner != unitId;
+        }
+
+        /// <summary>
+        /// Whether a unit may move from <paramref name="from"/> to <paramref name="to"/> without
+        /// closing to within <paramref name="clearance"/> of another unit. Cell occupancy only
+        /// changes as a unit crosses an edge, so two of them can still overlap on a boundary or
+        /// clip past each other on a diagonal; this is what actually keeps the bodies apart.
+        /// Units already standing closer than that (a hauler parked at a digger) may still move,
+        /// as long as they are not getting closer.
+        /// </summary>
+        public bool CanMoveTo(Vector2 from, Vector2 to, int unitId, float clearance)
+        {
+            var squared = clearance * clearance;
+            foreach (var other in _units)
+            {
+                if (other == null || other.Id == unitId)
+                    continue;
+                var after = (to - other.Position).sqrMagnitude;
+                if (after >= squared)
+                    continue;
+                if (after < (from - other.Position).sqrMagnitude)
+                    return false;
+            }
+
+            return true;
         }
 
         /// <summary>The unit standing on the cell, or -1.</summary>

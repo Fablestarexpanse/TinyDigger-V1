@@ -134,15 +134,21 @@ namespace TinyDiggers.Units.Tests
 
             var shared = 0;
             var tippedUnderAnother = 0;
+            var closest = float.MaxValue;
             var took = Run(600f, () => _map.Count == 0, () =>
             {
                 for (var i = 0; i < _units.Count; i++)
                 {
                     for (var j = i + 1; j < _units.Count; j++)
+                    {
                         if (_units[i].Cell == _units[j].Cell)
                             shared++;
+                        closest = Mathf.Min(closest, (_units[i].Position - _units[j].Position).magnitude);
+                    }
+
                     if (_units[i].State != CrewUnitState.Tipping)
                         continue;
+
                     for (var j = 0; j < _units.Count; j++)
                         if (j != i && _units[i].JobTarget == _units[j].Cell)
                             tippedUnderAnother++;
@@ -150,6 +156,8 @@ namespace TinyDiggers.Units.Tests
             });
 
             Assert.That(shared, Is.EqualTo(0), "two units stood on one cell");
+            // The clearance rule lets units pass corner to corner (0.707 apart) but no closer.
+            Assert.That(closest, Is.GreaterThanOrEqualTo(0.7f - 1e-3f), "two units closed in on each other");
             Assert.That(tippedUnderAnother, Is.EqualTo(0), "a unit tipped where another was standing");
             Assert.That(_map.Count, Is.EqualTo(0), $"after {took:0} s");
         }

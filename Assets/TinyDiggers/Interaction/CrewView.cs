@@ -50,8 +50,10 @@ namespace TinyDiggers.Interaction
         /// <summary>Let the crew cut ramps to work it cannot otherwise reach.</summary>
         public bool autoRamp = true;
 
-        [SerializeField] Vector3 _bodySize = new Vector3(1f, 0.8f, 2f);
-        [SerializeField] Vector3 _haulerBodySize = new Vector3(1.4f, 1f, 2.8f);
+        // Bodies fit inside one cell: units keep a cell between their centres, so anything
+        // longer than that overlaps its neighbour when they work side by side.
+        [SerializeField] Vector3 _bodySize = new Vector3(0.7f, 0.55f, 0.95f);
+        [SerializeField] Vector3 _haulerBodySize = new Vector3(0.85f, 0.7f, 0.95f);
         [SerializeField] Color _bodyColor = new Color(1f, 0.78f, 0.1f);
         [SerializeField] Color _haulerColor = new Color(0.35f, 0.55f, 0.9f);
         [SerializeField] Color _selectedColor = new Color(1f, 1f, 1f);

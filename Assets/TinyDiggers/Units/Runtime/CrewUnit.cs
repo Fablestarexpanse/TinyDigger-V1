@@ -85,17 +85,22 @@ namespace TinyDiggers.Units
     /// - Dig the nearest unclaimed Dig designation it can reach, one height step at a time, until
     ///   it is met or the scoop is full.
     /// - Full, with a hauler beside it: empty into the hauler (<see cref="TransferRate"/>).
-    /// - Full, with a hauler assigned or one in the crew to ask for: wait for it.
-    /// - No hauler to wait for: tip into a Fill designation or Dump Zone itself, from the rim.
+    /// - Full, with any hauler in the crew: wait for one, or walk the last few cells to one that
+    ///   has parked nearby. Diggers never carry spoil while there is a hauler to carry it.
+    /// - No hauler in the crew at all: tip into a Fill designation or Dump Zone itself, from the
+    ///   rim.
     ///
     /// Hauler job loop:
-    /// - Loaded: tip into the nearest Fill designation it can reach the rim of, else the nearest
-    ///   Dump Zone with room under its cap.
+    /// - Loaded: empty the bed, tipping into the nearest Fill designation it can reach the rim
+    ///   of, else the nearest Dump Zone with room under its cap. It finishes unloading before it
+    ///   goes back to a digger.
     /// - Empty (or part loaded with nothing to tip into): serve the reachable digger with the
     ///   fullest load that has no hauler, parking beside it. It leaves when full, when the digger
     ///   has nothing left to give, or after <see cref="ParkPatience"/> with nothing received.
     ///
-    /// Traffic: units never share a cell. One whose next path cell is taken waits up to
+    /// Traffic: units never share a cell, and hold the one they are driving into until they
+    /// arrive, so they never overlap on a boundary or cut a diagonal past one another. One whose
+    /// next path cell is taken waits up to
     /// <see cref="TrafficWaitSeconds"/>, then re-paths around the units in the way, and stands
     /// aside if there is no way round.
     /// </summary>
@@ -137,6 +142,13 @@ namespace TinyDiggers.Units
 
         /// <summary>Seconds a unit waits for another one to move off its next cell before going round.</summary>
         public float TrafficWaitSeconds = 1f;
+
+        /// <summary>
+        /// How close a unit will let itself get to another, in cells. Just under the 0.707 of a
+        /// diagonal pass, so units can still drive past one another corner to corner, but never
+        /// close in on each other head-on or overlap across a cell edge.
+        /// </summary>
+        public float Clearance = 0.7f;
 
         readonly TerrainGrid _grid;
         readonly DesignationMap _designations;
@@ -440,6 +452,8 @@ namespace TinyDiggers.Units
                     return;
                 }
 
+                // With haulers in the crew, a digger waits for one instead of carrying spoil
+                // itself; only a crew with no haulers left does its own hauling.
                 if (_dispatcher.RequestHauler(this))
                 {
                     WaitForHauler("a hauler");
@@ -461,9 +475,12 @@ namespace TinyDiggers.Units
         void ChooseHaulerJob(Vector2Int start)
         {
             var step = Step;
-            var full = Inventory.Remaining + Epsilon < step;
             var loaded = Inventory.Total + Epsilon >= step;
-            if (full)
+
+            // A load is delivered before anything else. Serving first was tried, and a hauler
+            // that had tipped a single metre counted as "not full" and drove all the way back to
+            // its digger with the rest still in the bed.
+            if (loaded)
             {
                 if (TryPlanTip(start))
                     return;
@@ -476,14 +493,6 @@ namespace TinyDiggers.Units
                 digger = _dispatcher.AssignDigger(this);
             if (digger >= 0 && TryPlanServe(start, digger))
                 return;
-
-            if (loaded && TryPlanTip(start))
-                return;
-            if (loaded)
-            {
-                Stop();
-                return;
-            }
 
             Idle();
         }
@@ -933,10 +942,14 @@ namespace TinyDiggers.Units
             if (_repath && !Replan(null))
                 return;
 
-            // Units never share a cell: wait for the one in the way, then go round it, and give
-            // the job up if there is no way round.
+            // Units never share a cell, and a unit holds the cell it is driving into until it
+            // gets there, so two of them are never overlapping on a boundary. It also will not
+            // cut a diagonal past a unit standing on the corner. Blocked, it waits for the one in
+            // the way, then goes round it, and gives the job up if there is no way round.
             var next = NextCell();
-            if (next.x >= 0 && _dispatcher.IsOccupiedByOther(next.x, next.y, Id))
+            var blocked = next.x >= 0
+                && (_dispatcher.IsOccupiedByOther(next.x, next.y, Id) || !_dispatcher.CanMoveTo(Position, Probe(deltaTime), Id, Clearance));
+            if (blocked)
             {
                 _waitTimer += deltaTime;
                 if (_waitTimer < TrafficWaitSeconds)
@@ -1009,6 +1022,19 @@ namespace TinyDiggers.Units
             MarkPath();
             SetState(CrewUnitState.Moving, "Standing aside at " + DescribeJob());
             return true;
+        }
+
+        /// <summary>Where this frame's travel would take it, for the clearance check.</summary>
+        Vector2 Probe(float deltaTime)
+        {
+            if (_pathIndex >= _path.Count)
+                return Position;
+            var waypoint = _path[_pathIndex];
+            var target = new Vector2(waypoint.x + 0.5f, waypoint.y + 0.5f);
+            var delta = target - Position;
+            var distance = delta.magnitude;
+            var travel = Speed * deltaTime;
+            return distance <= travel || distance < 1e-5f ? target : Position + delta / distance * travel;
         }
 
         /// <summary>The next cell the unit will drive into, or (-1, -1) if it is on its last one.</summary>
