@@ -25,8 +25,8 @@ namespace TinyDiggers.Units
     /// the player. The player removing one, or designating over it, raises
     /// <see cref="AutoCancelled"/> so the unit can back off.
     ///
-    /// Dump Zones are a separate layer: cells where the player wants spoil tipped. They never
-    /// clear themselves and do not count as work.
+    /// Dump Zones are a separate layer: cells where the player wants spoil tipped, each with a
+    /// cap height nothing is heaped above. They never clear themselves and do not count as work.
     /// </summary>
     public sealed class DesignationMap : IDisposable
     {
@@ -40,6 +40,7 @@ namespace TinyDiggers.Units
         readonly int[] _slot;
         readonly List<int> _active = new List<int>();
         readonly int[] _dumpSlot;
+        readonly float[] _dumpCap;
         readonly List<int> _dumpCells = new List<int>();
         bool _disposed;
 
@@ -52,10 +53,12 @@ namespace TinyDiggers.Units
             _auto = new bool[cells];
             _slot = new int[cells];
             _dumpSlot = new int[cells];
+            _dumpCap = new float[cells];
             for (var i = 0; i < cells; i++)
             {
                 _slot[i] = -1;
                 _dumpSlot[i] = -1;
+                _dumpCap[i] = float.PositiveInfinity;
             }
 
             _grid.CellChanged += OnCellChanged;
@@ -97,6 +100,9 @@ namespace TinyDiggers.Units
         public bool IsAuto(int x, int z) => _auto[Index(x, z)];
 
         public bool IsDumpZone(int x, int z) => _dumpSlot[Index(x, z)] >= 0;
+
+        /// <summary>The height nothing may be heaped above on this Dump Zone cell; infinite if uncapped.</summary>
+        public float DumpZoneCap(int x, int z) => _dumpCap[Index(x, z)];
 
         /// <summary>Whether the cell's surface already satisfies a designation of this kind and height.</summary>
         public bool Satisfies(int x, int z, DesignationKind kind, float height)
@@ -198,15 +204,25 @@ namespace TinyDiggers.Units
             }
         }
 
-        /// <summary>Marks or unmarks a Dump Zone cell. Returns whether anything changed.</summary>
-        public bool SetDumpZone(int x, int z, bool on)
+        /// <summary>
+        /// Marks or unmarks a Dump Zone cell, with the height spoil may be heaped to. Returns
+        /// whether anything changed; re-marking a cell with a new cap counts as a change.
+        /// </summary>
+        public bool SetDumpZone(int x, int z, bool on, float cap = float.PositiveInfinity)
         {
             var cell = Index(x, z);
             if ((_dumpSlot[cell] >= 0) == on)
-                return false;
+            {
+                if (!on || _dumpCap[cell] == cap)
+                    return false;
+                _dumpCap[cell] = cap;
+                Raise(x, z);
+                return true;
+            }
 
             if (on)
             {
+                _dumpCap[cell] = cap;
                 _dumpSlot[cell] = _dumpCells.Count;
                 _dumpCells.Add(cell);
             }
@@ -218,6 +234,8 @@ namespace TinyDiggers.Units
                 _dumpSlot[last] = slot;
                 _dumpCells.RemoveAt(_dumpCells.Count - 1);
                 _dumpSlot[cell] = -1;
+                _dumpCap[cell] = float.PositiveInfinity;
+
             }
 
             Raise(x, z);

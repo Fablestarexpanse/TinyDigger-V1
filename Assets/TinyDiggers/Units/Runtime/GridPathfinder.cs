@@ -89,11 +89,15 @@ namespace TinyDiggers.Units
             return distance * (1f + rise * SlopeCostFactor);
         }
 
-        /// <summary>Shortest path from start to goal, both inclusive. False if unreachable.</summary>
-        public bool TryFindPath(int startX, int startZ, int goalX, int goalZ, List<Vector2Int> path)
+        /// <summary>
+        /// Shortest path from start to goal, both inclusive. False if unreachable.
+        /// <paramref name="avoid"/> blocks cells the unit must not drive through, such as those
+        /// another unit is standing on; the start is never blocked.
+        /// </summary>
+        public bool TryFindPath(int startX, int startZ, int goalX, int goalZ, List<Vector2Int> path, Func<int, int, bool> avoid = null)
         {
             var goal = goalZ * _grid.Width + goalX;
-            var found = Search(startX, startZ, cell => cell == goal, goalX, goalZ, 0f, true);
+            var found = Search(startX, startZ, cell => cell == goal, goalX, goalZ, 0f, true, avoid: avoid);
             return Reconstruct(found, path);
         }
 
@@ -215,7 +219,7 @@ namespace TinyDiggers.Units
         /// no step limit, steep steps penalised, only cells <paramref name="corridor"/> allows.
         /// </summary>
         int Search(int startX, int startZ, Predicate<int> isGoal, int headingX, int headingZ, float heuristicSlack, bool useHeuristic,
-            Func<int, int, bool> corridor = null, float steepPenalty = 0f, int corridorGoal = -1)
+            Func<int, int, bool> corridor = null, float steepPenalty = 0f, int corridorGoal = -1, Func<int, int, bool> avoid = null)
         {
             LastExpandedCount = 0;
             if (!_grid.InBounds(startX, startZ))
@@ -258,6 +262,9 @@ namespace TinyDiggers.Units
                         continue;
                     if (corridor == null ? !CanStep(x, z, nx, nz) : next != corridorGoal && !corridor(nx, nz))
                         continue;
+                    if (avoid != null && avoid(nx, nz))
+                        continue;
+
 
                     var cost = _cost[cell] + (corridor == null ? StepCost(x, z, nx, nz) : CorridorCost(x, z, nx, nz, steepPenalty));
                     if (_seen[next] == _generation && _cost[next] <= cost)

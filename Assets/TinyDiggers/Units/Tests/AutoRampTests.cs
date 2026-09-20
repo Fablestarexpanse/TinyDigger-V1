@@ -65,44 +65,56 @@ namespace TinyDiggers.Units.Tests
             }
         }
 
-        // --- reachability cache ----------------------------------------------------------------
+        // --- regions --------------------------------------------------------------------------
 
         [Test]
-        public void TheReachabilityCacheRefloodsOnlyAfterAHeightChange()
+        public void RegionsRebuildOnlyAfterAHeightChange()
         {
-            var cache = new ReachabilityCache(_grid, _pathfinder);
-            Assert.That(cache.IsReachable(2, 2, 20, 20), Is.True);
-            Assert.That(cache.FloodCount, Is.EqualTo(1));
+            var regions = new RegionMap(_grid, _pathfinder);
+            Assert.That(regions.CanReach(2, 2, 20, 20), Is.True);
+            Assert.That(regions.RebuildCount, Is.EqualTo(1));
 
-            // More queries, from anywhere in the same area: no new flood.
-            Assert.That(cache.IsReachable(15, 3, 1, 1), Is.True);
-            Assert.That(cache.IsReachable(2, 2, 3, 3), Is.True);
-            Assert.That(cache.FloodCount, Is.EqualTo(1));
+            // More queries, from anywhere: no new build.
+            Assert.That(regions.CanReach(15, 3, 1, 1), Is.True);
+            Assert.That(regions.CanReach(2, 2, 3, 3), Is.True);
+            Assert.That(regions.RebuildCount, Is.EqualTo(1));
 
             // A wall 3 m high across the map cuts it in two; the next query sees it.
             for (var z = 0; z < Size; z++)
                 SetHeight(12, z, 11f);
-            Assert.That(cache.IsStale, Is.True);
-            Assert.That(cache.IsReachable(2, 2, 20, 20), Is.False);
-            Assert.That(cache.FloodCount, Is.EqualTo(2));
+            Assert.That(regions.IsStale, Is.True);
+            Assert.That(regions.CanReach(2, 2, 20, 20), Is.False);
+            Assert.That(regions.RegionCount, Is.EqualTo(3), "either side, and the wall itself");
+            Assert.That(regions.RebuildCount, Is.EqualTo(2));
 
             // A gap in the wall joins them again.
             SetHeight(12, 5, 8f);
-            Assert.That(cache.IsReachable(2, 2, 20, 20), Is.True);
-            Assert.That(cache.FloodCount, Is.EqualTo(3));
-            cache.Dispose();
+            Assert.That(regions.CanReach(2, 2, 20, 20), Is.True);
+            Assert.That(regions.RebuildCount, Is.EqualTo(3));
+            regions.Dispose();
         }
 
         [Test]
-        public void TheReachabilityCacheRefloodsWhenAskedFromOutsideItsSet()
+        public void ARebuildOnlyTouchesTheRegionThatChanged()
         {
+            // Two halves split by a wall, plus the wall itself as its own region.
             for (var z = 0; z < Size; z++)
                 SetHeight(12, z, 11f);
-            var cache = new ReachabilityCache(_grid, _pathfinder);
-            Assert.That(cache.IsReachable(2, 2, 20, 20), Is.False);
-            Assert.That(cache.IsReachable(20, 2, 20, 20), Is.True, "from the other side");
-            Assert.That(cache.FloodCount, Is.EqualTo(2));
-            cache.Dispose();
+            var regions = new RegionMap(_grid, _pathfinder);
+            var west = regions.RegionSize(2, 2);
+            var east = regions.RegionSize(20, 20);
+            Assert.That(west, Is.GreaterThan(0));
+            Assert.That(east, Is.GreaterThan(0));
+
+            // Dig a cell deep in the west half: only the west half is re-labelled.
+            SetHeight(4, 4, 7f);
+            regions.Update();
+
+            Assert.That(regions.CellsRelabelledLast, Is.LessThanOrEqualTo(west + 2), "the east half was left alone");
+            Assert.That(regions.CellsRelabelledLast, Is.GreaterThan(0));
+            Assert.That(regions.CanReach(2, 2, 20, 20), Is.False);
+            Assert.That(regions.RegionSize(20, 20), Is.EqualTo(east));
+            regions.Dispose();
         }
 
         [Test]
@@ -120,7 +132,8 @@ namespace TinyDiggers.Units.Tests
             Run(5f, () => false);
 
             Assert.That(_unit.State, Is.EqualTo(CrewUnitState.Unreachable));
-            Assert.That(_unit.Reachability.FloodCount, Is.EqualTo(1), "nothing changed, so one flood");
+            Assert.That(_unit.Dispatcher.Regions.RebuildCount, Is.EqualTo(1), "nothing changed, so one build");
+
             Assert.That(_pathfinder.LastExpandedCount, Is.EqualTo(0), "no search ran: no candidate passed the set lookup");
         }
 

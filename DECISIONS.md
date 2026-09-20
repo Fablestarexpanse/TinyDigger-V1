@@ -5,10 +5,10 @@ this records why.
 
 ---
 
-**NEXT:** Vertical Slice 3 (the crew carves its own ramp) is done, green (211/211) and pushed
-on `main`. Nothing is in flight. Terrain rendering stays closed. Still owed: a frame-time check
-on a mid-range machine (the 8 ms full-map re-flood after each terrain change is the thing to
-watch); then Ronan's call on the next slice.
+**NEXT:** Vertical Slice 4 (a crew) is done, green (218/218) and pushed on `main`. Nothing is in
+flight. Terrain rendering stays closed. Still owed: a frame-time check on a mid-range machine (the
+~9 ms region rebuild after a change in open ground is the thing to watch); then Ronan's call on
+the next slice.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -753,3 +753,82 @@ New tests:
   - with AutoRamp off, no Auto steps are made.
 - Mound: the headless 4-terrace mound finishes, never UNREACHABLE for 3 s or more.
 - Dump Zones: spoil lands only in the zone; with no zone, a part load is kept.
+
+## 2026-09-20 — Rulings, then Vertical Slice 4: a crew
+
+### Ronan's rulings on Slice 3
+- **Benching and auto-ramping are now separate switches.** `JobDispatcher.Benching` takes
+  designated ground down in drivable layers; `AutoRamp` cuts corridor ramps. Both default on and
+  both are on the Crew object in the scene. Slice 2's terrace test runs with both off, which is
+  exactly the Slice 2 behaviour.
+- **Dump Zones have a cap.** `DesignationMap.SetDumpZone` takes a cap height, and nothing is
+  tipped above it. The tool marks a zone at H + `zoneCapAbove` (3 m by default), so Q and E, which
+  already move H, move the cap; the cursor label shows it while Shift is held.
+- **A full Dump Zone is reported,** on the unit (`DumpZoneFull`) and in the readout, and tipping
+  falls back to the old rule (nearest cell that is no lower than the stand, clear of designations
+  and of the crew's finished work).
+
+### Slice 4: what a crew changes
+**`JobDispatcher`** is new and owns everything that has to be decided once for the whole crew:
+the designations, claims, reachability, benching, ramps, and who is standing and driving where.
+A `CrewUnit` now keeps only its own body, load and job. The old single-unit constructor still
+works and quietly makes a dispatcher of its own, so the Slice 1-3 tests are unchanged.
+
+- **Claims.** A unit claims the cell it is about to work; a claim is released when it changes
+  job, gives up, or is disposed of. Designations claimed by another unit are invisible to a
+  unit's job search, so no two units take the same cell.
+- **Ramps.** The dispatcher plans the crew's one ramp; a unit that can reach nothing asks for it.
+  The Auto step is an ordinary designation, so whichever unit is nearest cuts it. Two units can
+  no longer plan competing ramps.
+- **Finished-work memory is the crew's.** This was a bug found by the new mound test: with one
+  memory per unit, one unit dumped spoil on ground another had just finished, and a mound cell
+  ended 1 m proud. `JobDispatcher.MarkWorked` / `NearWork` are shared now.
+
+**`RegionMap`** replaces the per-unit reachability flood. The map is labelled into connected
+regions, so "can this unit reach that cell" is a comparison of two labels, shared by the crew.
+A change re-labels only the regions it touches: their cells are unlabelled and re-flooded, which
+splits a region that has been cut, and a re-flood that runs into an untouched region swallows it,
+which joins regions a fill has connected.
+
+Measured in play with 4 units (512x512 map):
+- A change inside a walled-off 9x9 region: **0.08 ms, 81 cells re-labelled**.
+- A change in the open: **9.5 ms, 262,144 cells** — on this map the walkable ground is one region,
+  so "only the region that changed" is the whole map. That is the honest ceiling of this design;
+  the win is that it is one rebuild for the crew instead of one flood per unit.
+
+**Traffic.** Units never share a cell. A unit whose next cell is taken waits 1 s
+(`TrafficWaitSeconds`), then re-paths with the occupied cells blocked. If there is no way round
+it gives its job up and drives to the nearest cell that is neither occupied nor on another unit's
+path (state Yield), which is what breaks a one-cell-corridor deadlock: without it, two units met
+head-on, both waited, both re-planned, and neither moved.
+
+**Tipping with a crew.** No unit tips where another is standing, or on any cell on another unit's
+current path (the dispatcher keeps each unit's remaining path cells).
+
+**Selection.** A left click on a unit selects it (the body turns white) instead of designating;
+Escape clears it. The readout lists the crew one line each, and gives the selected unit (or unit
+0) its state, load, job and how many path cells are still ahead.
+
+### Verified in play: 4 units, hands off
+Same rock mound as Slice 3 (7x7, terraces 24/23/22/21 on 20 m ground), dig to 20 over all of it,
+Dump Zone on the dip capped at 21 m, `autoRamp` and `benching` on, nothing else done.
+
+- **Finished in 102 s** of game time, with the mound flat at 20.00.
+- **Never UNREACHABLE** (0.0 s) and no Auto ramp was needed, as in Slice 3.
+- **The same scenario with one unit took 345 s**, so the crew of four is 3.4x faster. (Slice 3's
+  800 s is not the number to compare with: its Dump Zone had no cap, so the single unit hauled
+  every load to the dip.)
+- **Idle with work available: 18.5 s** summed over 4 units across 102 s, about 4.5% of their time,
+  in gaps between jobs.
+- **Longest a unit waited for another: 1.0 s**, its traffic timeout.
+- The zone filled to its cap and the units fell back to open ground, which the readout reported.
+
+**A cap is a tipping rule, not a wall.** The dip ended at 22 m against a 21 m cap: units tip only
+up to the cap, but slump can still carry material over it from heaps beside the zone.
+
+### Tests (218/218 green)
+New: a designation is never given to two units; a claim is released when its unit goes; units
+never share a cell and never tip under one another; two units sharing a one-cell gap finish
+without deadlocking and never wait more than a few seconds; four units take a mound down without
+sitting idle; regions rebuild only after a change and only touch the region that changed; spoil
+stops at the Dump Zone cap; a full zone is reported and the old rule takes over.

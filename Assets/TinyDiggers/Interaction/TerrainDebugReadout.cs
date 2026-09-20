@@ -17,7 +17,7 @@ namespace TinyDiggers.Interaction
 
         [SerializeField] TerrainView _terrain;
         [SerializeField] DesignationTool _tool;
-        [SerializeField] CrewUnitView _unit;
+        [SerializeField] CrewView _crew;
         [SerializeField] DesignationsView _designations;
 
         readonly TerrainCellReport _report = new TerrainCellReport();
@@ -27,6 +27,8 @@ namespace TinyDiggers.Interaction
         int _shownUnitVersion = -1;
         int _shownLoadVersion = -1;
         int _shownDesignationVersion = -1;
+        CrewUnit _shownUnit;
+
         float _shownTargetHeight = float.NaN;
         bool _shownLocked;
 
@@ -96,39 +98,64 @@ namespace TinyDiggers.Interaction
                 _panelChanged = true;
             }
 
-            var unit = _unit.Unit;
+            var units = _crew.Units;
+            var shown = _crew.Selected ?? _crew.Unit;
             var map = _designations.Map;
-            if (unit != null && (unit.Version != _shownUnitVersion || unit.Inventory.Version != _shownLoadVersion
-                || map.Version != _shownDesignationVersion || _tool.TargetHeight != _shownTargetHeight || _tool.HeightLocked != _shownLocked))
+            var crewVersion = 0;
+            var loadVersion = 0;
+            foreach (var member in units)
             {
-                _shownUnitVersion = unit.Version;
-                _shownLoadVersion = unit.Inventory.Version;
+                crewVersion += member.Version;
+                loadVersion += member.Inventory.Version;
+            }
+
+            if (shown != null && (crewVersion != _shownUnitVersion || loadVersion != _shownLoadVersion
+                || map.Version != _shownDesignationVersion || _tool.TargetHeight != _shownTargetHeight || _tool.HeightLocked != _shownLocked
+                || !ReferenceEquals(shown, _shownUnit)))
+            {
+                _shownUnitVersion = crewVersion;
+                _shownLoadVersion = loadVersion;
                 _shownDesignationVersion = map.Version;
                 _shownTargetHeight = _tool.TargetHeight;
                 _shownLocked = _tool.HeightLocked;
+                _shownUnit = shown;
 
-                _unitText.Clear()
-                    .Append("Unit: ").AppendLine(unit.Status)
-                    .Append("  at (").Append(unit.Cell.x).Append(", ").Append(unit.Cell.y).Append("), dig reach ±")
-                    .Append(unit.DigReachLevels).AppendLine(" levels")
-                    .AppendLine(_loadReport.Describe(unit.Inventory, _terrain.Grid.Materials));
+                _unitText.Clear().Append("Crew: ").Append(units.Count).AppendLine(" units (click one to select, Escape to clear)");
+                foreach (var member in units)
+                {
+                    _unitText.Append(ReferenceEquals(member, _crew.Selected) ? " >" : "  ")
+                        .Append(member.Id).Append(": ").Append(member.State).Append("  ")
+                        .Append(member.Inventory.Total.ToString("0.0")).Append(" m³  ")
+                        .AppendLine(member.Status);
+                }
+
+                _unitText.AppendLine()
+                    .Append(ReferenceEquals(shown, _crew.Selected) ? "Selected unit " : "Unit ").Append(shown.Id)
+                    .Append(": ").AppendLine(shown.Status)
+                    .Append("  at (").Append(shown.Cell.x).Append(", ").Append(shown.Cell.y).Append("), dig reach ±")
+                    .Append(shown.DigReachLevels).Append(" levels, path ").Append(Mathf.Max(0, shown.Path.Count - shown.PathIndex))
+                    .AppendLine(" cells ahead")
+                    .AppendLine(_loadReport.Describe(shown.Inventory, _terrain.Grid.Materials));
                 _unitText.Append("Target: ");
-                if (unit.Job == CrewJobKind.None)
+                if (shown.Job == CrewJobKind.None)
                     _unitText.Append("none");
                 else
-                    _unitText.Append(unit.Job).Append(" (").Append(unit.JobTarget.x).Append(", ").Append(unit.JobTarget.y).Append(')')
-                        .Append(" from (").Append(unit.JobStand.x).Append(", ").Append(unit.JobStand.y).Append(')');
-                _unitText.AppendLine(unit.OnAutoRamp ? "   ON AUTO RAMP" : "");
-                _unitText.Append("Auto ramp ").Append(unit.AutoRamp ? "on" : "off")
+                    _unitText.Append(shown.Job).Append(" (").Append(shown.JobTarget.x).Append(", ").Append(shown.JobTarget.y).Append(')')
+                        .Append(" from (").Append(shown.JobStand.x).Append(", ").Append(shown.JobStand.y).Append(')');
+                _unitText.AppendLine(shown.OnAutoRamp ? "   ON AUTO RAMP" : "");
+                _unitText.Append("Benching ").Append(_crew.benching ? "on" : "off")
+                    .Append(", auto ramp ").Append(_crew.autoRamp ? "on" : "off")
                     .Append(": ").Append(map.AutoCount).Append(" Auto designation").Append(map.AutoCount == 1 ? "" : "s");
-                if (unit.HasRamp)
-                    _unitText.Append(", ramp toward (").Append(unit.RampTarget.x).Append(", ").Append(unit.RampTarget.y).Append(')');
+                if (shown.HasRamp)
+                    _unitText.Append(", ramp toward (").Append(shown.RampTarget.x).Append(", ").Append(shown.RampTarget.y).Append(')');
                 _unitText.AppendLine();
-                if (unit.AutoRamp && unit.RampNote.Length > 0)
-                    _unitText.Append("  ").AppendLine(unit.RampNote);
-                if (unit.UnreachableCount > 0)
-                    _unitText.Append("UNREACHABLE designations: ").Append(unit.UnreachableCount)
-                        .Append(", nearest ").AppendLine(unit.NearestUnreachable);
+                if (_crew.autoRamp && shown.RampNote.Length > 0)
+                    _unitText.Append("  ").AppendLine(shown.RampNote);
+                if (shown.UnreachableCount > 0)
+                    _unitText.Append("UNREACHABLE designations: ").Append(shown.UnreachableCount)
+                        .Append(", nearest ").AppendLine(shown.NearestUnreachable);
+                if (shown.DumpZoneFull)
+                    _unitText.AppendLine("Dump Zone full: tipping falls back to open ground");
                 _unitText.Append("Designations: ").Append(map.Count)
                     .Append("   Dump Zone cells: ").Append(map.DumpZoneCount)
                     .Append("   H ").Append(_tool.TargetHeight.ToString("0.#")).Append(" m")

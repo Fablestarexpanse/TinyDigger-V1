@@ -27,9 +27,13 @@ namespace TinyDiggers.Interaction
         /// <summary>A middle press that travels less than this many pixels is a click, not a camera drag.</summary>
         public const float ClickTravelPixels = 6f;
 
+        /// <summary>Metres above H that spoil may be heaped on a Dump Zone marked now. Q/E move H, so they move the cap.</summary>
+        [Min(0f)] public float zoneCapAbove = 3f;
+
         [SerializeField] TerrainView _terrain;
         [SerializeField] Camera _camera;
         [SerializeField] DesignationsView _designations;
+        [SerializeField] CrewView _crew;
         [SerializeField] Material _overlayMaterial;
         [SerializeField] Color32 _previewColor = new Color32(255, 240, 160, 90);
 
@@ -133,6 +137,14 @@ namespace TinyDiggers.Interaction
         void HandleButtons(Mouse mouse)
         {
             // Strokes: the kind and H are fixed when the button goes down.
+            // A left click on a unit selects it instead of designating.
+            if (mouse.leftButton.wasPressedThisFrame && _crew != null
+                && _crew.TrySelectAt(_camera.ScreenPointToRay(mouse.position.ReadValue())))
+            {
+                LastAction = "Selected a unit";
+                return;
+            }
+
             if (mouse.leftButton.wasPressedThisFrame)
                 BeginStroke(DesignationKind.Dig, false);
             else if (mouse.rightButton.wasPressedThisFrame)
@@ -149,7 +161,7 @@ namespace TinyDiggers.Interaction
                     {
                         if (_strokeIsZone)
                         {
-                            _designations.Map.SetDumpZone(cell.x, cell.y, true);
+                            _designations.Map.SetDumpZone(cell.x, cell.y, true, _strokeHeight + zoneCapAbove);
                             _strokeCells.Add(cell.y * width + cell.x);
                             return true;
                         }
@@ -196,7 +208,7 @@ namespace TinyDiggers.Interaction
             var count = _strokeCells.Count;
             if (_strokeIsZone)
             {
-                LastAction = $"Marked {count} cell{(count == 1 ? "" : "s")} as Dump Zone";
+                LastAction = $"Marked {count} cell{(count == 1 ? "" : "s")} as Dump Zone, capped at {_strokeHeight + zoneCapAbove:0.#} m";
                 _stroke = DesignationKind.None;
                 _strokeIsZone = false;
                 return;
@@ -268,7 +280,10 @@ namespace TinyDiggers.Interaction
             _labelStyle ??= new GUIStyle(GUI.skin.label) { fontSize = 14, normal = { textColor = Color.white } };
             var position = mouse.position.ReadValue();
             var height = _stroke != DesignationKind.None ? _strokeHeight : TargetHeight;
-            var text = $"H {height:0.#} m" + (HeightLocked ? " (locked)" : "");
+            var zone = _strokeIsZone || (Keyboard.current != null && Keyboard.current.shiftKey.isPressed && _stroke == DesignationKind.None);
+            var text = $"H {height:0.#} m" + (HeightLocked ? " (locked)" : "")
+                + (zone ? $"   dump zone cap {height + zoneCapAbove:0.#} m" : "");
+
             GUI.Label(new Rect(position.x + 18f, Screen.height - position.y + 4f, 200f, 24f), text, _labelStyle);
         }
     }

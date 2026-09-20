@@ -229,6 +229,7 @@ namespace TinyDiggers.Units.Tests
             BuildMound(10, 10, 8f);
             Spawn(2, 10);
             _unit.AutoRamp = false;
+            _unit.Benching = false;
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     if (_grid.GetSurfaceHeight(x, z) > 8f)
