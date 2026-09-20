@@ -42,6 +42,8 @@ namespace TinyDiggers.Presentation
                 {
                     var x = originX + i;
                     var z = originZ + j;
+                    if (Grid.IsVoid(x, z))
+                        continue;
                     var height = Grid.GetSurfaceHeight(x, z);
                     var topColor = Palette[Grid.GetTopMaterial(x, z).Value];
 

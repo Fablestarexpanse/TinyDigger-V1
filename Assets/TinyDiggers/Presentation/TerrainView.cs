@@ -35,12 +35,6 @@ namespace TinyDiggers.Presentation
         /// </summary>
         [Min(0f)] public float HeightStep = 1f;
 
-        /// <summary>
-        /// Cells within this many cells of the clicked one are dug or filled; 0 is the clicked
-        /// cell alone. Read by the edit tool on every click, so it can be tuned in play mode.
-        /// </summary>
-        [Min(0)] public int BrushRadius = 2;
-
         /// <summary>Most cells the slump simulator examines per frame; the rest wait for the next frame.</summary>
         [Min(1)] public int SlumpTilesPerTick = 1000;
 
@@ -48,6 +42,15 @@ namespace TinyDiggers.Presentation
         AngleOfReposeSimulator _slump;
 
         public TerrainGrid Grid { get; private set; }
+
+        /// <summary>Cells from the middle of the grid to the edge of the disc of land.</summary>
+        public float DiscRadius { get; private set; }
+
+        /// <summary>The middle of the disc, in cells.</summary>
+        public Vector2 DiscCentre => Grid == null ? Vector2.zero : new Vector2(Grid.Width * 0.5f, Grid.Height * 0.5f);
+
+        /// <summary>The height the disc is cut to at its rim.</summary>
+        public float RimHeight => TerrainGenerator.RimHeight;
 
         public ITerrainRenderer Renderer => _terrainRenderer;
 
@@ -65,6 +68,7 @@ namespace TinyDiggers.Presentation
             var stopwatch = Stopwatch.StartNew();
             Grid = new TerrainGrid(_width, _height, MaterialTable.CreateDefault(), HeightStep);
             TerrainGenerator.Generate(Grid, _seed);
+            DiscRadius = TerrainGenerator.DiscRadius(Grid);
             var generated = stopwatch.Elapsed.TotalMilliseconds;
 
             stopwatch.Restart();

@@ -143,6 +143,8 @@ namespace TinyDiggers.Terrain
 
         void Settle(int x, int z)
         {
+            if (!_grid.IsGround(x, z))
+                return;
             var unit = _grid.HeightStep > 0f ? _grid.HeightStep : ContinuousMoveUnit;
 
             // Rank the neighbours by how steeply they fall away, steepest first.
@@ -152,7 +154,7 @@ namespace TinyDiggers.Terrain
             {
                 var nx = x + NeighbourDx[n];
                 var nz = z + NeighbourDz[n];
-                if (!_grid.InBounds(nx, nz))
+                if (!_grid.IsGround(nx, nz))
                     continue;
                 var distance = n < 4 ? 1f : Diagonal;
                 var slope = (height - _grid.GetSurfaceHeight(nx, nz)) / distance;

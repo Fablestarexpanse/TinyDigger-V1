@@ -39,6 +39,13 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
   for volume/slump maths.
 - Cell size: **1 m** (CoI tiles are ~2 m per community measurement; we go finer
   because our machines are smaller relative to the land).
+- **The world is a disc on a table** (built, slice 6). The grid stays square,
+  and the cells outside the disc are marked void: they hold no layers, are not
+  drawn, cannot be walked on, designated or slumped into, and belong to no
+  region. The last ~6 cells of land ease to one rim height, so the edge reads
+  as a cut rather than a ragged cliff, and a plinth under the disc, plus a flat
+  gradient instead of a sky, make it a model on a surface rather than a
+  landscape.
 
 ### Materials (to add)
 - **Disturbed variants are separate materials**, not a flag:

@@ -78,7 +78,7 @@ namespace TinyDiggers.Units
         /// <summary>Whether a unit standing on (fromX, fromZ) can drive to (x, z).</summary>
         public bool CanReach(int fromX, int fromZ, int x, int z)
         {
-            if (!_grid.InBounds(fromX, fromZ) || !_grid.InBounds(x, z))
+            if (!_grid.IsGround(fromX, fromZ) || !_grid.IsGround(x, z))
                 return false;
             Update();
             var width = _grid.Width;
@@ -135,8 +135,9 @@ namespace TinyDiggers.Units
             _members.Clear();
             _nextRegion = 0;
             CellsRelabelledLast = 0;
+            var voids = _grid.VoidCells;
             for (var cell = 0; cell < _label.Length; cell++)
-                if (_label[cell] == Unlabelled)
+                if (_label[cell] == Unlabelled && !voids[cell])
                     Flood(cell);
 
             ClearDirty();
@@ -187,25 +188,27 @@ namespace TinyDiggers.Units
                 _members.Remove(region);
             }
 
+            var voids = _grid.VoidCells;
             foreach (var cell in _dirtyCells)
                 if (_label[cell] == Unlabelled)
                     seeds.Add(cell);
 
             foreach (var cell in seeds)
-                if (_label[cell] == Unlabelled)
+                if (_label[cell] == Unlabelled && !voids[cell])
                     Flood(cell);
 
             ClearDirty();
             RebuildCount++;
         }
 
-        /// <summary>Labels everything connected to <paramref name="start"/> as one new region.</summary>
+        /// <summary>Labels everything connected to <paramref name="start"/> as one new region. Void cells are skipped.</summary>
         void Flood(int start)
         {
             var region = _nextRegion++;
             var members = new List<int>();
             _members[region] = members;
             var heights = _grid.SurfaceHeights;
+            var voids = _grid.VoidCells;
             var width = _grid.Width;
             var depth = _grid.Height;
             var limit = _pathfinder.MaxStepHeight + 1e-3f;
@@ -227,7 +230,7 @@ namespace TinyDiggers.Units
                     if (nx < 0 || nz < 0 || nx >= width || nz >= depth)
                         continue;
                     var next = nz * width + nx;
-                    if (_label[next] == region || Math.Abs(heights[next] - height) > limit)
+                    if (_label[next] == region || voids[next] || Math.Abs(heights[next] - height) > limit)
                         continue;
                     if (n >= 4)
                     {

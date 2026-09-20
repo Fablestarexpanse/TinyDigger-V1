@@ -824,7 +824,7 @@ namespace TinyDiggers.Units
         /// </summary>
         bool CanStandHere(int x, int z)
         {
-            if (_dispatcher.IsOccupiedByOther(x, z, Id))
+            if (!_grid.IsGround(x, z) || _dispatcher.IsOccupiedByOther(x, z, Id))
                 return false;
             // Never stand on ground that is to be filled: the fill would go on under the unit.
             // Dump Zones are different — a heap has to be driven onto to grow — and the tipping

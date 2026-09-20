@@ -119,6 +119,8 @@ namespace TinyDiggers.Presentation
                 {
                     var x = originX + i;
                     var z = originZ + j;
+                    if (Grid.IsVoid(x, z))
+                        continue;
                     var h00 = Corner(x, z);
                     var h10 = Corner(x + 1, z);
                     var h01 = Corner(x, z + 1);

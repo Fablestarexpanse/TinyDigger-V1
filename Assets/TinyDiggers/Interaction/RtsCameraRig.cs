@@ -3,75 +3,116 @@ using UnityEngine;
 namespace TinyDiggers.Interaction
 {
     /// <summary>
-    /// The camera as a pivot on the ground plus a yaw, a fixed pitch and a distance. Panning
-    /// moves the pivot relative to the current yaw, rotating orbits the pivot, zooming changes
-    /// the distance. Plain C#: the controller feeds it input and copies <see cref="Position"/>
-    /// and <see cref="Rotation"/> onto the camera.
+    /// Where the camera wants to be: a pivot on the ground, a distance back from it, a heading
+    /// and a pitch. Plain C# and frame-independent, so the arithmetic — panning that scales with
+    /// zoom, zooming toward a point, pitch following zoom, and keeping the pivot on the disc —
+    /// can be tested without a scene. <see cref="RtsCamera"/> reads input into this and eases the
+    /// camera toward it.
     /// </summary>
     public sealed class RtsCameraRig
     {
+        /// <summary>The ground point the camera orbits, in cells.</summary>
         public Vector3 Pivot;
+
+        /// <summary>Degrees clockwise from +z.</summary>
         public float Yaw;
-        public float Pitch = 55f;
-        public float Distance = 350f;
 
-        public float MinDistance = 15f;
-        public float MaxDistance = 700f;
+        /// <summary>Metres from the pivot.</summary>
+        public float Distance = 100f;
 
-        /// <summary>Pivot speed as a multiple of the current distance per second, so panning feels the same at every zoom.</summary>
-        public float PanSpeed = 0.8f;
+        /// <summary>Degrees the player has nudged the pitch away from what the zoom asks for.</summary>
+        public float PitchOffset;
 
-        /// <summary>Degrees per second.</summary>
-        public float RotateSpeed = 90f;
+        public float MinDistance = 4f;
 
-        /// <summary>Fraction of the distance removed per zoom step.</summary>
-        public float ZoomStep = 0.12f;
+        public float MaxDistance = 600f;
 
-        /// <summary>How quickly the pivot's height catches up with the ground under it; higher is snappier.</summary>
-        public float GroundFollowRate = 8f;
+        /// <summary>Fraction of the distance one scroll notch covers.</summary>
+        public float ZoomStep = 0.15f;
 
-        public Vector2 BoundsMin;
-        public Vector2 BoundsMax;
+        /// <summary>Cells a second of panning at the closest zoom.</summary>
+        public float PanSpeed = 12f;
+
+        /// <summary>How many times faster panning is at the furthest zoom.</summary>
+        public float PanSpeedAtFar = 6f;
+
+        public float ClosePitch = 35f;
+
+        public float FarPitch = 60f;
+
+        /// <summary>The middle of the disc of land, in cells.</summary>
+        public Vector2 DiscCentre = Vector2.zero;
+
+        /// <summary>Cells from the middle of the disc to its rim; the pivot never leaves it.</summary>
+        public float DiscRadius = 128f;
+
+        /// <summary>How far out the camera is, 0 closest and 1 furthest.</summary>
+        public float ZoomFraction => Mathf.InverseLerp(MinDistance, MaxDistance, Distance);
+
+        /// <summary>The pitch the current zoom asks for, plus whatever the player has nudged it by.</summary>
+        public float Pitch => Mathf.Clamp(Mathf.Lerp(ClosePitch, FarPitch, ZoomFraction) + PitchOffset, 5f, 89f);
 
         public Quaternion Rotation => Quaternion.Euler(Pitch, Yaw, 0f);
 
-        public Vector3 Position => Pivot - Rotation * Vector3.forward * Distance;
+        /// <summary>Where the camera sits to look at the pivot from <see cref="Distance"/> away.</summary>
+        public Vector3 CameraPosition => Pivot - Rotation * Vector3.forward * Distance;
 
         /// <summary>
-        /// Moves the pivot. <paramref name="input"/> x is right, y is forward, relative to the
-        /// camera's yaw; it is clamped to length 1 so diagonals are not faster.
+        /// Moves the pivot in screen-relative directions on the ground: x is right, y is away from
+        /// the viewer, both turned by the current heading. Speed rises with the zoom, so a given
+        /// input covers a similar share of the screen at any distance.
         /// </summary>
         public void Pan(Vector2 input, float deltaTime)
         {
-            input = Vector2.ClampMagnitude(input, 1f);
-            var yaw = Quaternion.Euler(0f, Yaw, 0f);
-            var move = (yaw * Vector3.right * input.x + yaw * Vector3.forward * input.y) * (PanSpeed * Distance * deltaTime);
-            Pivot.x = Mathf.Clamp(Pivot.x + move.x, BoundsMin.x, BoundsMax.x);
-            Pivot.z = Mathf.Clamp(Pivot.z + move.z, BoundsMin.y, BoundsMax.y);
+            if (input.sqrMagnitude < 1e-6f)
+                return;
+            var speed = PanSpeed * Mathf.Lerp(1f, PanSpeedAtFar, ZoomFraction);
+            var move = Quaternion.Euler(0f, Yaw, 0f) * new Vector3(input.x, 0f, input.y) * (speed * deltaTime);
+            Pivot = ClampToDisc(Pivot + move);
         }
 
-        /// <summary>Positive steps zoom in, negative zoom out. Each step scales the distance, so zoom feels even.</summary>
-        public void Zoom(float steps)
+        public void Turn(float degrees)
         {
-            Distance = Mathf.Clamp(Distance * Mathf.Pow(1f - ZoomStep, steps), MinDistance, MaxDistance);
+            Yaw += degrees;
         }
 
-        /// <summary>Positive direction orbits clockwise seen from above.</summary>
-        public void Rotate(float direction, float deltaTime)
+        public void NudgePitch(float degrees)
         {
-            RotateBy(direction * RotateSpeed * deltaTime);
+            PitchOffset = Mathf.Clamp(PitchOffset + degrees, -30f, 30f);
         }
 
-        /// <summary>Orbits by <paramref name="degrees"/>, clockwise seen from above when positive.</summary>
-        public void RotateBy(float degrees)
+        /// <summary>
+        /// Zooms by whole notches: each one closes or opens the distance by the same fraction, so
+        /// the step is even at every scale. With a point given, the pivot slides toward it by as
+        /// much of the way as the zoom closed, which is what makes the zoom follow the cursor.
+        /// </summary>
+        public void Zoom(float notches, Vector3? towards = null)
         {
-            Yaw = Mathf.Repeat(Yaw + degrees, 360f);
+            var before = Distance;
+            Distance = Mathf.Clamp(Distance * Mathf.Pow(1f - ZoomStep, notches), MinDistance, MaxDistance);
+            if (!towards.HasValue || before <= 1e-4f)
+                return;
+            var closed = 1f - Distance / before;
+            if (closed > 0f)
+                Pivot = ClampToDisc(Vector3.Lerp(Pivot, towards.Value, Mathf.Clamp01(closed)));
         }
 
-        /// <summary>Eases the pivot's height towards the ground so the camera rides over hills without snapping.</summary>
-        public void FollowGround(float groundHeight, float deltaTime)
+        /// <summary>Puts the camera over the middle of the map, fully zoomed out.</summary>
+        public void GoHome()
         {
-            Pivot.y = Mathf.Lerp(Pivot.y, groundHeight, 1f - Mathf.Exp(-GroundFollowRate * deltaTime));
+            Pivot = new Vector3(DiscCentre.x, Pivot.y, DiscCentre.y);
+            Distance = MaxDistance;
+            Yaw = 45f;
+            PitchOffset = 0f;
+        }
+
+        /// <summary>Keeps a point on the disc, so the land can never be pushed off the table.</summary>
+        public Vector3 ClampToDisc(Vector3 point)
+        {
+            var flat = new Vector2(point.x - DiscCentre.x, point.z - DiscCentre.y);
+            if (flat.magnitude > DiscRadius)
+                flat = flat.normalized * DiscRadius;
+            return new Vector3(DiscCentre.x + flat.x, point.y, DiscCentre.y + flat.y);
         }
     }
 }

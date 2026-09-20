@@ -128,6 +128,9 @@ namespace TinyDiggers.Units
                 throw new ArgumentException("Use Clear to remove a designation.", nameof(kind));
 
             var cell = Index(x, z);
+            // Off the edge of the world: there is nothing there to dig or fill.
+            if (_grid.IsVoid(x, z))
+                return false;
             var cancelsAuto = _auto[cell] && !auto;
             if (Satisfies(x, z, kind, height))
             {
@@ -214,6 +217,8 @@ namespace TinyDiggers.Units
         public bool SetDumpZone(int x, int z, bool on, float cap = float.PositiveInfinity)
         {
             var cell = Index(x, z);
+            if (on && _grid.IsVoid(x, z))
+                return false;
             if ((_dumpSlot[cell] >= 0) == on)
             {
                 if (!on || _dumpCap[cell] == cap)

@@ -33,6 +33,7 @@ namespace TinyDiggers.Terrain
         readonly byte[] _layerCounts;
         readonly float[] _surfaceHeights;
         readonly MaterialId[] _topMaterials;
+        readonly bool[] _void;
 
         public TerrainGrid(int width, int height, MaterialTable materials, float heightStep = 0f)
         {
@@ -53,6 +54,7 @@ namespace TinyDiggers.Terrain
             _layerCounts = new byte[cellCount];
             _surfaceHeights = new float[cellCount];
             _topMaterials = new MaterialId[cellCount];
+            _void = new bool[cellCount];
         }
 
         public int Width { get; }
@@ -82,6 +84,53 @@ namespace TinyDiggers.Terrain
         public event Action<int, int> CellChanged;
 
         public bool InBounds(int x, int z) => (uint)x < (uint)Width && (uint)z < (uint)Height;
+
+        /// <summary>
+        /// Whether the cell is off the edge of the world: the map is a disc on a table, and the
+        /// cells of the square grid outside it hold nothing. Void cells are not drawn, cannot be
+        /// walked on, designated or slumped into, and hold no layers.
+        /// </summary>
+        public bool IsVoid(int x, int z) => _void[RequireIndex(x, z)];
+
+        /// <summary>Void flags, indexed <c>z * Width + x</c>, for hot loops.</summary>
+        public ReadOnlySpan<bool> VoidCells => _void;
+
+        /// <summary>Whether the cell is on the map and not void: real ground.</summary>
+        public bool IsGround(int x, int z) => InBounds(x, z) && !_void[z * Width + x];
+
+        /// <summary>Cells on the map that are not void. Counted on demand.</summary>
+        public int GroundCellCount
+        {
+            get
+            {
+                var count = 0;
+                foreach (var isVoid in _void)
+                    if (!isVoid)
+                        count++;
+                return count;
+            }
+        }
+
+        /// <summary>
+        /// Marks a cell as off the map, or back on it. Voiding a cell empties its column, so
+        /// nothing is left hanging in the air.
+        /// </summary>
+        public void SetVoid(int x, int z, bool isVoid)
+        {
+            var cell = RequireIndex(x, z);
+            if (_void[cell] == isVoid)
+                return;
+            _void[cell] = isVoid;
+            if (isVoid)
+            {
+                _layerCounts[cell] = 0;
+                var layerBase = cell * MaxLayersPerCell;
+                for (var i = 0; i < MaxLayersPerCell; i++)
+                    _layers[layerBase + i] = default;
+            }
+
+            OnCellMutated(cell, x, z);
+        }
 
         /// <summary>Height of the top of the column in metres. Cached, so this is a single array read.</summary>
         public float GetSurfaceHeight(int x, int z) => _surfaceHeights[RequireIndex(x, z)];

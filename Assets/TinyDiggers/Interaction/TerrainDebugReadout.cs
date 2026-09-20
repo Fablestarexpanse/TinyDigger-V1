@@ -16,7 +16,7 @@ namespace TinyDiggers.Interaction
         const float FrameTimeWindow = 0.5f;
 
         [SerializeField] TerrainView _terrain;
-        [SerializeField] DesignationTool _tool;
+        [SerializeField] PlayerTools _tool;
         [SerializeField] CrewView _crew;
         [SerializeField] DesignationsView _designations;
 
@@ -71,6 +71,12 @@ namespace TinyDiggers.Interaction
 
         void Update()
         {
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            if (keyboard != null && keyboard.f3Key.wasPressedThisFrame)
+                Visible = !Visible;
+            if (!Visible)
+                return;
+
             _frameTimeAccumulated += Time.unscaledDeltaTime;
             _framesCounted++;
             if (_frameTimeAccumulated >= FrameTimeWindow)
@@ -182,10 +188,10 @@ namespace TinyDiggers.Interaction
                 _panelChanged = true;
             }
 
-            if (!ReferenceEquals(_tool.LastAction, _shownAction) || _terrain.BrushRadius != _shownRadius)
+            if (!ReferenceEquals(_tool.LastAction, _shownAction) || _tool.BrushRadius != _shownRadius)
             {
                 _shownAction = _tool.LastAction;
-                _shownRadius = _terrain.BrushRadius;
+                _shownRadius = _tool.BrushRadius;
                 _panelChanged = true;
             }
 
@@ -193,11 +199,10 @@ namespace TinyDiggers.Interaction
             {
                 _text.Clear()
                     .AppendLine(_frameTime)
-                    .Append("Brush radius ").Append(_terrain.BrushRadius)
-                    .AppendLine("   LMB dig to H   RMB fill to H   Shift+RMB dump zone   MMB click clear")
-
-                    .AppendLine("Q/E H -/+ 1 step (locks)   R H follows cursor")
-                    .AppendLine("WASD pan   MMB drag rotate   scroll zoom")
+                    .Append("Brush ").Append(_tool.BrushRadius)
+                    .AppendLine("   tools 1-7   LMB apply   RMB cancel/clear   Esc select")
+                    .AppendLine("PgUp/PgDn H -/+ 1 step (locks)   [ ] brush or road width   F3 hides this")
+                    .AppendLine("WASD pan   Q/E or MMB drag turn   R/F pitch   scroll zoom   Home centre")
                     .AppendLine()
                     .AppendLine(_unitBlock)
                     .AppendLine()
@@ -210,8 +215,14 @@ namespace TinyDiggers.Interaction
             }
         }
 
+        /// <summary>Whether the panel is shown. F3 toggles it; the toolbar is the everyday UI.</summary>
+        public bool Visible;
+
         void OnGUI()
         {
+            if (!Visible)
+                return;
+
             if (_style == null)
             {
                 _style = new GUIStyle(GUI.skin.box)

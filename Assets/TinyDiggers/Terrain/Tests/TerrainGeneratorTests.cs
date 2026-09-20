@@ -49,6 +49,8 @@ namespace TinyDiggers.Terrain.Tests
             {
                 for (var x = 0; x < grid.Width; x++)
                 {
+                    if (!grid.IsGround(x, z))
+                        continue;
                     var bottom = grid.GetLayer(x, z, 0);
                     Assert.That(bottom.Material, Is.EqualTo(MaterialTable.Bedrock));
                     Assert.That(bottom.Thickness, Is.EqualTo(TerrainGenerator.BedrockThickness).Within(Tolerance));
@@ -67,7 +69,7 @@ namespace TinyDiggers.Terrain.Tests
             int peakX = 0, peakZ = 0;
             for (var z = 0; z < grid.Height; z++)
                 for (var x = 0; x < grid.Width; x++)
-                    if (grid.GetSurfaceHeight(x, z) > grid.GetSurfaceHeight(peakX, peakZ))
+                    if (grid.IsGround(x, z) && grid.GetSurfaceHeight(x, z) > grid.GetSurfaceHeight(peakX, peakZ))
                     {
                         peakX = x;
                         peakZ = z;
@@ -83,10 +85,16 @@ namespace TinyDiggers.Terrain.Tests
             }
 
             var mean = 0f;
+            var land = 0;
             for (var z = 0; z < grid.Height; z++)
                 for (var x = 0; x < grid.Width; x++)
-                    mean += grid.GetSurfaceHeight(x, z);
-            mean /= grid.Width * grid.Height;
+                    if (grid.IsGround(x, z))
+                    {
+                        mean += grid.GetSurfaceHeight(x, z);
+                        land++;
+                    }
+
+            mean /= Mathf.Max(1, land);
 
             Assert.That(grid.GetSurfaceHeight(peakX, peakZ), Is.GreaterThan(mean + 3f), "expected at least one real hill");
             Assert.That(soil, Is.LessThanOrEqualTo(1f));
@@ -107,6 +115,10 @@ namespace TinyDiggers.Terrain.Tests
             {
                 for (var x = 0; x < grid.Width - 1; x++)
                 {
+                    // Only where there is land on both sides: the map is a disc, and the drop
+                    // from the rim into the void is the edge of the world, not a slope.
+                    if (!grid.IsGround(x, z) || !grid.IsGround(x + 1, z) || !grid.IsGround(x, z + 1))
+                        continue;
                     var h = grid.GetSurfaceHeight(x, z);
                     var east = Mathf.Abs(h - grid.GetSurfaceHeight(x + 1, z));
                     var north = Mathf.Abs(h - grid.GetSurfaceHeight(x, z + 1));
@@ -116,7 +128,8 @@ namespace TinyDiggers.Terrain.Tests
                 }
             }
 
-            Assert.That(flat, Is.GreaterThan(255 * 255 * 0.8f), "most of the land should be terrace tops, not risers");
+            // The disc covers about pi/4 of the square grid, and most of that should be terrace tops.
+            Assert.That(flat, Is.GreaterThan(255 * 255 * 0.55f), "most of the land should be terrace tops, not risers");
         }
 
         [Test]

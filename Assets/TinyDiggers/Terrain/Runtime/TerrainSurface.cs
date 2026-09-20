@@ -19,14 +19,16 @@ namespace TinyDiggers.Terrain
             {
                 for (var x = cornerX - 1; x <= cornerX; x++)
                 {
-                    if (!grid.InBounds(x, z))
+                    // Void cells are off the map: the rim corner takes the height of the ground
+                    // beside it, so the disc ends in a cut edge rather than a ramp down to zero.
+                    if (!grid.IsGround(x, z))
                         continue;
                     sum += grid.GetSurfaceHeight(x, z);
                     count++;
                 }
             }
 
-            return sum / count;
+            return count == 0 ? 0f : sum / count;
         }
 
         /// <summary>

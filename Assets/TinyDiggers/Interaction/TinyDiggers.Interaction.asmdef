@@ -5,7 +5,8 @@
         "TinyDiggers.Terrain",
         "TinyDiggers.Presentation",
         "TinyDiggers.Units",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

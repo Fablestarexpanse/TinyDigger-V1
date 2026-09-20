@@ -150,12 +150,15 @@ namespace TinyDiggers.Units
                 return 0;
 
             var heights = _grid.SurfaceHeights;
+            var voids = _grid.VoidCells;
             var width = _grid.Width;
             var depth = _grid.Height;
             var limit = MaxStepHeight + Tolerance;
             var stack = _floodCells;
             var top = 0;
             var start = startZ * width + startX;
+            if (voids[start])
+                return 0;
             reachable[start] = true;
             stack[top++] = start;
             var count = 1;
@@ -172,7 +175,7 @@ namespace TinyDiggers.Units
                     if (nx < 0 || nz < 0 || nx >= width || nz >= depth)
                         continue;
                     var next = nz * width + nx;
-                    if (reachable[next] || Math.Abs(heights[next] - h) > limit)
+                    if (reachable[next] || voids[next] || Math.Abs(heights[next] - h) > limit)
                         continue;
                     if (n >= 4)
                     {
@@ -211,7 +214,8 @@ namespace TinyDiggers.Units
         }
 
         bool Climbable(int ax, int az, int bx, int bz) =>
-            Math.Abs(_grid.GetSurfaceHeight(ax, az) - _grid.GetSurfaceHeight(bx, bz)) <= MaxStepHeight + Tolerance;
+            _grid.IsGround(ax, az) && _grid.IsGround(bx, bz)
+            && Math.Abs(_grid.GetSurfaceHeight(ax, az) - _grid.GetSurfaceHeight(bx, bz)) <= MaxStepHeight + Tolerance;
 
         /// <summary>
         /// A* (or Dijkstra without a heuristic). Returns the goal cell index, or -1. With
@@ -259,6 +263,8 @@ namespace TinyDiggers.Units
                         continue;
                     var next = nz * width + nx;
                     if (_closed[next] == _generation)
+                        continue;
+                    if (!_grid.IsGround(nx, nz))
                         continue;
                     if (corridor == null ? !CanStep(x, z, nx, nz) : next != corridorGoal && !corridor(nx, nz))
                         continue;

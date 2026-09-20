@@ -22,6 +22,16 @@ namespace TinyDiggers.Terrain
         public const float BedrockThickness = 10f;
         public const float TopsoilThickness = 0.3f;
 
+        /// <summary>Cells nearer the disc edge than this have their surface eased to the rim height.</summary>
+        public const int RimTaper = 6;
+
+        /// <summary>The height the disc's edge is cut to, so the rim reads as one clean line.</summary>
+        public static float RimHeight => BedrockThickness + BaseRockDepth;
+
+        /// <summary>Cells from the middle of the grid to the edge of the disc of land.</summary>
+        public static float DiscRadius(TerrainGrid grid) =>
+            grid == null ? 0f : Math.Min(grid.Width, grid.Height) * 0.5f - 2f;
+
         /// <summary>Layers thinner than this are left out rather than spent on a near-invisible band.</summary>
         const float MinLayerThickness = 0.05f;
 
@@ -85,12 +95,12 @@ namespace TinyDiggers.Terrain
             for (var i = 0; i < hills.Length; i++)
             {
                 // Wide and low: 4-8 terraces at the 1 m step, each terrace ring several cells deep.
-                var radius = shortSide * Lerp(0.08f, 0.15f, (float)random.NextDouble());
+                var hillRadius = shortSide * Lerp(0.08f, 0.15f, (float)random.NextDouble());
                 hills[i] = new Hill
                 {
                     X = grid.Width * Lerp(0.2f, 0.8f, (float)random.NextDouble()),
                     Z = grid.Height * Lerp(0.2f, 0.8f, (float)random.NextDouble()),
-                    InverseRadiusSquared = 1f / (radius * radius),
+                    InverseRadiusSquared = 1f / (hillRadius * hillRadius),
                     Height = Lerp(4f, 8f, (float)random.NextDouble()),
                 };
             }
@@ -100,11 +110,24 @@ namespace TinyDiggers.Terrain
             var warpOffsetX = (float)random.NextDouble() * 1000f;
             var warpOffsetZ = (float)random.NextDouble() * 1000f;
 
+            // The world is a disc on a table: everything outside it is void, and the last few
+            // cells ease to a single rim height so the edge is a cut, not a cliff of noise.
+            var radius = DiscRadius(grid);
+            var centreX = grid.Width * 0.5f;
+            var centreZ = grid.Height * 0.5f;
+
             Span<Layer> column = stackalloc Layer[5];
             for (var z = 0; z < grid.Height; z++)
             {
                 for (var x = 0; x < grid.Width; x++)
                 {
+                    var toCentre = (float)Math.Sqrt((x + 0.5f - centreX) * (x + 0.5f - centreX) + (z + 0.5f - centreZ) * (z + 0.5f - centreZ));
+                    if (toCentre > radius)
+                    {
+                        grid.SetVoid(x, z, true);
+                        continue;
+                    }
+
                     // Warp first: every field below is sampled at the displaced position.
                     var sx = x + (Mathf.PerlinNoise(warpOffsetX + x * WarpFrequency, warpOffsetZ + z * WarpFrequency) - 0.5f) * 2f * WarpStrength;
                     var sz = z + (Mathf.PerlinNoise(warpOffsetZ + x * WarpFrequency, warpOffsetX + z * WarpFrequency) - 0.5f) * 2f * WarpStrength;
@@ -121,6 +144,14 @@ namespace TinyDiggers.Terrain
                     var edges = (Mathf.PerlinNoise(offsetZ + sx * EdgeFrequency, offsetX + sz * EdgeFrequency) - 0.5f) * EdgeRange;
                     var medium = (Mathf.PerlinNoise(mediumOffset + sx * MediumFrequency, mediumOffset + sz * MediumFrequency) - 0.5f) * MediumRange;
                     var surface = BedrockThickness + BaseRockDepth + plateau + edges + medium + hill;
+                    var fromRim = radius - toCentre;
+                    if (fromRim < RimTaper)
+                    {
+                        // Smoothstep in, so the land meets the rim without a visible crease.
+                        var t = Math.Min(Math.Max(fromRim / RimTaper, 0f), 1f);
+                        surface = RimHeight + (surface - RimHeight) * (t * t * (3f - 2f * t));
+                    }
+
                     // Snap to the grid's height step only after warping and summing, so terrace
                     // lines follow the warped field; the rock layer absorbs the difference, so the
                     // soil thicknesses stay as designed and only the surface moves.

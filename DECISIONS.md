@@ -5,11 +5,11 @@ this records why.
 
 ---
 
-**NEXT:** Vertical Slice 5 (loader and dump truck) is done, green (230/230) and pushed on `main`,
-with three corrections from Ronan watching it run (diggers hauling, haulers leaving part loaded,
-units overlapping). Nothing is in flight. Terrain rendering stays closed. Still owed: a frame-time
-check on a mid-range machine (the ~9 ms region rebuild after a change in open ground is the thing
-to watch); then Ronan's call on the next slice.
+**NEXT:** Vertical Slice 6 (camera, toolbar, turntable) is done, green (238/238) and pushed on
+`main`. Nothing is in flight. Terrain rendering stays closed apart from the disc, plinth and
+backdrop added here. Still owed: a frame-time check on a mid-range machine (the ~9 ms region
+rebuild after a change in open ground is the thing to watch), and the optional tilt-shift blur,
+which is a public toggle but not implemented; then Ronan's call on the next slice.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -966,3 +966,88 @@ neighbour when two units work side by side, which is exactly what looked wrong.
 - **Diggers never tipped** (0 frames in Tipping) and never left the cut.
 - Haulers carried **117 m³** of the ~126 m³ dug; diggers waited 165.6 s in total, which is the
   cost of two trucks on a 40-cell round trip.
+
+## 2026-09-20 — Vertical Slice 6: camera, toolbar, and the turntable
+
+No new simulation rules. This slice is about being able to play the thing: a camera that goes
+where you look, a toolbar of tools with modes, and a world that reads as a model on a table.
+
+### The world is a disc
+`TerrainGrid` gains a per-cell **void** flag. The grid stays square and flat-array indexed; the
+cells outside the disc are simply off the map. Voiding a cell empties its column, and void cells
+are:
+- not drawn (both renderers skip them);
+- impassable (`GridPathfinder` and `RegionMap` never step into or label them);
+- not designable (Dig, Fill and Dump Zone all refuse);
+- not slumped into or out of.
+
+The generator masks everything outside `min(width, height) / 2 - 2` cells of the middle, and eases
+the last 6 cells of land to one rim height with a smoothstep, so the edge is a clean cut instead
+of noise falling off a cliff. `TerrainSurface.CornerHeight` ignores void neighbours, so a rim
+corner takes the height of the land beside it.
+
+**The table.** `TableView` builds a plinth (a cylinder 6 cells wider than the disc and 26 m deep,
+with a darker band at the top) and swaps the skybox for a flat two-colour gradient. Two details
+that were wrong at first and are worth remembering:
+- The plinth top must sit *below* the rim (0.75 m here). Level with it, the two surfaces fight for
+  the same depth and the flats come out striped.
+- A custom skybox shader must not tag its pass `LightMode = UniversalForward`, or URP never draws
+  it and you get the camera's clear colour.
+The plinth is also wider than the land on purpose: it hides the stepped edge of the circle mask,
+so from above the world reads as a clean disc.
+
+### The camera
+`RtsCameraRig` is plain C# and holds the arithmetic — pan, zoom, pitch, the pivot and its clamp to
+the disc — so it is unit tested. `RtsCamera` reads input into it and eases the camera toward it
+with SmoothDamp.
+- WASD or the arrow keys pan on the ground in screen-relative directions, and the speed scales
+  with zoom, so a keypress covers a similar share of the screen at any distance.
+- Q/E and middle-drag turn about the pivot. Fully zoomed out, that is the lazy Susan.
+- The wheel zooms in even fractions toward the ground under the cursor: the pivot slides toward it
+  by as much of the way as the zoom closed.
+- Pitch follows the zoom (35° close, 60° far), R and F nudge it ±10°, Home flies back to the
+  middle of the map fully zoomed out, and edge panning is off unless asked for.
+- The pivot is clamped to the disc, so the land cannot be shoved off the table.
+
+Q and E used to move the designation height; that is now PageUp and PageDown, shown in the
+toolbar.
+
+### The toolbar and the tools
+`PlayerTools` is the player's hands: one mode at a time, left button applies, right button cancels
+or clears, Escape goes back to Select, hotkeys 1-7, `[` and `]` resize the brush or the road.
+`ToolbarView` builds one Canvas in code with a button per tool and a line that says what the tool
+will do.
+- **Select**, **Dig**, **Fill** as before, with the brush now on the tool rather than the terrain.
+- **Dump Zone**, **Level** and **Clear** are dragged rectangles.
+- **Level** designates every cell in the rectangle to H, digging or filling whichever each one
+  needs (`Blueprints.PlanLevel`).
+- **Road** takes clicked control points, each at the ground height where it was clicked, and lays a
+  ribbon 3-7 cells wide whose height is interpolated along each leg. The ghost shows the whole
+  ribbon with the cut and fill it would cost, in m³, before anything is committed; the ghost lies
+  on the road bed, or on the ground where the road would cut into it, so it always reads as one
+  band. A leg steeper than 0.25 m per cell turns the ribbon orange and refuses to confirm.
+
+The debug readout is still there, behind F3, and now defaults to hidden.
+
+`Blueprints` (plain C#) holds the planning arithmetic for both tools, so the ghost, the cost and
+the designations all come from the same code, and it is tested without a scene.
+
+### Verified in play (screenshots in the session scratchpad)
+- **(a)** The whole disc on its plinth against the gradient, 202,744 cells of land out of 262,144,
+  turning as Q/E would turn it.
+- **(b)** A five-cell road across a 22 m hill, level at 20 m: the ghost ribbon with
+  "cut 579 m³, fill 33 m³" in the toolbar.
+- **(c)** The same road under construction: red dig designations along the route, the first
+  stretch already graded, two diggers working it and two haulers running to the Dump Zone.
+
+### Tests (238/238 green)
+New: void cells hold nothing and refuse every designation; units cannot path, flood or region
+across the void; a rim corner takes its height from the land beside it; levelling a slope cuts the
+high side and fills the low and leaves the void alone; a road interpolates between three control
+points and is the width it says; a road is refused above the max grade and allowed at it; a road
+over a ridge costs what it says. The camera rig tests were rewritten for the new rig: panning
+scales with zoom and follows the heading, the pivot stays on the disc, zoom steps evenly and
+toward the cursor, pitch follows zoom and the nudges, and Home re-centres.
+
+The generator tests now skip void cells, and the "most of the land is terrace tops" threshold came
+down from 80% to 55% of the square grid, because the disc only covers about 78% of it.
