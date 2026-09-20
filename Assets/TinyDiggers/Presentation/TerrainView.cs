@@ -6,6 +6,16 @@ using Debug = UnityEngine.Debug;
 
 namespace TinyDiggers.Presentation
 {
+    /// <summary>Which generator a <see cref="TerrainView"/> fills its grid with.</summary>
+    public enum TerrainGeneratorKind
+    {
+        /// <summary>The island: sea, shelf, mountain, river. What the game plays on.</summary>
+        Island,
+
+        /// <summary>The old plateaus-and-hills test terrain, kept for the tests that use it.</summary>
+        Plateaus,
+    }
+
     /// <summary>Which <see cref="ITerrainRenderer"/> a <see cref="TerrainView"/> builds.</summary>
     public enum TerrainRendererKind
     {
@@ -28,6 +38,12 @@ namespace TinyDiggers.Presentation
         [SerializeField] int _seed = 1;
         [SerializeField] Material _material;
         [SerializeField] TerrainRendererKind _renderer = TerrainRendererKind.Smoothed;
+
+        [Header("Land")]
+        [SerializeField] TerrainGeneratorKind _generator = TerrainGeneratorKind.Island;
+
+        [Tooltip("The island's numbers. Without one the old plateau generator is used.")]
+        [SerializeField] TerrainGenSettings _settings;
 
         [Header("Material detail")]
         [SerializeField, Tooltip("Leave empty to draw with the flat vertex-colour material instead.")]
@@ -72,8 +88,42 @@ namespace TinyDiggers.Presentation
         /// <summary>The middle of the disc, in cells.</summary>
         public Vector2 DiscCentre => Grid == null ? Vector2.zero : new Vector2(Grid.Width * 0.5f, Grid.Height * 0.5f);
 
-        /// <summary>The height the disc is cut to at its rim.</summary>
-        public float RimHeight => TerrainGenerator.RimHeight;
+        /// <summary>The height the disc reads as at its rim: the top of the wall the land sits in.</summary>
+        public float RimHeight => PlinthTop;
+
+        /// <summary>
+        /// Where the top of the plinth wall sits. On the island it stands a metre above the sea, so
+        /// the water is held inside the wall rather than running off the edge of the table.
+        /// </summary>
+        public float PlinthTop => UsingIsland ? World.SeaLevel + 1f : TerrainGenerator.RimHeight - 0.75f;
+
+        /// <summary>The island as last generated: its peak and its river. Null for the old generator.</summary>
+        public IslandMap Island { get; private set; }
+
+        /// <summary>The seed the land was last generated from.</summary>
+        public int Seed => _settings != null && UsingIsland ? _settings.Seed : _seed;
+
+        /// <summary>The island's settings asset, or null when the old generator is in use.</summary>
+        public TerrainGenSettings Settings => _settings;
+
+        /// <summary>Raised after the land is regenerated, so anything holding cells can start again.</summary>
+        public event System.Action Regenerated;
+
+        bool UsingIsland => _generator == TerrainGeneratorKind.Island && _settings != null;
+
+        /// <summary>
+        /// The river the generator cut, in world space, for a river mesh to be laid along. Empty
+        /// when there is no island or no river.
+        /// </summary>
+        public System.Collections.Generic.List<Vector3> RiverWorldPoints()
+        {
+            var points = new System.Collections.Generic.List<Vector3>();
+            if (Island == null)
+                return points;
+            foreach (var point in Island.River)
+                points.Add(transform.TransformPoint(point));
+            return points;
+        }
 
         public ITerrainRenderer Renderer => _terrainRenderer;
 
@@ -89,8 +139,12 @@ namespace TinyDiggers.Presentation
         void Awake()
         {
             var stopwatch = Stopwatch.StartNew();
-            Grid = new TerrainGrid(_width, _height, MaterialTable.CreateDefault(), HeightStep);
-            TerrainGenerator.Generate(Grid, _seed);
+            var datum = UsingIsland ? _settings.Datum : 0f;
+            Grid = new TerrainGrid(_width, _height, MaterialTable.CreateDefault(), HeightStep, datum);
+            // The simulator is built before the land so that generation queues every cell it
+            // touches, and one settle at the end leaves nothing standing steeper than it should.
+            _slump = new AngleOfReposeSimulator(Grid);
+            Fill();
             DiscRadius = TerrainGenerator.DiscRadius(Grid);
             var generated = stopwatch.Elapsed.TotalMilliseconds;
 
@@ -120,14 +174,36 @@ namespace TinyDiggers.Presentation
                 : new SmoothedTerrainRenderer(Grid, transform, material, _chunkSize);
             var built = stopwatch.Elapsed.TotalMilliseconds;
 
-            // Created after generation, so the freshly generated map is not queued for slumping;
-            // only edits start collapses.
-            _slump = new AngleOfReposeSimulator(Grid);
-
             Debug.Log(
                 $"TerrainView: {_width}x{_height} cells, {_renderer} renderer, " +
                 $"{_terrainRenderer.ChunkCountX * _terrainRenderer.ChunkCountZ} chunks, " +
                 $"{_terrainRenderer.TriangleCount:N0} triangles. Generated in {generated:0} ms, meshed in {built:0} ms.");
+        }
+
+        /// <summary>Generates the land into the existing grid and settles it once.</summary>
+        void Fill()
+        {
+            if (UsingIsland)
+                Island = IslandGenerator.Generate(Grid, _settings);
+            else
+                TerrainGenerator.Generate(Grid, _seed);
+            // One settle, so nothing the generator left standing too steep is a surprise later.
+            _slump.RunUntilStable();
+        }
+
+        /// <summary>
+        /// Rebuilds the land from a seed, in place: the grid, the renderers and everything holding
+        /// a reference to them stay as they are, and every cell simply changes.
+        /// </summary>
+        public void Regenerate(int seed)
+        {
+            if (Grid == null)
+                return;
+            if (_settings != null)
+                _settings.Seed = seed;
+            _seed = seed;
+            Fill();
+            Regenerated?.Invoke();
         }
 
         static readonly ProfilerMarker SlumpMarker = new ProfilerMarker("TinyDiggers.SlumpTick");

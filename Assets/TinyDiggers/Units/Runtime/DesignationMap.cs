@@ -131,6 +131,10 @@ namespace TinyDiggers.Units
             // Off the edge of the world: there is nothing there to dig or fill.
             if (_grid.IsVoid(x, z))
                 return false;
+            // Under the sea: nothing can be dug from the seabed, but filling it is reclamation and
+            // is exactly what the player is meant to do with the shallows.
+            if (kind == DesignationKind.Dig && _grid.IsWater(x, z))
+                return false;
             var cancelsAuto = _auto[cell] && !auto;
             if (Satisfies(x, z, kind, height))
             {

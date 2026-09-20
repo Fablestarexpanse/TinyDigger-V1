@@ -150,7 +150,7 @@ namespace TinyDiggers.Units
                 return 0;
 
             var heights = _grid.SurfaceHeights;
-            var voids = _grid.VoidCells;
+            var voids = _grid.BlockedCells;
             var width = _grid.Width;
             var depth = _grid.Height;
             var limit = MaxStepHeight + Tolerance;
@@ -214,7 +214,7 @@ namespace TinyDiggers.Units
         }
 
         bool Climbable(int ax, int az, int bx, int bz) =>
-            _grid.IsGround(ax, az) && _grid.IsGround(bx, bz)
+            _grid.IsPassableGround(ax, az) && _grid.IsPassableGround(bx, bz)
             && Math.Abs(_grid.GetSurfaceHeight(ax, az) - _grid.GetSurfaceHeight(bx, bz)) <= MaxStepHeight + Tolerance;
 
         /// <summary>
@@ -264,7 +264,7 @@ namespace TinyDiggers.Units
                     var next = nz * width + nx;
                     if (_closed[next] == _generation)
                         continue;
-                    if (!_grid.IsGround(nx, nz))
+                    if (!_grid.IsPassableGround(nx, nz))
                         continue;
                     if (corridor == null ? !CanStep(x, z, nx, nz) : next != corridorGoal && !corridor(nx, nz))
                         continue;

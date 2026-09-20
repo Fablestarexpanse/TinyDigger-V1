@@ -24,7 +24,11 @@ namespace TinyDiggers.Terrain
     /// </summary>
     public sealed class TerrainGrid
     {
-        public const int MaxLayersPerCell = 8;
+        /// <summary>
+        /// Sixteen, not eight: an island's column carries bedrock, granite, rock, clay, dirt, sand
+        /// and topsoil before anything is dug or tipped on it.
+        /// </summary>
+        public const int MaxLayersPerCell = 16;
 
         /// <summary>Thicknesses below this are treated as zero, so digging cannot leave slivers.</summary>
         const float Epsilon = 1e-5f;
@@ -34,8 +38,9 @@ namespace TinyDiggers.Terrain
         readonly float[] _surfaceHeights;
         readonly MaterialId[] _topMaterials;
         readonly bool[] _void;
+        readonly bool[] _blocked;
 
-        public TerrainGrid(int width, int height, MaterialTable materials, float heightStep = 0f)
+        public TerrainGrid(int width, int height, MaterialTable materials, float heightStep = 0f, float datum = 0f)
         {
             if (width <= 0)
                 throw new ArgumentOutOfRangeException(nameof(width));
@@ -48,6 +53,7 @@ namespace TinyDiggers.Terrain
             Height = height;
             Materials = materials ?? throw new ArgumentNullException(nameof(materials));
             HeightStep = heightStep;
+            Datum = datum;
 
             var cellCount = width * height;
             _layers = new Layer[cellCount * MaxLayersPerCell];
@@ -55,6 +61,11 @@ namespace TinyDiggers.Terrain
             _surfaceHeights = new float[cellCount];
             _topMaterials = new MaterialId[cellCount];
             _void = new bool[cellCount];
+            _blocked = new bool[cellCount];
+            // An empty column is under the datum, which is below the sea: every cell starts blocked
+            // and opens up as soon as it is filled above sea level.
+            for (var i = 0; i < cellCount; i++)
+                _blocked[i] = true;
         }
 
         public int Width { get; }
@@ -68,6 +79,35 @@ namespace TinyDiggers.Terrain
         /// given. Generation also snaps surfaces to it.
         /// </summary>
         public float HeightStep { get; }
+
+        /// <summary>
+        /// Metres above sea level that the bottom of every column sits at. An island puts this
+        /// well below sea level so a seabed can be below it and still be a stack of layers, and so
+        /// the bedrock base has somewhere to be.
+        /// </summary>
+        public float Datum { get; }
+
+        /// <summary>
+        /// Whether the cell is under the sea: a cell counts as land only once its surface has
+        /// reached one whole step above sea level, so tipping into the shallows has to actually
+        /// break the surface before anything can stand there.
+        /// </summary>
+        public bool IsWater(int x, int z)
+        {
+            if (!IsGround(x, z))
+                return false;
+            return _surfaceHeights[z * Width + x] < World.SeaLevel + LandStep;
+        }
+
+        /// <summary>Metres of water over a cell, or 0 where the ground is dry.</summary>
+        public float WaterDepth(int x, int z)
+        {
+            var surface = GetSurfaceHeight(x, z);
+            return surface < World.SeaLevel ? World.SeaLevel - surface : 0f;
+        }
+
+        /// <summary>How far above sea level a cell's surface must reach to count as land.</summary>
+        float LandStep => HeightStep > 0f ? HeightStep : 1f;
 
         /// <summary>
         /// Rounds <paramref name="volume"/> to the nearest whole number of height steps, or returns
@@ -95,8 +135,22 @@ namespace TinyDiggers.Terrain
         /// <summary>Void flags, indexed <c>z * Width + x</c>, for hot loops.</summary>
         public ReadOnlySpan<bool> VoidCells => _void;
 
-        /// <summary>Whether the cell is on the map and not void: real ground.</summary>
+        /// <summary>Whether the cell is on the map and not void: real ground, wet or dry.</summary>
         public bool IsGround(int x, int z) => InBounds(x, z) && !_void[z * Width + x];
+
+        /// <summary>
+        /// Whether anything can stand or travel here: on the map, not void, and not under the sea.
+        /// This is what the pathfinder, the regions and the crew ask; <see cref="IsGround"/> is the
+        /// weaker question of whether the cell is part of the world at all, which is what a fill
+        /// designation or a dump zone needs, because reclaiming the shallows is the point of them.
+        /// </summary>
+        public bool IsPassableGround(int x, int z) => InBounds(x, z) && !_blocked[z * Width + x];
+
+        /// <summary>
+        /// Void-or-water flags, indexed <c>z * Width + x</c>, for hot loops. Water blocks travel
+        /// exactly as the void does, so a flood fill can read one array instead of two.
+        /// </summary>
+        public ReadOnlySpan<bool> BlockedCells => _blocked;
 
         /// <summary>Cells on the map that are not void. Counted on demand.</summary>
         public int GroundCellCount
@@ -473,7 +527,9 @@ namespace TinyDiggers.Terrain
             var height = 0f;
             for (var i = 0; i < count; i++)
                 height += _layers[layerBase + i].Thickness;
-            _surfaceHeights[cell] = height;
+            var surface = Datum + height;
+            _surfaceHeights[cell] = surface;
+            _blocked[cell] = _void[cell] || surface < World.SeaLevel + LandStep;
             _topMaterials[cell] = count == 0 ? MaterialId.None : _layers[layerBase + count - 1].Material;
 
             CellChanged?.Invoke(x, z);

@@ -45,7 +45,6 @@ namespace TinyDiggers.Presentation
 
             var radius = _terrain.DiscRadius + _overhang;
             var centre = _terrain.DiscCentre;
-            var rim = _terrain.RimHeight;
 
             _plinthMaterial = NewMaterial(_plinthColor);
             _bandMaterial = NewMaterial(_bandColor);
@@ -58,7 +57,7 @@ namespace TinyDiggers.Presentation
             // a pit floor drawn in plinth colour. The ring only fills the collar between the
             // ragged edge of the land and the clean circle of the plinth, so however deep a pit
             // goes, what is under it is still terrain.
-            var top = rim - 0.75f;
+            var top = _terrain.PlinthTop;
             AddRing("Plinth", centre, top, _depth, radius, _terrain.DiscRadius - 2f, capBottom: true, _plinthMaterial);
             AddRing("Plinth Band", centre, top, _bandHeight, radius + 0.025f, radius - 0.025f, capBottom: false, _bandMaterial);
 

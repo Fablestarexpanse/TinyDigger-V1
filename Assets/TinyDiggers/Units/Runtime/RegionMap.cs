@@ -78,7 +78,7 @@ namespace TinyDiggers.Units
         /// <summary>Whether a unit standing on (fromX, fromZ) can drive to (x, z).</summary>
         public bool CanReach(int fromX, int fromZ, int x, int z)
         {
-            if (!_grid.IsGround(fromX, fromZ) || !_grid.IsGround(x, z))
+            if (!_grid.IsPassableGround(fromX, fromZ) || !_grid.IsPassableGround(x, z))
                 return false;
             Update();
             var width = _grid.Width;
@@ -135,7 +135,7 @@ namespace TinyDiggers.Units
             _members.Clear();
             _nextRegion = 0;
             CellsRelabelledLast = 0;
-            var voids = _grid.VoidCells;
+            var voids = _grid.BlockedCells;
             for (var cell = 0; cell < _label.Length; cell++)
                 if (_label[cell] == Unlabelled && !voids[cell])
                     Flood(cell);
@@ -188,7 +188,7 @@ namespace TinyDiggers.Units
                 _members.Remove(region);
             }
 
-            var voids = _grid.VoidCells;
+            var voids = _grid.BlockedCells;
             foreach (var cell in _dirtyCells)
                 if (_label[cell] == Unlabelled)
                     seeds.Add(cell);
@@ -208,7 +208,7 @@ namespace TinyDiggers.Units
             var members = new List<int>();
             _members[region] = members;
             var heights = _grid.SurfaceHeights;
-            var voids = _grid.VoidCells;
+            var voids = _grid.BlockedCells;
             var width = _grid.Width;
             var depth = _grid.Height;
             var limit = _pathfinder.MaxStepHeight + 1e-3f;
