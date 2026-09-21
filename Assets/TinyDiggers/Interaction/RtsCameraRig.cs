@@ -138,16 +138,30 @@ namespace TinyDiggers.Interaction
         /// Zooms by whole notches: each one closes or opens the distance by the same fraction, so
         /// the step is even at every scale. With a point given, the pivot slides toward it by as
         /// much of the way as the zoom closed, which is what makes the zoom follow the cursor.
+        /// Zooming out slides the pivot back toward the middle of the disc by as much of the way
+        /// as the zoom opened toward <see cref="MaxDistance"/>, so fully out is always the whole
+        /// disc: a zoom in toward the rim used to leave the pivot there, and no amount of zooming
+        /// out brought the far side back on screen.
         /// </summary>
         public void Zoom(float notches, Vector3? towards = null)
         {
             var before = Distance;
             Distance = Mathf.Clamp(Distance * Mathf.Pow(1f - ZoomStep, notches), MinDistance, MaxDistance);
+            RecentreOnZoomOut(before);
             if (!towards.HasValue || before <= 1e-4f)
                 return;
             var closed = 1f - Distance / before;
             if (closed > 0f)
                 Pivot = ClampToDisc(Vector3.Lerp(Pivot, towards.Value, Mathf.Clamp01(closed)));
+        }
+
+        void RecentreOnZoomOut(float before)
+        {
+            if (Distance <= before || MaxDistance - before <= 1e-4f)
+                return;
+            var opened = Mathf.Clamp01((Distance - before) / (MaxDistance - before));
+            var centre = new Vector3(DiscCentre.x, Pivot.y, DiscCentre.y);
+            Pivot = Vector3.Lerp(Pivot, centre, opened);
         }
 
         /// <summary>

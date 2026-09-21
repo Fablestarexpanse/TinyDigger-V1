@@ -51,8 +51,11 @@ namespace TinyDiggers.Interaction
         [Tooltip("Metres from the pivot when fully zoomed in: about three cells across the screen.")]
         public float MinDistance = 3f;
 
-        [Tooltip("Metres from the pivot when fully zoomed out. Clamped so the whole disc fits with margin.")]
-        public float MaxDistance = 700f;
+        [Tooltip("Upper bound on the zoom-out, metres. The real limit is worked out from the disc and the lens so the whole disc fits with margin.")]
+        public float MaxDistance = 3000f;
+
+        [Tooltip("How much wider than the disc the view is at full zoom-out.")]
+        public float FitMargin = 1.2f;
 
         [Tooltip("Fraction of the distance one scroll notch covers.")]
         public float ZoomStep = 0.15f;
@@ -197,8 +200,25 @@ namespace TinyDiggers.Interaction
                 return;
             _rig.DiscCentre = _terrain.DiscCentre;
             _rig.DiscRadius = _terrain.DiscRadius;
-            // Far enough out that the whole disc fits on screen with a margin.
-            _rig.MaxDistance = Mathf.Min(MaxDistance, _terrain.DiscRadius * 2.6f + 40f);
+            _rig.MaxDistance = Mathf.Min(MaxDistance, FitDistance());
+            // Far enough to draw the far rim of the disc from the furthest zoom.
+            if (_camera != null)
+                _camera.farClipPlane = Mathf.Max(_camera.farClipPlane, _rig.MaxDistance + _terrain.DiscRadius * 2f + 100f);
+        }
+
+        /// <summary>
+        /// How far back the camera must sit for the whole disc to fit on screen, at the current lens,
+        /// looking from any pitch: the disc's radius (plus margin) over the tangent of the narrower
+        /// half-angle of the view. The old fixed 2.6 × radius cut the disc off looking straight
+        /// down or through a narrow lens.
+        /// </summary>
+        float FitDistance()
+        {
+            var halfVertical = _rig.Fov * 0.5f * Mathf.Deg2Rad;
+            var aspect = _camera != null ? _camera.aspect : 16f / 9f;
+            var halfHorizontal = Mathf.Atan(Mathf.Tan(halfVertical) * aspect);
+            var half = Mathf.Min(halfVertical, halfHorizontal);
+            return _terrain.DiscRadius * FitMargin / Mathf.Tan(Mathf.Max(0.01f, half));
         }
 
         void Update()
@@ -338,10 +358,26 @@ namespace TinyDiggers.Interaction
                 transform.SetPositionAndRotation(position, rotation);
         }
 
+        /// <summary>
+        /// The height the pivot rides at: the mean ground over a footprint that grows with the zoom,
+        /// never below the sea. Reading the single point under the pivot made the camera bob as it
+        /// crossed every half-metre step, cliff and bay (the seabed is 15 m down).
+        /// </summary>
         float GroundHeightAt(Vector3 point)
         {
             var grid = _terrain != null ? _terrain.Grid : null;
-            return grid == null ? point.y : TerrainSurface.SampleHeight(grid, point.x / grid.CellSize, point.z / grid.CellSize);
+            if (grid == null)
+                return point.y;
+            var radius = Mathf.Max(2f, _rig.Distance * 0.08f);
+            var sum = 0f;
+            for (var i = 0; i < 9; i++)
+            {
+                var offset = i == 0 ? Vector2.zero
+                    : new Vector2(Mathf.Cos(i * Mathf.PI / 4f), Mathf.Sin(i * Mathf.PI / 4f)) * radius;
+                sum += TerrainSurface.SampleHeight(grid, (point.x + offset.x) / grid.CellSize, (point.z + offset.y) / grid.CellSize);
+            }
+
+            return Mathf.Max(World.SeaLevel, sum / 9f);
         }
 
         /// <summary>The ground point under a screen position, in metres in the terrain's local space.</summary>

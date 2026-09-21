@@ -692,7 +692,8 @@ MonoBehaviour:
   EdgePan: 0
   EdgePanMargin: 12
   MinDistance: 4
-  MaxDistance: 700
+  MaxDistance: 3000
+  FitMargin: 1.2
   ZoomStep: 0.15
   FovStep: 2
   TurnSpeed: 90

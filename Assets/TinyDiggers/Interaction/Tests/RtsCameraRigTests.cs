@@ -103,10 +103,28 @@ namespace TinyDiggers.Interaction.Tests
             Assert.That(rig.Pivot.x, Is.GreaterThan(100f), "it moved toward the cursor");
             Assert.That(rig.Pivot.x, Is.LessThan(cursor.x), "but not all the way in one notch");
 
-            // Zooming out leaves the pivot where it is.
+            // Zooming out does not chase the cursor: it heads back toward the middle.
             var before = rig.Pivot;
             rig.Zoom(-1f, cursor);
-            Assert.That(rig.Pivot.x, Is.EqualTo(before.x).Within(Tolerance));
+            Assert.That(rig.Pivot.x, Is.LessThan(before.x), "back toward the disc's centre, not the cursor");
+        }
+
+        [Test]
+        public void ZoomingAllTheWayOutCentresTheDisc()
+        {
+            var rig = NewRig();
+            rig.Pivot = new Vector3(170f, 0f, 130f);
+
+            var before = (new Vector2(rig.Pivot.x, rig.Pivot.z) - rig.DiscCentre).magnitude;
+            rig.Zoom(-1f);
+            var after = (new Vector2(rig.Pivot.x, rig.Pivot.z) - rig.DiscCentre).magnitude;
+            Assert.That(after, Is.LessThan(before), "each notch out moves the pivot inward");
+
+            for (var i = 0; i < 40; i++)
+                rig.Zoom(-1f);
+            Assert.That(rig.Distance, Is.EqualTo(rig.MaxDistance).Within(Tolerance));
+            Assert.That(rig.Pivot.x, Is.EqualTo(100f).Within(Tolerance));
+            Assert.That(rig.Pivot.z, Is.EqualTo(100f).Within(Tolerance));
         }
 
         [Test]

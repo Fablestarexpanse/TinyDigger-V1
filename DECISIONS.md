@@ -1797,3 +1797,27 @@ and will frame wrongly at 0.5 m.
    valley side and does not read well.
 3. Crew bodies are tiny at cell size.
 
+
+## Camera: zoom out to the whole disc, steadier pivot (2026-09-21)
+
+Ronan: "my camera controls are all jenky i cant zoom far enough out to see entire disk". In play,
+the camera had drifted to a pivot at (407, −15, 404), near the rim and down on the seabed (centre
+256, 256), looking straight down. There were three causes:
+1. **Zoom-to-cursor never came back.** Zooming in pulls the pivot toward the cursor, and zooming
+   out left it there, so the far side of the disc never came back on screen. Now each notch out
+   slides the pivot back toward the disc centre by the share of the remaining range it opened,
+   and fully out is always the centre. This replaces the old "zooming out leaves the pivot"
+   test, which was my own choice, not a ruling.
+2. **Max zoom was a fixed 2.6 × radius + 40 m (700 m).** That fits the disc at a tilt but not
+   looking straight down or through a narrow Shift-wheel lens. The limit is now worked out every
+   frame from the disc radius × `FitMargin` 1.2 over the tangent of the narrower half-angle of
+   the view: 841 m at FOV 40 and 16:9. `MaxDistance` is only an upper bound now (3000 m), and the
+   far clip grows to reach the far rim.
+3. **The pivot rode the single ground point under it.** It dropped 15 m over every bay and
+   stepped on every half-metre terrace. It now rides the mean of nine samples over a footprint of
+   8% of the zoom distance (at least 2 m), never below sea level, still eased by the existing
+   smoothing.
+
+Checked in play: zooming 12 notches toward the rim, then all the way out, returns the pivot to
+(256, 256) at 841 m; the straight-down shot (`Screenshots/Camera/zoomed_out_top.png`) shows the
+whole disc with margin. 323/323 tests pass.
