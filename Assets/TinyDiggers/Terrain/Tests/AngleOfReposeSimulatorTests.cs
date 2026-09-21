@@ -29,6 +29,47 @@ namespace TinyDiggers.Terrain.Tests
             _slump.Dispose();
         }
 
+        [Test]
+        public void DroppingSettledCellsKeepsOnlyWhatCanSlideAndSettlesTheSame()
+        {
+            // Every cell queued, as generation leaves it, with one loose pile that must come down.
+            Pile(Centre, Centre, MaterialTable.DirtLoose, 8f);
+            for (var z = 0; z < Size; z++)
+                for (var x = 0; x < Size; x++)
+                    _grid.SetColumn(x, z, CopyColumn(x, z));
+            Assert.That(_slump.PendingCount, Is.EqualTo(Size * Size));
+
+            var dropped = _slump.DropSettled();
+
+            Assert.That(dropped, Is.EqualTo(Size * Size - 1), "only the pile can slide");
+            Assert.That(_slump.PendingCount, Is.EqualTo(1));
+            _slump.RunUntilStable();
+            var pruned = Heights();
+
+            // The same pile settled the plain way.
+            SetUp();
+            Pile(Centre, Centre, MaterialTable.DirtLoose, 8f);
+            _slump.RunUntilStable();
+            Assert.That(pruned, Is.EqualTo(Heights()), "the same slope either way");
+        }
+
+        Layer[] CopyColumn(int x, int z)
+        {
+            var layers = new Layer[_grid.GetLayerCount(x, z)];
+            for (var i = 0; i < layers.Length; i++)
+                layers[i] = _grid.GetLayer(x, z, i);
+            return layers;
+        }
+
+        float[] Heights()
+        {
+            var heights = new float[Size * Size];
+            for (var z = 0; z < Size; z++)
+                for (var x = 0; x < Size; x++)
+                    heights[z * Size + x] = _grid.GetSurfaceHeight(x, z);
+            return heights;
+        }
+
         float TotalHeight()
         {
             var total = 0f;

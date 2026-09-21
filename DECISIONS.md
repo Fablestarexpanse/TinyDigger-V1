@@ -5,9 +5,9 @@ this records why.
 
 ---
 
-**NEXT:** Slice 14 shaped the open sea floor; next is Slice 15, a faster load (start-up about 10.5 s), then Slice 16, a terrain LOD. PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
+**NEXT:** Slices 14 (sea floor) and 15 (load, about 11 s down to about 7 s) are done; next is Slice 16, a terrain LOD. PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
 swell, spillway overflows (a safety valve at sea level), game logic reading it and a Basic Zone sample; waiting on Ronan's look. Open:
-- start-up is about 10 s at 3104² (generate 7.0 s, mesh 2.7 s);
+- start-up is about 7 s at 3104² (generate 5.4 s, mesh 1.7 s);
 - the frame is 10.5 ms median, with 15 M terrain triangles, mostly flat seabed (a seabed LOD is the lever);
 - the water stops 4 m short of the dam's inner face (the gap between disc edge and dam);
 
@@ -2374,3 +2374,30 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   short. It is the 4 m between the disc's edge and the dam face (`DamSettings.InnerOffset`).
 - `WaterTests.BakingAFullMapIsCheap` (a 60 ms timing check) failed once at 63 ms on a busy
   editor and passed on the rerun. It is flaky.
+
+## Slice 15: faster load (2026-09-21)
+- **Measured first** (3104² disc, editor, stage by stage): mask 437, heights 68, valleys 284,
+  coast 893, relax 1142, rivers+shores 905, materials 1259, strata+ore 819, then a settle of
+  1501 ms with every one of the 9.6 M cells queued, then a mesh build of about 3000 ms.
+- **What changed.** Each change either gives the same result or only changes the deep sea floor:
+  - **Mesh build, run in parallel** (`ChunkedTerrainRenderer.RebuildInParallel`). A rebuild of
+    64 chunks or more builds its geometry on up to 16 worker threads, 256 chunks a batch, and
+    uploads on the main thread. `SmoothedTerrainRenderer`'s scratch moved into a per-worker
+    `Workspace`. Meshing went from 3.4 s to 1.7 s; what is left is mostly the upload.
+  - **Settle pre-scan** (`AngleOfReposeSimulator.DropSettled`). The queue keeps only cells with
+    a neighbour at least two steps down, steeper than the top material's angle of repose (a
+    lower bound on the angle Settle uses). A dropped cell is re-queued as soon as a neighbour
+    changes. It keeps 271 k of 9.6 M cells in 57 ms, and the settle went from 1501 to 641 ms.
+    Test: `DroppingSettledCellsKeepsOnlyWhatCanSlideAndSettlesTheSame`.
+  - **Material clean-up limited to land and the shallow sea** (`SurfaceMaterials.CleanArea`,
+    above ShelfFarDepth). The deep floor is all rock, so there is nothing to despeckle, but it
+    was one patch of millions of cells flooded five times. Materials went from 1259 to 544 ms.
+  - **Distance floods seed only edge cells, and stop at the reach the coast reads.** The results
+    within reach are the same. Coast went from 893 to 634 ms.
+  - **Relax sweeps each row only across its land span**, in the same order, so the result is
+    identical. Relax went from 1142 to 840 ms and rivers+shores from 905 to 476 ms.
+- **Result in play:** "Generated in 5367 ms, meshed in 1726 ms", down from 7623 + 3443 ms.
+  378/378 pass, and the island-untouched tests (`LandRadiusTests`, `SeabedTests`) still hold
+  cell for cell.
+- **Left:** the mesh upload (about 1.7 s; the terrain LOD should shrink it); strata+ore (0.77 s,
+  a serial SetColumn per cell raising events); two shore clean-ups that each flood the whole sea.

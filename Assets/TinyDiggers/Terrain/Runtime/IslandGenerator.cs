@@ -751,8 +751,11 @@ namespace TinyDiggers.Terrain
         static float[] ShapeCoast(float[] heights, bool[] land, bool[] inDisc, int width, int depth,
             float radius, Vector2 centre, TerrainGenSettings settings)
         {
-            var toWater = Distance(land, inDisc, width, depth, from: false);
-            var toLand = Distance(land, inDisc, width, depth, from: true);
+            // Each flood only as far as anything reads it: the beach, and the shelf plus the sea
+            // floor's fade from the shore. Past that a cell reads as "far" either way.
+            var toWater = Distance(land, inDisc, width, depth, from: false, reach: Mathf.Max(1, settings.BeachCells) + 1f);
+            var seaReach = Mathf.Max(3f * Mathf.Max(1, settings.ShallowCells), settings.OpenSeaFloor ? 2f * settings.SeabedShoreGap : 0f) + 2f;
+            var toLand = Distance(land, inDisc, width, depth, from: true, reach: seaReach);
 
             for (var z = 0; z < depth; z++)
             {
@@ -802,26 +805,51 @@ namespace TinyDiggers.Terrain
         }
 
         /// <summary>Cells to the nearest cell whose land flag is <paramref name="from"/>, by flood.</summary>
-        static float[] Distance(bool[] land, bool[] inDisc, int width, int depth, bool from)
+        /// <remarks>
+        /// Only seeds on the edge of their region start the flood: a seed with nothing but seeds
+        /// round it can never lower anything, and on the 3104² disc queueing all seven million sea
+        /// cells as seeds was most of the cost. <paramref name="reach"/> stops the flood that far
+        /// out; cells beyond keep float.MaxValue, which every caller already reads as "far".
+        /// </remarks>
+        static float[] Distance(bool[] land, bool[] inDisc, int width, int depth, bool from, float reach = float.MaxValue)
         {
             var distance = new float[land.Length];
+            var seed = new bool[land.Length];
+            Parallel.For(0, depth, z =>
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var cell = z * width + x;
+                    seed[cell] = inDisc[cell] && land[cell] == from;
+                    distance[cell] = seed[cell] ? 0f : float.MaxValue;
+                }
+            });
+
             var queue = new Queue<int>();
             for (var cell = 0; cell < land.Length; cell++)
             {
-                if (inDisc[cell] && land[cell] == from)
+                if (!seed[cell])
+                    continue;
+                var x = cell % width;
+                var z = cell / width;
+                for (var n = 0; n < 4; n++)
                 {
-                    distance[cell] = 0f;
-                    queue.Enqueue(cell);
-                }
-                else
-                {
-                    distance[cell] = float.MaxValue;
+                    var nx = x + StepX[n];
+                    var nz = z + StepZ[n];
+                    if (nx >= 0 && nz >= 0 && nx < width && nz < depth && !seed[nz * width + nx])
+                    {
+                        queue.Enqueue(cell);
+                        break;
+                    }
                 }
             }
 
             while (queue.Count > 0)
             {
                 var cell = queue.Dequeue();
+                var further = distance[cell] + 1f;
+                if (further > reach)
+                    continue;
                 var x = cell % width;
                 var z = cell / width;
                 for (var n = 0; n < 4; n++)
@@ -831,9 +859,9 @@ namespace TinyDiggers.Terrain
                     if (nx < 0 || nz < 0 || nx >= width || nz >= depth)
                         continue;
                     var next = nz * width + nx;
-                    if (distance[next] <= distance[cell] + 1f)
+                    if (distance[next] <= further)
                         continue;
-                    distance[next] = distance[cell] + 1f;
+                    distance[next] = further;
                     queue.Enqueue(next);
                 }
             }
@@ -873,24 +901,42 @@ namespace TinyDiggers.Terrain
 
         static int Relax(float[] heights, bool[] isLand, bool[] cliff, int width, int depth, float step, float cliffStep)
         {
+            // Only land moves, so each row is swept only across the span its land covers, in the
+            // same order as before: the cells skipped were no-ops. On the 3104² disc most of every
+            // row is sea, and the full sweeps cost over a second.
+            var first = new int[depth];
+            var last = new int[depth];
+            Parallel.For(0, depth, z =>
+            {
+                first[z] = width;
+                last[z] = -1;
+                for (var x = 0; x < width; x++)
+                {
+                    if (!isLand[z * width + x])
+                        continue;
+                    first[z] = Math.Min(first[z], x);
+                    last[z] = x;
+                }
+            });
+
             for (var sweep = 0; sweep < MaxRelaxSweeps; sweep++)
             {
                 var moved = false;
 
                 for (var z = 0; z < depth; z++)
-                    for (var x = 1; x < width; x++)
+                    for (var x = Math.Max(1, first[z]); x <= last[z]; x++)
                         moved |= Pull(heights, isLand, cliff, z * width + x, z * width + x - 1, step, cliffStep);
 
                 for (var z = 0; z < depth; z++)
-                    for (var x = width - 2; x >= 0; x--)
+                    for (var x = Math.Min(width - 2, last[z]); x >= first[z]; x--)
                         moved |= Pull(heights, isLand, cliff, z * width + x, z * width + x + 1, step, cliffStep);
 
                 for (var z = 1; z < depth; z++)
-                    for (var x = 0; x < width; x++)
+                    for (var x = first[z]; x <= last[z]; x++)
                         moved |= Pull(heights, isLand, cliff, z * width + x, (z - 1) * width + x, step, cliffStep);
 
                 for (var z = depth - 2; z >= 0; z--)
-                    for (var x = 0; x < width; x++)
+                    for (var x = first[z]; x <= last[z]; x++)
                         moved |= Pull(heights, isLand, cliff, z * width + x, (z + 1) * width + x, step, cliffStep);
 
                 if (!moved)

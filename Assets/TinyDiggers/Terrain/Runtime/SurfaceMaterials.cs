@@ -68,24 +68,26 @@ namespace TinyDiggers.Terrain
                 }
             });
 
+            var clean = CleanArea(heights, inDisc, width, depth, settings);
+
             // Twice: absorbing one speck can leave its neighbour below the minimum in turn.
-            Despeckle(materials, inDisc, width, depth, settings.MinMaterialPatch);
-            Despeckle(materials, inDisc, width, depth, settings.MinMaterialPatch);
+            Despeckle(materials, clean, width, depth, settings.MinMaterialPatch);
+            Despeckle(materials, clean, width, depth, settings.MinMaterialPatch);
 
             // The cleanup absorbs a patch into whatever surrounds it, which can carry sand up a
             // hillside if a speck of something else sat in a beach. Sand is coastal by definition,
             // so the rule is enforced after every cleanup, and last of all — a patch of hillside
             // that ends up a little small is a smaller sin than a dune at four metres.
             EnforceCoastalSand(materials, heights, smoothed, inDisc, toWater, width, depth, settings);
-            Despeckle(materials, inDisc, width, depth, settings.MinMaterialPatch);
+            Despeckle(materials, clean, width, depth, settings.MinMaterialPatch);
             EnforceCoastalSand(materials, heights, smoothed, inDisc, toWater, width, depth, settings);
 
             // That last pass can leave a cell alone in the middle of a beach it has just been
             // taken out of. A cell with no neighbour of its own material is speckle whatever put
             // it there, so it joins whichever of its neighbours it is allowed to.
             // Twice: joining one cell to its neighbours can leave the cell it left behind alone.
-            RepairLonelyCells(materials, heights, inDisc, toWater, width, depth, settings);
-            RepairLonelyCells(materials, heights, inDisc, toWater, width, depth, settings);
+            RepairLonelyCells(materials, heights, clean, toWater, width, depth, settings);
+            RepairLonelyCells(materials, heights, clean, toWater, width, depth, settings);
             return materials;
         }
 
@@ -142,12 +144,33 @@ namespace TinyDiggers.Terrain
             }
         }
 
-        /// <summary>Joins whatever a later pass left on its own to its neighbours.</summary>
+        /// <summary>Joins whatever a later pass left on its own to its neighbours, on land and the shallow sea.</summary>
         public static void Tidy(MaterialId[] materials, float[] heights, bool[] inDisc, float[] toWater,
             int width, int depth, TerrainGenSettings settings)
         {
-            RepairLonelyCells(materials, heights, inDisc, toWater, width, depth, settings);
-            RepairLonelyCells(materials, heights, inDisc, toWater, width, depth, settings);
+            var clean = CleanArea(heights, inDisc, width, depth, settings);
+            RepairLonelyCells(materials, heights, clean, toWater, width, depth, settings);
+            RepairLonelyCells(materials, heights, clean, toWater, width, depth, settings);
+        }
+
+        /// <summary>
+        /// Where the clean-up passes look: land and the sea above the shelf's foot. Past the shelf
+        /// everything is rock (reefs included), so there is no speck to find, and on the 3104² disc
+        /// the deep floor was one patch of millions of cells that each pass flooded end to end.
+        /// No land cell touches water that deep (the shelf lies between), so land is unaffected.
+        /// </summary>
+        static bool[] CleanArea(float[] heights, bool[] inDisc, int width, int depth, TerrainGenSettings settings)
+        {
+            var clean = new bool[heights.Length];
+            Parallel.For(0, depth, z =>
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var cell = z * width + x;
+                    clean[cell] = inDisc[cell] && heights[cell] > settings.ShelfFarDepth;
+                }
+            });
+            return clean;
         }
 
         /// <summary>

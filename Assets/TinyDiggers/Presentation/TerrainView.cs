@@ -195,6 +195,8 @@ namespace TinyDiggers.Presentation
             else
                 TerrainGenerator.Generate(Grid, _seed);
             // One settle, so nothing the generator left standing too steep is a surprise later.
+            // Every cell is queued by the generation; only the few that could slide are kept.
+            _slump.DropSettled();
             _slump.RunUntilStable();
         }
 

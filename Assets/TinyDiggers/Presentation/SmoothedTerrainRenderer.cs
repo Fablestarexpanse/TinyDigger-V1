@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using TinyDiggers.Terrain;
 using UnityEngine;
 
@@ -26,39 +27,24 @@ namespace TinyDiggers.Presentation
     /// Building a chunk first copies the heights and top materials of the chunk plus a two-cell
     /// halo into local arrays, then works only from those, so the per-quad loop pays no bounds
     /// checks or grid lookups. On flat ground the exposed layer is the top material and the
-    /// layer lookup is skipped.
+    /// layer lookup is skipped. Those arrays live in a <see cref="Workspace"/>, one per worker
+    /// thread, so a big rebuild can build several chunks at once.
     /// </summary>
     public sealed class SmoothedTerrainRenderer : ChunkedTerrainRenderer
     {
         /// <summary>Cells beyond the chunk on each side that the build reads: corner normals need two.</summary>
         const int Halo = 2;
 
-        readonly float[] _cellHeights;
-        readonly MaterialId[] _cellTops;
-        readonly bool[] _cellInWorld;
-        readonly int _cellRow;
-
-        readonly float[] _cornerHeights;
-        readonly Vector3[] _cornerNormals;
-        readonly int _cornerRow;
-
-        int _originX;
-        int _originZ;
+        readonly List<Workspace> _workspaces = new List<Workspace>();
 
         public SmoothedTerrainRenderer(TerrainGrid grid, Transform parent, Material material, int chunkSize = DefaultChunkSize)
             : base(grid, parent, material, chunkSize)
         {
-            _cellRow = chunkSize + 2 * Halo;
-            _cellHeights = new float[_cellRow * _cellRow];
-            _cellTops = new MaterialId[_cellRow * _cellRow];
-            _cellInWorld = new bool[_cellRow * _cellRow];
-
-            // Corner heights one ring beyond the chunk, so edge normals can see across the border.
-            _cornerRow = chunkSize + 3;
-            _cornerHeights = new float[_cornerRow * _cornerRow];
-            _cornerNormals = new Vector3[(chunkSize + 1) * (chunkSize + 1)];
+            _workspaces.Add(new Workspace(this));
             Rebuild();
         }
+
+        protected override int ParallelWorkers => Math.Max(1, Math.Min(Environment.ProcessorCount, 16));
 
         /// <summary>
         /// The smooth normal at grid corner (cornerX, cornerZ), from central differences of the
@@ -90,170 +76,217 @@ namespace TinyDiggers.Presentation
                     MarkCellsChunkDirty(x + dx, z + dz);
         }
 
-        protected override void BuildChunk(int originX, int originZ, int width, int depth, TerrainMeshBuilder builder)
+        protected override void BuildChunk(int originX, int originZ, int width, int depth, TerrainMeshBuilder builder) =>
+            _workspaces[0].Build(originX, originZ, width, depth, builder);
+
+        protected override void BuildChunk(int worker, int originX, int originZ, int width, int depth, TerrainMeshBuilder builder) =>
+            _workspaces[worker].Build(originX, originZ, width, depth, builder);
+
+        protected override void BeforeParallelBuild(int workers)
         {
-            _originX = originX;
-            _originZ = originZ;
-            CacheCells(width, depth);
-
-            // Corner heights for the chunk plus one ring beyond it, clamped to the world. Only
-            // in-world corners are ever read back.
-            for (var j = -1; j <= depth + 1; j++)
-            {
-                var cornerZ = Math.Min(Math.Max(originZ + j, 0), Grid.Height);
-                for (var i = -1; i <= width + 1; i++)
-                {
-                    var cornerX = Math.Min(Math.Max(originX + i, 0), Grid.Width);
-                    _cornerHeights[(j + 1) * _cornerRow + i + 1] = CachedCornerHeight(cornerX, cornerZ);
-                }
-            }
-
-            var normalsPerRow = width + 1;
-            for (var j = 0; j <= depth; j++)
-                for (var i = 0; i <= width; i++)
-                    _cornerNormals[j * normalsPerRow + i] = CachedCornerNormal(originX + i, originZ + j);
-
-            for (var j = 0; j < depth; j++)
-            {
-                for (var i = 0; i < width; i++)
-                {
-                    var x = originX + i;
-                    var z = originZ + j;
-                    if (Grid.IsVoid(x, z))
-                        continue;
-                    var h00 = Corner(x, z);
-                    var h10 = Corner(x + 1, z);
-                    var h01 = Corner(x, z + 1);
-                    var h11 = Corner(x + 1, z + 1);
-
-                    var topMaterial = CellTop(x, z);
-                    var exposed = Palette[ExposedMaterial(x, z, topMaterial, (h00 + h10 + h01 + h11) * 0.25f).Value];
-
-                    builder.AddQuad(
-                        new Vector3(i, h00, j),
-                        new Vector3(i, h01, j + 1),
-                        new Vector3(i + 1, h11, j + 1),
-                        new Vector3(i + 1, h10, j),
-                        _cornerNormals[j * normalsPerRow + i],
-                        _cornerNormals[(j + 1) * normalsPerRow + i],
-                        _cornerNormals[(j + 1) * normalsPerRow + i + 1],
-                        _cornerNormals[j * normalsPerRow + i + 1],
-                        Palette[topMaterial.Value],
-                        exposed,
-                        new Vector4(
-                            DiffersFrom(topMaterial, x - 1, z),
-                            DiffersFrom(topMaterial, x + 1, z),
-                            DiffersFrom(topMaterial, x, z - 1),
-                            DiffersFrom(topMaterial, x, z + 1)));
-                }
-            }
+            while (_workspaces.Count < workers)
+                _workspaces.Add(new Workspace(this));
         }
 
-        /// <summary>Copies heights and top materials of the chunk plus <see cref="Halo"/> cells around it.</summary>
-        void CacheCells(int width, int depth)
+        /// <summary>The scratch one chunk build needs: never shared between two threads.</summary>
+        sealed class Workspace
         {
-            var heights = Grid.SurfaceHeights;
-            var tops = Grid.TopMaterials;
-            var gridWidth = Grid.Width;
-            for (var j = -Halo; j < depth + Halo; j++)
+            readonly SmoothedTerrainRenderer _renderer;
+            readonly TerrainGrid _grid;
+            readonly float[] _cellHeights;
+            readonly MaterialId[] _cellTops;
+            readonly bool[] _cellInWorld;
+            readonly int _cellRow;
+
+            readonly float[] _cornerHeights;
+            readonly Vector3[] _cornerNormals;
+            readonly int _cornerRow;
+
+            int _originX;
+            int _originZ;
+
+            public Workspace(SmoothedTerrainRenderer renderer)
             {
-                var z = _originZ + j;
-                var row = (j + Halo) * _cellRow;
-                for (var i = -Halo; i < width + Halo; i++)
+                _renderer = renderer;
+                _grid = renderer.Grid;
+                var chunkSize = renderer.ChunkSize;
+                _cellRow = chunkSize + 2 * Halo;
+                _cellHeights = new float[_cellRow * _cellRow];
+                _cellTops = new MaterialId[_cellRow * _cellRow];
+                _cellInWorld = new bool[_cellRow * _cellRow];
+
+                // Corner heights one ring beyond the chunk, so edge normals can see across the border.
+                _cornerRow = chunkSize + 3;
+                _cornerHeights = new float[_cornerRow * _cornerRow];
+                _cornerNormals = new Vector3[(chunkSize + 1) * (chunkSize + 1)];
+            }
+
+            public void Build(int originX, int originZ, int width, int depth, TerrainMeshBuilder builder)
+            {
+                var palette = _renderer.Palette;
+                _originX = originX;
+                _originZ = originZ;
+                CacheCells(width, depth);
+
+                // Corner heights for the chunk plus one ring beyond it, clamped to the world. Only
+                // in-world corners are ever read back.
+                for (var j = -1; j <= depth + 1; j++)
                 {
-                    var x = _originX + i;
-                    var at = row + i + Halo;
-                    // Void cells are off the map, as in TerrainSurface.CornerHeight: counting them
-                    // dragged every rim corner down toward the datum, a comb of blades under the
-                    // disc edge that only the plinth used to hide.
-                    var inWorld = (uint)x < (uint)gridWidth && (uint)z < (uint)Grid.Height && !Grid.IsVoid(x, z);
-                    _cellInWorld[at] = inWorld;
-                    if (inWorld)
+                    var cornerZ = Math.Min(Math.Max(originZ + j, 0), _grid.Height);
+                    for (var i = -1; i <= width + 1; i++)
                     {
-                        _cellHeights[at] = heights[z * gridWidth + x];
-                        _cellTops[at] = tops[z * gridWidth + x];
+                        var cornerX = Math.Min(Math.Max(originX + i, 0), _grid.Width);
+                        _cornerHeights[(j + 1) * _cornerRow + i + 1] = CachedCornerHeight(cornerX, cornerZ);
                     }
                 }
-            }
-        }
 
-        int CellIndex(int x, int z) => (z - _originZ + Halo) * _cellRow + x - _originX + Halo;
+                var normalsPerRow = width + 1;
+                for (var j = 0; j <= depth; j++)
+                    for (var i = 0; i <= width; i++)
+                        _cornerNormals[j * normalsPerRow + i] = CachedCornerNormal(originX + i, originZ + j);
 
-        MaterialId CellTop(int x, int z) => _cellTops[CellIndex(x, z)];
-
-        /// <summary>Same sum, in the same order, as <see cref="CornerHeight"/>, so results match bit for bit.</summary>
-        float CachedCornerHeight(int cornerX, int cornerZ)
-        {
-            var sum = 0f;
-            var count = 0;
-            for (var z = cornerZ - 1; z <= cornerZ; z++)
-            {
-                for (var x = cornerX - 1; x <= cornerX; x++)
+                for (var j = 0; j < depth; j++)
                 {
-                    var at = CellIndex(x, z);
-                    if (!_cellInWorld[at])
-                        continue;
-                    sum += _cellHeights[at];
-                    count++;
-                }
-            }
-
-            return sum / count;
-        }
-
-        /// <summary>Cached height of in-world grid corner (cornerX, cornerZ) near the chunk being built.</summary>
-        float Corner(int cornerX, int cornerZ) =>
-            _cornerHeights[(cornerZ - _originZ + 1) * _cornerRow + cornerX - _originX + 1];
-
-        /// <summary>Same maths as <see cref="CornerNormal"/>, reading the cached corner heights.</summary>
-        Vector3 CachedCornerNormal(int cornerX, int cornerZ)
-        {
-            var west = Math.Max(cornerX - 1, 0);
-            var east = Math.Min(cornerX + 1, Grid.Width);
-            var south = Math.Max(cornerZ - 1, 0);
-            var north = Math.Min(cornerZ + 1, Grid.Height);
-            var slopeX = (Corner(east, cornerZ) - Corner(west, cornerZ)) / (east - west);
-            var slopeZ = (Corner(cornerX, north) - Corner(cornerX, south)) / (north - south);
-            return new Vector3(-slopeX, 1f, -slopeZ).normalized;
-        }
-
-        /// <summary>1 if cell (x, z) exists and its top material is not <paramref name="material"/>.</summary>
-        float DiffersFrom(MaterialId material, int x, int z)
-        {
-            var at = CellIndex(x, z);
-            return _cellInWorld[at] && _cellTops[at] != material ? 1f : 0f;
-        }
-
-        /// <summary>The layer a steep face over cell (x, z) cuts through at <paramref name="height"/>.</summary>
-        MaterialId ExposedMaterial(int x, int z, MaterialId top, float height)
-        {
-            var tallestX = x;
-            var tallestZ = z;
-            var own = _cellHeights[CellIndex(x, z)];
-            var tallest = own;
-            for (var dz = -1; dz <= 1; dz++)
-            {
-                for (var dx = -1; dx <= 1; dx++)
-                {
-                    var at = CellIndex(x + dx, z + dz);
-                    if (!_cellInWorld[at])
-                        continue;
-                    var h = _cellHeights[at];
-                    if (h > tallest)
+                    for (var i = 0; i < width; i++)
                     {
-                        tallest = h;
-                        tallestX = x + dx;
-                        tallestZ = z + dz;
+                        var x = originX + i;
+                        var z = originZ + j;
+                        if (_grid.IsVoid(x, z))
+                            continue;
+                        var h00 = Corner(x, z);
+                        var h10 = Corner(x + 1, z);
+                        var h01 = Corner(x, z + 1);
+                        var h11 = Corner(x + 1, z + 1);
+
+                        var topMaterial = CellTop(x, z);
+                        var exposed = palette[ExposedMaterial(x, z, topMaterial, (h00 + h10 + h01 + h11) * 0.25f).Value];
+
+                        builder.AddQuad(
+                            new Vector3(i, h00, j),
+                            new Vector3(i, h01, j + 1),
+                            new Vector3(i + 1, h11, j + 1),
+                            new Vector3(i + 1, h10, j),
+                            _cornerNormals[j * normalsPerRow + i],
+                            _cornerNormals[(j + 1) * normalsPerRow + i],
+                            _cornerNormals[(j + 1) * normalsPerRow + i + 1],
+                            _cornerNormals[j * normalsPerRow + i + 1],
+                            palette[topMaterial.Value],
+                            exposed,
+                            new Vector4(
+                                DiffersFrom(topMaterial, x - 1, z),
+                                DiffersFrom(topMaterial, x + 1, z),
+                                DiffersFrom(topMaterial, x, z - 1),
+                                DiffersFrom(topMaterial, x, z + 1)));
                     }
                 }
             }
 
-            // The cell itself is the tallest and the face is not below its surface: nothing is cut
-            // into, and the answer is its own top. This is every cell on flat ground.
-            if (tallestX == x && tallestZ == z && height >= own)
-                return top;
+            /// <summary>Copies heights and top materials of the chunk plus <see cref="Halo"/> cells around it.</summary>
+            void CacheCells(int width, int depth)
+            {
+                var heights = _grid.SurfaceHeights;
+                var tops = _grid.TopMaterials;
+                var gridWidth = _grid.Width;
+                for (var j = -Halo; j < depth + Halo; j++)
+                {
+                    var z = _originZ + j;
+                    var row = (j + Halo) * _cellRow;
+                    for (var i = -Halo; i < width + Halo; i++)
+                    {
+                        var x = _originX + i;
+                        var at = row + i + Halo;
+                        // Void cells are off the map, as in TerrainSurface.CornerHeight: counting them
+                        // dragged every rim corner down toward the datum, a comb of blades under the
+                        // disc edge that only the plinth used to hide.
+                        var inWorld = (uint)x < (uint)gridWidth && (uint)z < (uint)_grid.Height && !_grid.IsVoid(x, z);
+                        _cellInWorld[at] = inWorld;
+                        if (inWorld)
+                        {
+                            _cellHeights[at] = heights[z * gridWidth + x];
+                            _cellTops[at] = tops[z * gridWidth + x];
+                        }
+                    }
+                }
+            }
 
-            return Grid.GetMaterialAt(tallestX, tallestZ, height);
+            int CellIndex(int x, int z) => (z - _originZ + Halo) * _cellRow + x - _originX + Halo;
+
+            MaterialId CellTop(int x, int z) => _cellTops[CellIndex(x, z)];
+
+            /// <summary>Same sum, in the same order, as <see cref="CornerHeight"/>, so results match bit for bit.</summary>
+            float CachedCornerHeight(int cornerX, int cornerZ)
+            {
+                var sum = 0f;
+                var count = 0;
+                for (var z = cornerZ - 1; z <= cornerZ; z++)
+                {
+                    for (var x = cornerX - 1; x <= cornerX; x++)
+                    {
+                        var at = CellIndex(x, z);
+                        if (!_cellInWorld[at])
+                            continue;
+                        sum += _cellHeights[at];
+                        count++;
+                    }
+                }
+
+                return sum / count;
+            }
+
+            /// <summary>Cached height of in-world grid corner (cornerX, cornerZ) near the chunk being built.</summary>
+            float Corner(int cornerX, int cornerZ) =>
+                _cornerHeights[(cornerZ - _originZ + 1) * _cornerRow + cornerX - _originX + 1];
+
+            /// <summary>Same maths as <see cref="CornerNormal"/>, reading the cached corner heights.</summary>
+            Vector3 CachedCornerNormal(int cornerX, int cornerZ)
+            {
+                var west = Math.Max(cornerX - 1, 0);
+                var east = Math.Min(cornerX + 1, _grid.Width);
+                var south = Math.Max(cornerZ - 1, 0);
+                var north = Math.Min(cornerZ + 1, _grid.Height);
+                var slopeX = (Corner(east, cornerZ) - Corner(west, cornerZ)) / (east - west);
+                var slopeZ = (Corner(cornerX, north) - Corner(cornerX, south)) / (north - south);
+                return new Vector3(-slopeX, 1f, -slopeZ).normalized;
+            }
+
+            /// <summary>1 if cell (x, z) exists and its top material is not <paramref name="material"/>.</summary>
+            float DiffersFrom(MaterialId material, int x, int z)
+            {
+                var at = CellIndex(x, z);
+                return _cellInWorld[at] && _cellTops[at] != material ? 1f : 0f;
+            }
+
+            /// <summary>The layer a steep face over cell (x, z) cuts through at <paramref name="height"/>.</summary>
+            MaterialId ExposedMaterial(int x, int z, MaterialId top, float height)
+            {
+                var tallestX = x;
+                var tallestZ = z;
+                var own = _cellHeights[CellIndex(x, z)];
+                var tallest = own;
+                for (var dz = -1; dz <= 1; dz++)
+                {
+                    for (var dx = -1; dx <= 1; dx++)
+                    {
+                        var at = CellIndex(x + dx, z + dz);
+                        if (!_cellInWorld[at])
+                            continue;
+                        var h = _cellHeights[at];
+                        if (h > tallest)
+                        {
+                            tallest = h;
+                            tallestX = x + dx;
+                            tallestZ = z + dz;
+                        }
+                    }
+                }
+
+                // The cell itself is the tallest and the face is not below its surface: nothing is cut
+                // into, and the answer is its own top. This is every cell on flat ground.
+                if (tallestX == x && tallestZ == z && height >= own)
+                    return top;
+
+                return _grid.GetMaterialAt(tallestX, tallestZ, height);
+            }
         }
     }
 }

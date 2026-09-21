@@ -84,6 +84,73 @@ namespace TinyDiggers.Terrain
             return examined;
         }
 
+        /// <summary>
+        /// Takes out of the queue every cell that cannot slide: one with no neighbour at least two
+        /// height steps below it, which is the least drop <see cref="Settle"/> ever acts on. What
+        /// is left keeps its order. A cell taken out is queued again the moment a neighbour
+        /// changes, so nothing that could slide is missed. After generation every cell of the map
+        /// is queued; at 3104² settling them all one by one took 1.5 s. Returns how many it took out.
+        /// </summary>
+        public int DropSettled()
+        {
+            var unit = _grid.HeightStep > 0f ? _grid.HeightStep : ContinuousMoveUnit;
+            var least = 2f * unit - Tolerance;
+            // The gentlest slope each top material could fail at: its plain angle of repose. The
+            // angle Settle uses is never lower (thin loose skins and the layers under only raise
+            // it), so a drop no steeper than this cannot slide.
+            var materials = _grid.Materials;
+            var gentlest = new float[materials.MaxId + 1];
+            for (var id = 0; id < gentlest.Length; id++)
+            {
+                var material = new MaterialId((byte)id);
+                var repose = materials.Contains(material) ? materials.Get(material).AngleOfRepose : 0f;
+                gentlest[id] = repose >= NeverSlumps ? float.MaxValue : (float)Math.Tan(repose * Math.PI / 180.0);
+            }
+
+            var cells = _queue.ToArray();
+            var keep = new bool[cells.Length];
+            System.Threading.Tasks.Parallel.For(0, cells.Length, i => keep[i] = CouldSlide(cells[i], least, gentlest));
+            _queue.Clear();
+            var dropped = 0;
+            for (var i = 0; i < cells.Length; i++)
+            {
+                if (keep[i])
+                {
+                    _queue.Enqueue(cells[i]);
+                    continue;
+                }
+
+                _queued[cells[i]] = false;
+                dropped++;
+            }
+
+            return dropped;
+        }
+
+        bool CouldSlide(int cell, float least, float[] gentlest)
+        {
+            var width = _grid.Width;
+            var x = cell % width;
+            var z = cell / width;
+            if (!_grid.IsGround(x, z) || _grid.GetLayerCount(x, z) == 0)
+                return false;
+            var heights = _grid.SurfaceHeights;
+            var height = heights[cell];
+            var tan = gentlest[_grid.GetTopMaterial(x, z).Value];
+            for (var n = 0; n < 8; n++)
+            {
+                var nx = x + NeighbourDx[n];
+                var nz = z + NeighbourDz[n];
+                if (!_grid.IsGround(nx, nz))
+                    continue;
+                var drop = height - heights[nz * width + nx];
+                if (drop >= least && drop / ((n < 4 ? 1f : Diagonal) * _grid.CellSize) > tan)
+                    return true;
+            }
+
+            return false;
+        }
+
         /// <summary>Ticks until nothing is queued or <paramref name="maxTicks"/> is reached. Returns the ticks used.</summary>
         public int RunUntilStable(int maxTicks = 100000)
         {

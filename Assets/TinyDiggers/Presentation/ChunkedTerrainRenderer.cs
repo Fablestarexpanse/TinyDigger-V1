@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using TinyDiggers.Terrain;
 using Unity.Profiling;
 using UnityEngine;
@@ -17,6 +18,11 @@ namespace TinyDiggers.Presentation
     /// deduplicated dirty-cell set, which is cheap however many times a slump tick touches the same
     /// cell. <see cref="Rebuild"/> then expands each dirty cell into the chunks it affects, and
     /// rebuilds each of those chunks once.
+    ///
+    /// A big rebuild (start-up, a regenerate: <see cref="ParallelFrom"/> chunks or more) works out
+    /// the chunks' geometry on worker threads, a batch at a time, when the subclass says it can
+    /// (<see cref="ParallelWorkers"/>); the meshes are still uploaded on the main thread. At 3104²
+    /// cells the one-at-a-time build of 9409 chunks took about 3 s.
     ///
     /// Plain C#, not a MonoBehaviour: the owner calls <see cref="Rebuild"/> once a frame and
     /// <see cref="Dispose"/> when done. Subclasses must call <see cref="Rebuild"/> at the end of
@@ -146,6 +152,18 @@ namespace TinyDiggers.Presentation
         static readonly ProfilerMarker BuildMarker = new ProfilerMarker("TinyDiggers.ChunkBuild");
         static readonly ProfilerMarker UploadMarker = new ProfilerMarker("TinyDiggers.ChunkUpload");
 
+        /// <summary>Chunks in one rebuild at or above which their geometry is built on worker threads.</summary>
+        public const int ParallelFrom = 64;
+
+        /// <summary>Chunks built on the workers before the main thread uploads them.</summary>
+        const int ParallelBatch = 256;
+
+        /// <summary>
+        /// How many threads may build chunks at once through <see cref="BuildChunk(int, int, int, int, int, TerrainMeshBuilder)"/>.
+        /// 1, the default, keeps every build on the main thread.
+        /// </summary>
+        protected virtual int ParallelWorkers => 1;
+
         public void Rebuild()
         {
             if (_disposed)
@@ -153,6 +171,13 @@ namespace TinyDiggers.Presentation
 
             ResolveDirtyCells();
             LastRebuiltChunkCount = _dirtyChunks.Count;
+            var workers = ParallelWorkers;
+            if (workers > 1 && _dirtyChunks.Count >= ParallelFrom)
+            {
+                RebuildInParallel(workers);
+                return;
+            }
+
             foreach (var index in _dirtyChunks)
             {
                 var chunk = _chunks[index];
@@ -177,6 +202,48 @@ namespace TinyDiggers.Presentation
             _dirtyChunks.Clear();
         }
 
+        void RebuildInParallel(int workers)
+        {
+            BeforeParallelBuild(workers);
+            var builders = new TerrainMeshBuilder[Math.Min(ParallelBatch, _dirtyChunks.Count)];
+            for (var i = 0; i < builders.Length; i++)
+                builders[i] = new TerrainMeshBuilder(ChunkSize * ChunkSize * 4);
+
+            for (var start = 0; start < _dirtyChunks.Count; start += builders.Length)
+            {
+                var count = Math.Min(builders.Length, _dirtyChunks.Count - start);
+                // Each worker takes every workers-th chunk of the batch, with its own scratch.
+                Parallel.For(0, workers, worker =>
+                {
+                    for (var k = worker; k < count; k += workers)
+                    {
+                        var chunk = _chunks[_dirtyChunks[start + k]];
+                        var originX = chunk.X * ChunkSize;
+                        var originZ = chunk.Z * ChunkSize;
+                        var builder = builders[k];
+                        builder.Clear();
+                        using (BuildMarker.Auto())
+                        {
+                            BuildChunk(worker, originX, originZ,
+                                Math.Min(ChunkSize, Grid.Width - originX),
+                                Math.Min(ChunkSize, Grid.Height - originZ),
+                                builder);
+                        }
+                    }
+                });
+
+                for (var k = 0; k < count; k++)
+                {
+                    var index = _dirtyChunks[start + k];
+                    using (UploadMarker.Auto())
+                        _chunks[index].TriangleCount = builders[k].ApplyTo(_chunks[index].Mesh);
+                    _dirty[index] = false;
+                }
+            }
+
+            _dirtyChunks.Clear();
+        }
+
         public void Dispose()
         {
             if (_disposed)
@@ -194,6 +261,20 @@ namespace TinyDiggers.Presentation
         /// in cells; the chunk's transform scales them to metres.
         /// </summary>
         protected abstract void BuildChunk(int originX, int originZ, int width, int depth, TerrainMeshBuilder builder);
+
+        /// <summary>
+        /// As <see cref="BuildChunk(int, int, int, int, TerrainMeshBuilder)"/>, on worker thread
+        /// <paramref name="worker"/> (0 .. <see cref="ParallelWorkers"/> - 1), while the grid is not
+        /// being changed. Overridden by renderers that set <see cref="ParallelWorkers"/> above 1:
+        /// two workers never share scratch.
+        /// </summary>
+        protected virtual void BuildChunk(int worker, int originX, int originZ, int width, int depth, TerrainMeshBuilder builder) =>
+            BuildChunk(originX, originZ, width, depth, builder);
+
+        /// <summary>Called on the main thread before a parallel build, so a subclass can make each worker's scratch.</summary>
+        protected virtual void BeforeParallelBuild(int workers)
+        {
+        }
 
         /// <summary>Flags the chunk containing cell (x, z); cells off the grid are ignored.</summary>
         protected void MarkCellsChunkDirty(int x, int z)
