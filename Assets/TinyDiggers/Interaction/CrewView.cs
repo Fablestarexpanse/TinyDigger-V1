@@ -18,7 +18,8 @@ namespace TinyDiggers.Interaction
         [SerializeField] TerrainView _terrain;
         [SerializeField] DesignationsView _designations;
         [SerializeField] Material _pathMaterial;
-        [SerializeField] Vector2Int _spawnCell = new Vector2Int(256, 256);
+        [Tooltip("Metres from the middle of the disc the crew would like to start. It starts on the nearest level, dry ground to that.")]
+        [SerializeField] Vector2 _spawnOffset;
 
         [Tooltip("How many diggers to spawn, side by side across the spawn cell.")]
         [SerializeField, Min(0)] int _diggerCount = 2;
@@ -87,8 +88,17 @@ namespace TinyDiggers.Interaction
             _pathfinder = new GridPathfinder(grid) { MaxStepHeight = maxStepHeight };
             Dispatcher = new JobDispatcher(grid, _designations.Map, _pathfinder);
 
-            var spawnX = Mathf.Clamp(_spawnCell.x, 0, grid.Width - 1);
-            var spawnZ = Mathf.Clamp(_spawnCell.y, 0, grid.Height - 1);
+            var wish = (_terrain.DiscCentre + _spawnOffset) / grid.CellSize;
+            var wishX = Mathf.Clamp(Mathf.FloorToInt(wish.x), 0, grid.Width - 1);
+            var wishZ = Mathf.Clamp(Mathf.FloorToInt(wish.y), 0, grid.Height - 1);
+            if (!CrewSpawn.TryFind(grid, wishX, wishZ, Mathf.Max(grid.Width, grid.Height) / 2, out var spawn))
+            {
+                Debug.LogWarning($"CrewView: no level, dry ground anywhere near ({wishX}, {wishZ}); the crew starts there anyway.", this);
+                spawn = new Vector2Int(wishX, wishZ);
+            }
+
+            var spawnX = spawn.x;
+            var spawnZ = spawn.y;
             var total = _diggerCount + _haulerCount;
             for (var i = 0; i < total; i++)
             {

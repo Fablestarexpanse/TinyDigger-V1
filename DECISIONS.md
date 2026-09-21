@@ -5,9 +5,9 @@ this records why.
 
 ---
 
-**NEXT:** PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
+**NEXT:** Slice 12 made the disc 1792² cells (896 m, 3x the area); waiting on Ronan's look. PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
 swell, spillway overflows (a safety valve at sea level), game logic reading it and a Basic Zone sample; waiting on Ronan's look. Open:
-- nothing on the water list; next is Ronan's call.
+- start-up on the 1792² disc is about 4.6 s (generate 3.6 s, mesh 0.95 s).
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -2267,3 +2267,36 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   Water System/0.1.0/Basic Zone`): 37 components, none missing; it plays the same. The test copy
   was then deleted.
 - Needs URP's Opaque Texture on (the water refracts through it); the README says so.
+
+## Slice 12: a bigger disc (2026-09-21)
+- **Ronan: "the map is just too small, expand the disk by 3x"** means 3x the area: about 890 m
+  across instead of 512 m, with 0.5 m cells kept.
+- Turned down:
+  - 3x the width (9.4 M cells, needs terrain LOD and streaming first);
+  - 3x the width at 1 m cells (gives up Slice 11's half-metre detail).
+- **Built:** the scene's grid goes from 1024² to **1792²** cells: 896 m across, 3.06x the area,
+  a whole number of 32-cell chunks. Everything else already sizes from the grid:
+  - the disc radius (447 m);
+  - the island generator, whose features are in metres, so the bigger disc gets more coast,
+    bays, lakes and offshore islands, not a stretched copy;
+  - the water zone (1792²) and the grid feed;
+  - the dam, now 188 pieces round 2.8 km: still 4 terminals, 8 spillways and 8 pads, with more
+    bays between them;
+  - the camera's zoom limit and view distance.
+- **Only fix needed:** the crew spawned at the fixed cell (512, 512), yesterday's centre.
+  `CrewSpawn.TryFind` now starts the crew on the nearest level, dry 3×3 block to the disc centre
+  (plus an optional offset in metres, `CrewView._spawnOffset`). At 1792² that is (895–897,
+  895–897) at 15 m. Tests: `CrewSpawnTests` (4).
+- **Big landmarks are still fixed counts:** one mountain chain, up to 2 plateaus and 3 valleys.
+  On the first look the continent doesn't read as sparse, so they are left alone unless Ronan
+  wants more ranges.
+- **Measured in play**, compared with 1024²:
+  - generated in 3613 ms (was 760–980 ms);
+  - meshed in 946 ms (was 297 ms);
+  - 3136 chunks, 5.02 M triangles (was 1.63 M);
+  - frames average 6.2 ms since start;
+  - water feed: the first whole pass takes 21 ms, once; bands are 0.85–2.1 ms a frame;
+  - managed heap 1.0 GB; the layer store alone is 1792² × 16 × 8 B = 411 MB.
+- **Not changed:** the 1.2 s generation budget in `LandShapeTests` still measures 1024². Start-up
+  on the real map is now about 4.6 s (generate plus mesh), so this is the next thing to speed
+  up if it bothers.
