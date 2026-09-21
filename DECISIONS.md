@@ -9,7 +9,6 @@ this records why.
 swell, spillway overflows (a safety valve at sea level), game logic reading it and a Basic Zone sample; waiting on Ronan's look. Open:
 - start-up is about 5.3 s at 3104², nearly all generation (5.0 s);
 - `WaterTests.BakingAFullMapIsCheap` is a flaky 60 ms timing check;
-- the water stops 4 m short of the dam's inner face (the gap between disc edge and dam);
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -2438,3 +2437,15 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
 - `WaterTests.BakingAFullMapIsCheap` (60 ms) failed again at 60.5 ms on a loaded editor. It
   measures the old static sea's bake, which the dynamic water has replaced; its margin is too
   thin for an editor holding a 3 GB map.
+
+## Water meets the dam face (2026-09-21)
+- **The strip:** the dam's inner face stood `DamSettings.InnerOffset` (4 m) out from the disc's
+  edge. The water ends at the disc's last cells, a staircase of 0.5 m squares, so a band of
+  nothing showed between the sea and the concrete all the way round. No reason for the 4 m was
+  on record; it predates the dynamic water.
+- **Fix:** InnerOffset is now −1 m (negative allowed). The face sits a metre inside the disc
+  edge, so the concrete overlaps the outermost water cells and hides the stepped edge. The dam
+  is laid out at radius 774 m (356 pieces). Nothing else moved: the spillway outlets sit 8 m
+  inside the disc edge, still in open water, and the terminals and pads follow the ring.
+- **Seen in play:** the view where the strip showed is clean, and a low close-up along the
+  face has the water lapping the concrete round the curve. 382/382 pass.

@@ -16,7 +16,7 @@ MonoBehaviour:
   SpillwayWidth: 36
   PadWidth: 24
   TerminalWidth: 84
-  InnerOffset: 4
+  InnerOffset: -1
   Terminals: 4
   SpillwaysPerGap: 2
   PadsPerGap: 2

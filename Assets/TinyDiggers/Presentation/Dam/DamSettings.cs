@@ -36,8 +36,8 @@ namespace TinyDiggers.Presentation
         [Min(1f)] public float TerminalWidth = 84f;
 
         [Header("The ring")]
-        [Tooltip("Metres from the edge of the disc of land out to the dam's inner face.")]
-        [Min(0f)] public float InnerOffset = 4f;
+        [Tooltip("Metres from the edge of the disc out to the dam's inner face. Negative tucks the face over the disc's last cells, so the water runs into the concrete: the disc edge is a staircase of square cells, and with the face 4 m out a strip of it showed between the water and the dam.")]
+        public float InnerOffset = -1f;
 
         [Tooltip("Capital-ship terminals, evenly round the ring, the first at north.")]
         [Min(0)] public int Terminals = 4;
