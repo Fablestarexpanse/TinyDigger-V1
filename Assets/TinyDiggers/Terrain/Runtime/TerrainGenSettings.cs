@@ -70,6 +70,54 @@ namespace TinyDiggers.Terrain
         [Tooltip("Metres the warp pushes each sample around by.")]
         [Min(0f)] public float WarpStrength = 14f;
 
+        [Header("Land types (natural terrain, phase 2)")]
+        [Tooltip("Build the land from plains, hills and mountains, each with its own relief. Off: the old single noise stack everywhere.")]
+        public bool UseLandTypes = true;
+
+        [Tooltip("Share of the land that is plains: each seed draws its own share between these.")]
+        [Range(0f, 1f)] public float PlainsShareMin = 0.25f;
+        [Range(0f, 1f)] public float PlainsShareMax = 0.55f;
+
+        [Tooltip("Share of the land that is mountains: each seed draws its own share between these. Hills take the rest.")]
+        [Range(0f, 1f)] public float MountainShareMin = 0.08f;
+        [Range(0f, 1f)] public float MountainShareMax = 0.3f;
+
+        [Tooltip("Metres across the field that decides where each type lies. Big, so a plain or a range is a region, not a speck.")]
+        [Min(20f)] public float TypeFeatureSize = 260f;
+
+        [Tooltip("How gradually one type turns into the next, in type-field units either side of a border.")]
+        [Range(0.005f, 0.3f)] public float TypeBlend = 0.06f;
+
+        [Tooltip("How strongly the ridge line pulls mountains onto itself.")]
+        [Range(0f, 1f)] public float RidgeMountainBias = 0.35f;
+
+        [Tooltip("How strongly land near the sea is pushed toward plains.")]
+        [Range(0f, 1f)] public float CoastLowlandBias = 0.3f;
+
+        [Tooltip("Metres in from the sea that the lowland push fades over.")]
+        [Min(1f)] public float CoastLowlandDistance = 60f;
+
+        [Tooltip("Metres above the sea the land stands at the waterline, before the coast is shaped.")]
+        public float ShoreHeight = 1f;
+
+        [Tooltip("Metres the land rises on its way inland, before any type adds its own relief.")]
+        [Min(0f)] public float InlandRise = 5f;
+
+        [Tooltip("Metres inland over which most of that rise happens.")]
+        [Min(1f)] public float InlandRiseDistance = 120f;
+
+        [Tooltip("Metres across the swells of a plain.")]
+        [Min(10f)] public float PlainsFeatureSize = 180f;
+
+        [Tooltip("Metres a plain rises and falls: small, so it reads as flat ground.")]
+        [Min(0f)] public float PlainsRelief = 1.5f;
+
+        [Tooltip("Metres across a rolling hill.")]
+        [Min(10f)] public float HillsFeatureSize = 140f;
+
+        [Tooltip("Metres the hills stand above the plain under them, at most.")]
+        [Min(0f)] public float HillsRelief = 8f;
+
         [Header("Land mask")]
         [Tooltip("The shape of land to make. Any lets the seed choose.")]
         public LandShape Shape = LandShape.Any;
@@ -336,6 +384,8 @@ namespace TinyDiggers.Terrain
             s.RidgeWidth *= k; s.RidgeWarpSize *= k; s.RidgeWarpStrength *= k; s.PlateauRadius *= k;
             s.CoastNoiseSize *= k; s.CoastNoiseCells *= k; s.MountainRadius *= k; s.ValleyRadius *= k;
             s.MaterialNoiseSize *= k; s.SandMaxDistance *= k; s.RiverWander *= k;
+            s.TypeFeatureSize *= k; s.CoastLowlandDistance *= k; s.InlandRiseDistance *= k;
+            s.PlainsFeatureSize *= k; s.HillsFeatureSize *= k;
 
             s.RimWaterCells = Count(RimWaterCells); s.BeachCells = BeachCells == 0 ? 0 : Count(BeachCells);
             s.ShallowCells = Count(ShallowCells); s.ShelfCells = Count(ShelfCells); s.ChannelCells = Count(ChannelCells);

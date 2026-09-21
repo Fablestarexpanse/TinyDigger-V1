@@ -17,6 +17,9 @@ namespace TinyDiggers.Terrain
         /// <summary>The shape this seed actually made, once <see cref="LandShape.Any"/> has chosen.</summary>
         public LandShape Shape;
 
+        /// <summary>The mix of plains, hills and mountains this island was drawn with (phase 2).</summary>
+        public LandMix Mix;
+
         /// <summary>The highest cell of the land.</summary>
         public Vector2Int Peak;
 
@@ -189,7 +192,13 @@ namespace TinyDiggers.Terrain
             var benches = Benches(random, ridge, islandCentre, landRadius, settings);
             var heights = new float[cells];
             var highGround = new float[cells];
-            Parallel.For(0, depth, z =>
+            float[] upland = null;
+            if (settings.UseLandTypes)
+            {
+                upland = BuildTypedHeights(random, map, heights, highGround, land, inDisc, width, depth, shift, ridge, benches,
+                    baseOffset, mediumOffset, warpOffset, ridgeOffset, ridgeWarp, settings);
+            }
+            else Parallel.For(0, depth, z =>
             {
                 for (var x = 0; x < width; x++)
                 {
@@ -248,7 +257,7 @@ namespace TinyDiggers.Terrain
 
             // --- 5: valleys where the water would run ---------------------------------------
             var accumulation = FlowAccumulation(heights, land, width, depth);
-            CutValleys(heights, land, accumulation, settings);
+            CutValleys(heights, land, accumulation, settings, upland);
 
             map.Mark("valleys", stopwatch, ref lastMark);
 
@@ -377,6 +386,114 @@ namespace TinyDiggers.Terrain
 
             map.Milliseconds = stopwatch.Elapsed.TotalMilliseconds;
             return map;
+        }
+
+        /// <summary>
+        /// Natural terrain, phase 2: heights from land types. A slowly varying type field, pulled
+        /// toward mountains along the ridge and toward lowland near the sea, is cut at the seed's
+        /// mix into plains, hills and mountains. Each has its own relief:
+        /// - plains: the shore height and a gentle rise inland, with swells of a metre or two;
+        /// - hills: the plain with broad rolling mounds on it;
+        /// - mountains: the hills with the ridged crest, and the medium and fine octaves.
+        /// The three blend over the borders, so a plain climbs into foothills rather than hitting
+        /// a wall. Benches still pull the land onto their floors. Returns how much each cell is
+        /// hills or mountains (1 minus its plains weight), which the valley cut scales by.
+        /// </summary>
+        static float[] BuildTypedHeights(System.Random random, IslandMap map, float[] heights, float[] highGround,
+            bool[] land, bool[] inDisc, int width, int depth, Vector2Int shift, Vector2[] ridge, Vector3[] benches,
+            Vector2 baseOffset, Vector2 mediumOffset, Vector2 warpOffset, Vector2 ridgeOffset, Vector2 ridgeWarp,
+            TerrainGenSettings settings)
+        {
+            var cells = width * depth;
+            var typeOffset = Offset(random);
+            var hillsOffset = Offset(random);
+            map.Mix = LandTypes.Draw(random, settings);
+            var toSea = Distance(land, inDisc, width, depth, from: false);
+
+            // The type field over the land.
+            var type = new float[cells];
+            var upland = new float[cells];
+            Parallel.For(0, depth, z =>
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var cell = z * width + x;
+                    if (!land[cell])
+                        continue;
+                    var warped = Warp(x - shift.x, z - shift.y, warpOffset, settings.WarpSize, settings.WarpStrength);
+                    var value = Fbm(warped, typeOffset, settings.TypeFeatureSize, 3) + 0.5f;
+                    var alongRidge = Mathf.Clamp01(1f - DistanceToCurve(warped, ridge) / Mathf.Max(4f, settings.RidgeWidth));
+                    value += settings.RidgeMountainBias * Smooth(alongRidge);
+                    value -= settings.CoastLowlandBias * Mathf.Exp(-toSea[cell] / Mathf.Max(1f, settings.CoastLowlandDistance));
+                    type[cell] = value;
+                }
+            });
+
+            // Cut points from a sample of the land, so the shares come out as drawn.
+            var sample = new float[Math.Min(cells, 200000)];
+            var count = 0;
+            var stride = Math.Max(1, cells / sample.Length);
+            for (var cell = 0; cell < cells && count < sample.Length; cell += stride)
+                if (land[cell])
+                    sample[count++] = type[cell];
+            var (plainsBelow, mountainsAbove) = LandTypes.Thresholds(sample, count, map.Mix);
+
+            Parallel.For(0, depth, z =>
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var cell = z * width + x;
+                    if (!inDisc[cell])
+                    {
+                        heights[cell] = settings.ChannelDepth;
+                        continue;
+                    }
+
+                    if (!land[cell])
+                    {
+                        heights[cell] = World.SeaLevel - 1f; // Shaped properly in stage 6.
+                        continue;
+                    }
+
+                    var (plains, hills, mountains) = LandTypes.Weights(type[cell], plainsBelow, mountainsAbove, settings.TypeBlend);
+                    var warped = Warp(x - shift.x, z - shift.y, warpOffset, settings.WarpSize, settings.WarpStrength);
+
+                    var rise = settings.InlandRise * (1f - Mathf.Exp(-toSea[cell] / Mathf.Max(1f, settings.InlandRiseDistance)));
+                    var plain = settings.ShoreHeight + rise + Fbm(warped, baseOffset, settings.PlainsFeatureSize, 2) * 2f * settings.PlainsRelief;
+
+                    var mound = Smooth(Fbm(warped, hillsOffset, settings.HillsFeatureSize, 3) * 1.6f + 0.5f);
+                    var hill = plain + mound * settings.HillsRelief;
+
+                    // Mountains: the ridged crest, stronger on the ridge line, and the finer octaves.
+                    var crestAt = warped + Direction(warped, ridgeWarp, settings.RidgeWarpSize) * settings.RidgeWarpStrength;
+                    var crest = RidgedFbm(crestAt, ridgeOffset, settings.FeatureSize * 0.55f, 4);
+                    crest += (Noise(crestAt, ridgeOffset + new Vector2(211f, 97f), settings.RidgeWarpSize * 1.6f) - 0.5f) * 0.22f;
+                    var alongRidge = Mathf.Clamp01(1f - DistanceToCurve(warped, ridge) / Mathf.Max(4f, settings.RidgeWidth));
+                    var peak = Mathf.Clamp01(crest) * (0.55f + 0.45f * Smooth(alongRidge));
+                    var roughness = (Noise(warped, mediumOffset, settings.MediumSize) - 0.5f) * settings.MediumRelief
+                        + Fbm(warped, mediumOffset + new Vector2(313f, 77f), settings.DetailSize, 2) * 2f * settings.DetailRelief;
+                    var mountain = hill + peak * settings.RidgeHeight + roughness;
+
+                    var height = plains * plain + hills * hill + mountains * mountain;
+                    highGround[cell] = mountains * peak;
+                    upland[cell] = 1f - plains;
+
+                    foreach (var bench in benches)
+                    {
+                        var t = 1f - Vector2.Distance(warped, new Vector2(bench.x, bench.y)) / Mathf.Max(4f, settings.PlateauRadius);
+                        if (t <= 0f)
+                            continue;
+                        // Only where the land is already that high: a bench is a shelf in the
+                        // hills, not a table lifted out of a plain.
+                        if (height < bench.z * 0.6f)
+                            continue;
+                        height = Mathf.Lerp(height, bench.z, Smooth(t));
+                    }
+
+                    heights[cell] = height;
+                }
+            });
+            return upland;
         }
 
         static Vector2 Offset(System.Random random) =>
@@ -725,8 +842,8 @@ namespace TinyDiggers.Terrain
         static float ValleyStrength(float accumulation) =>
             accumulation <= ValleyThreshold ? 0f : Mathf.Clamp01(Mathf.Log(accumulation / ValleyThreshold) / 6f);
 
-        /// <summary>Cuts each cell down by how much water runs through it.</summary>
-        static void CutValleys(float[] heights, bool[] land, float[] accumulation, TerrainGenSettings settings)
+        /// <summary>Cuts each cell down by how much water runs through it, less on plains.</summary>
+        static void CutValleys(float[] heights, bool[] land, float[] accumulation, TerrainGenSettings settings, float[] upland = null)
         {
             if (settings.ValleyCut <= 0f)
                 return;
@@ -735,6 +852,9 @@ namespace TinyDiggers.Terrain
                 if (!land[cell])
                     continue;
                 var strength = ValleyStrength(accumulation[cell]);
+                // On plains a river runs in a shallow bed, not a gorge.
+                if (upland != null)
+                    strength *= 0.2f + 0.8f * upland[cell];
                 if (strength > 0f)
                     heights[cell] -= settings.ValleyCut * strength;
             }

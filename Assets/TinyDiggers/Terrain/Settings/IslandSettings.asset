@@ -23,6 +23,23 @@ MonoBehaviour:
   DetailRelief: 1.1
   WarpSize: 45
   WarpStrength: 14
+  UseLandTypes: 1
+  PlainsShareMin: 0.25
+  PlainsShareMax: 0.55
+  MountainShareMin: 0.08
+  MountainShareMax: 0.3
+  TypeFeatureSize: 260
+  TypeBlend: 0.06
+  RidgeMountainBias: 0.35
+  CoastLowlandBias: 0.3
+  CoastLowlandDistance: 60
+  ShoreHeight: 1
+  InlandRise: 5
+  InlandRiseDistance: 120
+  PlainsFeatureSize: 180
+  PlainsRelief: 1.5
+  HillsFeatureSize: 140
+  HillsRelief: 8
   Shape: 1
   LandRadius: 447
   LandFeatureSize: 150

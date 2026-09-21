@@ -233,7 +233,10 @@ namespace TinyDiggers.Terrain.Tests
                     var top = grid.GetTopMaterial(x, z);
                     if (Mathf.Abs(height - World.SeaLevel) <= _settings.SandBand && top == MaterialTable.Sand)
                         sandNearTheSea++;
-                    if (height > World.SeaLevel + _settings.SandBand + 4f && top == MaterialTable.Topsoil)
+                    // Above where sand may go: since the land types (natural terrain, phase 2) most
+                    // of an island is low plain, so "well above" is judged from the sand's limit,
+                    // not from a fixed ten metres.
+                    if (height > World.SeaLevel + _settings.SandMaxHeight + 2f && top == MaterialTable.Topsoil)
                         topsoilInland++;
                 }
             }

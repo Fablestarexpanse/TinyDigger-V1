@@ -66,7 +66,7 @@ namespace TinyDiggers.EditorTools
                 var seconds = Time.realtimeSinceStartupAsDouble - started;
 
                 var card = TerrainScorecard.Measure(grid);
-                var line = $"{label} seed {seeds[i]} ({island.Shape}), {seconds:0.00} s: {card}";
+                var line = $"{label} seed {seeds[i]} ({island.Shape}; {island.Mix}), {seconds:0.00} s: {card}";
                 report.AppendLine(line);
                 Debug.Log("Terrain preview: " + line);
 

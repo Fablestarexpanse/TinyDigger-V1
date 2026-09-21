@@ -2737,3 +2737,47 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
 - **Unity quirk:** a new script written from outside while the editor was busy was imported as a
   MonoScript, but left out of its assembly's source list. Neither Refresh, nor a forced
   reimport, nor a clean compile added it. Renaming it with `AssetDatabase.MoveAsset` did.
+
+### Natural terrain, phase 2: land types (2026-09-21)
+- **Built:**
+  - `LandTypes` (tested) and `LandMix`: each seed draws its mix, as Ronan asked ("each
+    generation should be random"):
+    - plains between 25% and 55%;
+    - mountains between 8% and 30%;
+    - hills take the rest, never less than 15%. If the two ranges ask for too much, they
+      shrink in proportion.
+  - A type field: fBm over 260 m, plus 0.35 × closeness to the ridge line, minus 0.3 × a
+    60 m fade from the sea. It is cut at quantiles of a sample of the land, so the shares
+    come out as drawn, and blended over ±0.06 across each border.
+  - Heights per type (`IslandGenerator.BuildTypedHeights`, on by `UseLandTypes`):
+    - plains: 1 m at the shore, +5 m rising over 120 m inland, ±1.5 m swells every 180 m;
+    - hills: the plain plus mounds up to 8 m every 140 m. The first try, 12 m every 110 m, was
+      still orange and red on the slope map.
+    - mountains: the hills plus the ridged crest (stronger on the ridge line), and the medium
+      and fine octaves, which now apply only here.
+  - Benches only pull land that is already at least 60% of their height, so they no longer
+    lift tables out of plains.
+  - The valley cut is ×0.2 on plains, rising to ×1 in the uplands.
+  - A test that took topsoil to mean "above 10 m" now measures from the sand's limit (3 m) plus
+    2 m, since most land is now low plain.
+- **Scorecard**, same four seeds:
+
+  | Measure | Baseline | Phase 2 |
+  |---|---|---|
+  | Flat | 5–7% | 22–32% |
+  | Gentle | 12–15% | 17–21% |
+  | Steep | 43–49% | 22–36% |
+  | Pits | 4,089–4,427 | 364–905 |
+  | Pits 1 m deep or more | 235–384 | 4–98 |
+  | Cliff steps | 6.6–8.1% | 2.9–6.1% |
+  | Beach coast | 20–25% | 61–71% |
+
+  Seed 37 drew the most mountains (28%) and is the steepest, as it should be. Maps are in
+  `Screenshots/Terrain/Preview/phase2_*`; in-game shots in `Screenshots/Terrain/Phase2/`.
+- **Seen, left for later phases:**
+  - Streaks and contour stripes where gentle ground is rounded to 0.5 m levels (phase 3).
+  - Sandbanks stepping straight into the water in places (phase 4).
+  - Sand patches on inland low ground (phase 5).
+  - The sea looks olive in the in-game shots. It may be the shallow shelf showing through;
+    to check in phase 4.
+- **Tests:** 409/409.
