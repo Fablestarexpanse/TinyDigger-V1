@@ -154,6 +154,13 @@ void Depth(uint3 id : SV_DispatchThreadID)
             depth = max(0.0, depth - effector.rate * weight * effector.scale * _Dt);
         else if (effector.kind == 2)
             depth += (effector.level - (ground + depth)) * saturate(effector.rate * _Dt) * weight;
+        else if (effector.kind == 4)
+        {
+            // Weir: this cell's head over the crest sets the rate; never below the crest.
+            float head = min(ground + depth - effector.level, depth);
+            if (head > 0.0)
+                depth -= min(head, 1.7 * effector.rate * head * sqrt(head) * weight * effector.scale * _Dt);
+        }
     }
 
     _Depth[i] = max(0.0, depth);

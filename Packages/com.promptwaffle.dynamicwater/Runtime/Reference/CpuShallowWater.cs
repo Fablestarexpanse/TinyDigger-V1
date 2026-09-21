@@ -225,6 +225,11 @@ namespace PromptWaffle.DynamicWater
                         var gap = e.Level - (ground + depth);
                         depth += gap * Mathf.Clamp01(e.Rate * dt) * weight;
                         break;
+                    case WaterEffectorKind.Overflow:
+                        var head = Mathf.Min(ground + depth - e.Level, depth);
+                        if (head > 0f)
+                            depth -= Mathf.Min(head, WaterEffector.WeirRate(e.Rate, head) * weight * e.Scale * dt);
+                        break;
                 }
             }
 

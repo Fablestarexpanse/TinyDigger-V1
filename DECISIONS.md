@@ -6,9 +6,9 @@ this records why.
 ---
 
 **NEXT:** PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
-swell (Gerstner waves on the simulated water); waiting on Ronan's look. Open:
+swell and spillway overflows (a safety valve at sea level); waiting on Ronan's look. Open:
 - the game logic still reads `TerrainGrid.IsWater`, not the simulation;
-- the spillways are not drains yet;
+- the spillway water visuals do not yet follow whether the outlet runs;
 - a package sample scene.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
@@ -2118,3 +2118,30 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   - The highlight is now a tight lobe (`900 × smoothness`) weighted by Fresnel, so it breaks into
     a glitter path.
   - New material knobs: `_WindRipples`, `_WindRippleSize` and `_SunGlint`.
+
+## Spillways drain the dynamic water; rim curtains fixed (2026-09-21)
+- **Ruling (Ronan): the spillways are a safety valve.** They let out only water standing above
+  sea level, so nothing runs today until something lifts the sea (later: rain, pumps, sources).
+  The other two options were a steady river inflow with constant spillway flow, and gates the
+  player opens.
+- **Package:** a new effector, `WaterEffectorKind.Overflow` / `WaterEffector.Overflow(position,
+  radius, crestLevel, weirWidth)`.
+  - It is a broad-crested weir: Q = 1.7 × width × head^1.5 m³/s, where head is each cell's own
+    depth over the crest, so the water draws down toward the outlet.
+  - It never adds water and never takes a cell below the crest.
+  - The CPU reference and ShallowWater.compute share the rule. Tests: it leaves water under the
+    crest alone, it drains a pool to the crest and no further at about the weir rate, and it is
+    part of the GPU = CPU check.
+- **TinyDiggers:** `DamSpillways` puts one Overflow at each spillway in `DamView.Slots`. Each sits
+  8 m inside the disc (wholly over cells, so none of its reach is spent on the void), with its
+  crest at sea level and a weir as wide as the spillway (36 m). There are 8 outlets.
+- **Measured in play:** the whole sea was raised 0.5 m (+68 400 m³). It then lost 941 m³ in
+  10.5 s, about 90 m³/s. The ideal is 173 m³/s at the full 0.5 m head; the difference is the
+  0.22 m drawdown at the outlet. At that rate a 0.5 m surge takes well over 10 minutes to run off.
+  The draw-down is too small to see yet. The falling spillway water in the dam kit still pours
+  whether or not the outlet runs.
+- **Leak under the map (Ronan saw it):** this was the surface mesh, not the simulation. Vertices
+  over the void (wall cells) were dropped to y = −10 000, so every triangle along the rim
+  stretched into a curtain hanging under the disc, and half of each still counted as wet. A wall
+  vertex now takes the highest open neighbour's surface, one vertex step away (`_WaterTexel.w` =
+  cells per vertex), and folds out of sight like dry ground.

@@ -68,7 +68,7 @@ namespace PromptWaffle.DynamicWater.URP
             var desc = simulation.Desc;
             _block.SetTexture(StateId, simulation.State);
             _block.SetVector(ZoneId, new Vector4(desc.Origin.x, desc.Origin.y, desc.Width * desc.CellSize, desc.Height * desc.CellSize));
-            _block.SetVector(TexelId, new Vector4(1f / desc.Width, 1f / desc.Height, desc.CellSize, 0f));
+            _block.SetVector(TexelId, new Vector4(1f / desc.Width, 1f / desc.Height, desc.CellSize, _cellsPerVertex));
             var waves = _zone.Waves;
             var settings = _zone.WaveSettings;
             WaterWaves.Pack(waves, _waveA, _waveB);

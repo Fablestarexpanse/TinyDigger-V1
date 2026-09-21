@@ -20,6 +20,14 @@ namespace PromptWaffle.DynamicWater
 
         /// <summary>Pushes water along <see cref="WaterEffector.Direction"/> at <see cref="WaterEffector.Rate"/> m/s².</summary>
         Force = 3,
+
+        /// <summary>
+        /// A weir: lets out only water standing above <see cref="WaterEffector.Level"/> (the crest),
+        /// at the broad-crested weir rate Q = 1.7 × width × head^1.5 m³/s, where the width is
+        /// <see cref="WaterEffector.Rate"/> in metres. Never adds water and never draws below the
+        /// crest, so it does nothing until something lifts the water over it. A spillway.
+        /// </summary>
+        Overflow = 4,
     }
 
     /// <summary>
@@ -56,6 +64,20 @@ namespace PromptWaffle.DynamicWater
 
         public static WaterEffector HoldLevel(Vector2 position, float radius, float level, float response = 0.5f) =>
             new WaterEffector { Kind = (int)WaterEffectorKind.Level, Position = position, Radius = radius, Level = level, Rate = response };
+
+        /// <summary>Broad-crested weir coefficient, SI units (m^0.5/s).</summary>
+        public const float WeirCoefficient = 1.7f;
+
+        /// <summary>
+        /// A spillway <paramref name="weirWidth"/> metres wide with its crest at world height
+        /// <paramref name="crestLevel"/>, drawing from the water within <paramref name="radius"/>.
+        /// </summary>
+        public static WaterEffector Overflow(Vector2 position, float radius, float crestLevel, float weirWidth) =>
+            new WaterEffector { Kind = (int)WaterEffectorKind.Overflow, Position = position, Radius = radius, Level = crestLevel, Rate = weirWidth };
+
+        /// <summary>The weir rate in m³/s for <paramref name="head"/> metres of water over the crest.</summary>
+        public static float WeirRate(float weirWidth, float head) =>
+            head > 0f ? WeirCoefficient * weirWidth * head * Mathf.Sqrt(head) : 0f;
 
         public static WaterEffector Force(Vector2 position, float radius, Vector2 direction, float acceleration) =>
             new WaterEffector { Kind = (int)WaterEffectorKind.Force, Position = position, Radius = radius, Direction = direction.normalized, Rate = acceleration };

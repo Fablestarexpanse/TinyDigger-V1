@@ -4,7 +4,7 @@ using UnityEngine;
 namespace PromptWaffle.DynamicWater
 {
     /// <summary>
-    /// A source, drain, level or force placed in the scene. Every enabled one inside a zone's
+    /// A source, drain, level, force or overflow placed in the scene. Every enabled one inside a zone's
     /// bounds acts on it; move, resize or retune it at runtime and the zone picks it up next frame.
     /// </summary>
     [AddComponentMenu("PromptWaffle/Dynamic Water/Water Effector")]
@@ -20,10 +20,10 @@ namespace PromptWaffle.DynamicWater
         [Tooltip("Metres.")]
         [Min(0.01f)] public float Radius = 2f;
 
-        [Tooltip("Source and drain: m³/s. Level: 0..1 of the gap closed per second. Force: m/s².")]
+        [Tooltip("Source and drain: m³/s. Level: 0..1 of the gap closed per second. Force: m/s². Overflow: weir width in metres.")]
         public float Rate = 5f;
 
-        [Tooltip("Level only: the world height the water surface is pulled toward.")]
+        [Tooltip("Level: the world height the water surface is pulled toward. Overflow: the crest height.")]
         public float Level;
 
         void OnEnable() => Active.Add(this);
@@ -53,6 +53,7 @@ namespace PromptWaffle.DynamicWater
                 WaterEffectorKind.Source => new Color(0.3f, 0.7f, 1f),
                 WaterEffectorKind.Drain => new Color(1f, 0.5f, 0.2f),
                 WaterEffectorKind.Level => new Color(0.4f, 1f, 0.6f),
+                WaterEffectorKind.Overflow => new Color(0.9f, 0.3f, 1f),
                 _ => new Color(1f, 1f, 0.3f),
             };
             Gizmos.DrawWireSphere(transform.position, Radius);

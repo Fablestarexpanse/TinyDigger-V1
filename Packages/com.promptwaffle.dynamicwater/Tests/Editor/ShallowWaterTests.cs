@@ -40,7 +40,7 @@ namespace PromptWaffle.DynamicWater.Tests
 
     /// <summary>
     /// The shallow-water model: water is only ever moved, never made or lost; still water stays
-    /// still; water finds its level over a sill; sources, drains, levels and forces do what they
+    /// still; water finds its level over a sill; sources, drains, levels, forces and overflows do what they
     /// say; walls hold; and the GPU runs the same model as the CPU reference.
     /// </summary>
     public class ShallowWaterTests
@@ -212,6 +212,46 @@ namespace PromptWaffle.DynamicWater.Tests
         }
 
         [Test]
+        public void AnOverflowLeavesWaterBelowItsCrestAlone()
+        {
+            var ground = new ArrayGround(30, 30);
+            var water = Cpu(30, ground);
+            water.FillTo(1f);
+            var before = water.TotalVolume();
+            water.SetEffectors(new[] { WaterEffector.Overflow(new Vector2(7.5f, 7.5f), 3f, 1.2f, 20f) });
+            for (var i = 0; i < 600; i++)
+                water.Step();
+
+            Assert.That(water.TotalVolume(), Is.EqualTo(before).Within(1e-3f));
+        }
+
+        [Test]
+        public void AnOverflowDrainsDownToItsCrestAndNoFurther()
+        {
+            // A 15 m pool 1 m deep with a 2 m weir cresting at 0.6 m.
+            var ground = new ArrayGround(30, 30);
+            var water = Cpu(30, ground);
+            water.FillTo(1f);
+            var start = water.TotalVolume();
+            water.SetEffectors(new[] { WaterEffector.Overflow(new Vector2(2f, 7.5f), 1.5f, 0.6f, 2f) });
+
+            // First second: the weir rate for 0.4 m of head, 1.7 × 2 × 0.4^1.5 ≈ 0.86 m³/s. The
+            // head right at the weir falls first, so allow it to run somewhat under.
+            var steps = Mathf.RoundToInt(1f / water.Desc.FixedStep);
+            for (var i = 0; i < steps; i++)
+                water.Step();
+            var first = start - water.TotalVolume();
+            Assert.That(first, Is.InRange(0.4f, 0.9f), "about the weir rate for the first second");
+
+            for (var i = 0; i < 60000; i++)
+                water.Step();
+            Assert.That(water.SurfaceAt(15, 15), Is.EqualTo(0.6f).Within(0.02f), "down to the crest");
+            for (var z = 0; z < 30; z++)
+                for (var x = 0; x < 30; x++)
+                    Assert.That(water.SurfaceAt(x, z), Is.GreaterThan(0.59f), "never below the crest");
+        }
+
+        [Test]
         public void AForcePushesTheWaterAlong()
         {
             var ground = new ArrayGround(40, 20);
@@ -242,7 +282,8 @@ namespace PromptWaffle.DynamicWater.Tests
             ground[30, 30] = WaterGround.Wall;
             var cpu = Cpu(size, ground);
             DamBreak(cpu, size);
-            var effectors = new[] { WaterEffector.Source(new Vector2(6f, 6f), 1.5f, 2f), WaterEffector.Drain(new Vector2(18f, 6f), 1.5f, 1f) };
+            var effectors = new[] { WaterEffector.Source(new Vector2(6f, 6f), 1.5f, 2f), WaterEffector.Drain(new Vector2(18f, 6f), 1.5f, 1f),
+                WaterEffector.Overflow(new Vector2(12f, 12f), 2f, 0.5f, 4f) };
             cpu.SetEffectors(effectors);
 
             using var gpu = new WaterSimulation(Desc(size), ground);

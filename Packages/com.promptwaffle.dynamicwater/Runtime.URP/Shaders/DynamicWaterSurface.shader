@@ -92,7 +92,7 @@ Shader "PromptWaffle/Dynamic Water Surface"
             // Set per zone by WaterZoneRenderer.
             TEXTURE2D(_WaterState); SAMPLER(sampler_WaterState);
             float4 _WaterZone;   // origin x, origin z, size x, size z (m)
-            float4 _WaterTexel;  // 1/width, 1/height, cell size
+            float4 _WaterTexel;  // 1/width, 1/height, cell size, cells per vertex
 
             // The swell, set per zone by WaterZoneRenderer from WaterWaves.Pack.
             #define PW_MAX_WAVES 8
@@ -168,6 +168,20 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 return displacement;
             }
 
+            // Height for a vertex over a wall: the highest non-wall surface one vertex step away,
+            // or the mesh's own height when it is walled in on every side.
+            float WallStandIn(float2 uv, float fallback)
+            {
+                float2 step = _WaterTexel.xy * max(1.0, _WaterTexel.w);
+                float best = -1e6;
+                float4 s;
+                s = State(uv + float2(step.x, 0)); if (s.x > -1e5) best = max(best, s.x);
+                s = State(uv - float2(step.x, 0)); if (s.x > -1e5) best = max(best, s.x);
+                s = State(uv + float2(0, step.y)); if (s.x > -1e5) best = max(best, s.x);
+                s = State(uv - float2(0, step.y)); if (s.x > -1e5) best = max(best, s.x);
+                return best > -1e5 ? best : fallback;
+            }
+
             Varyings Vert(Attributes input)
             {
                 Varyings output;
@@ -178,8 +192,13 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 float4 state = State(uv);
                 bool wall = state.x < -1e5;
                 float wet = (!wall && state.y > _DryDepth) ? 1.0 : 0.0;
-                // Dry: sink just under the ground so the triangle folds out of sight; walls far down.
-                positionWS.y = wall ? -1e4 : state.x - (1.0 - wet) * 0.15;
+                // Dry: sink just under the ground so the triangle folds out of sight. A wall vertex
+                // (the void round the world) takes the highest open neighbour instead: sent far
+                // down, the triangles along the rim stretched into curtains hanging under the map.
+                float surface = state.x;
+                if (wall)
+                    surface = WallStandIn(uv, input.positionOS.y);
+                positionWS.y = surface - (1.0 - wet) * 0.15;
                 output.baseXZ = positionWS.xz;
                 output.swell = 0;
                 if (wet > 0.5 && _PWWaveCount > 0)

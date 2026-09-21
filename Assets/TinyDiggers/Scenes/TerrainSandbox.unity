@@ -873,6 +873,7 @@ GameObject:
   - component: {fileID: 1181658047}
   - component: {fileID: 1181658046}
   - component: {fileID: 1181658045}
+  - component: {fileID: 1181658050}
   m_Layer: 0
   m_Name: Dynamic Water
   m_TagString: Untagged
@@ -967,6 +968,22 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1181658050
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1181658044}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7d6f7bea0865b3148acc193e4e15a223, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: TinyDiggers.Presentation::TinyDiggers.Presentation.DamSpillways
+  _dam: {fileID: 446856476}
+  _terrain: {fileID: 551060599}
+  _reach: 8
+  _crestAboveSea: 0
 --- !u!1 &1212779770
 GameObject:
   m_ObjectHideFlags: 0
