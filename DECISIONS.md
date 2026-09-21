@@ -2456,3 +2456,23 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   simulation runs.
 - Ronan's call: remove it rather than loosen it. The other WaterTests (what the bake produces,
   and the swell rules) stay. 381/381 pass.
+
+## The crew unit: a floating ball robot (2026-09-21)
+- **Ronan:** the smallest unit, one person in the game, is a small floating ball robot. He asked
+  for 8 concepts to find its style, and picked the first, **`crew_0_lens_8000`**
+  (`Art/Concepts~/crew_0_lens_8000_00001_.png`):
+  - a cream-white shell of rounded panels with a sunny yellow band round the middle;
+  - one big glossy cyan lens for an eye;
+  - two small stubby arms on round shoulder joints;
+  - a soft glow under its belly where it hovers.
+- **How it was made:** the fixed `TinyDiggers_Style_Krea2` workflow, seed 8000. The prompt was
+  the subject sentence, then a new **ROBOT clause**, then the core verbatim. The clause is not in
+  STYLE.md yet (block changes are Ronan's call):
+  > Robot: a small hovering round robot about the size of a football, clearly floating in the air
+  > a hand's width above its soft shadow, with a gentle glow underneath where it floats. Smooth
+  > rounded shell panels like a sturdy toy, few parts, big readable shapes, a simple friendly
+  > face, paint slightly worn at the edges. No plants or bushes anywhere.
+- **Also made before the pick** (in Concepts~ for reference): worker (hard-hat, 8001),
+  brutalist (concrete panels and cyan slits, 8002), two-tone (cream over teal with a face screen,
+  8003). The fifth (rotor, 8004) stalled in ComfyUI on a full GPU (23.5 of 24.5 GB with Unity
+  open), and the rest were not run once Ronan picked.
