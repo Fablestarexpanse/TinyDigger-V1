@@ -139,9 +139,17 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
+        /// Share of <see cref="TerrainGrid.DeepWater"/> a way out of water ends in. Clear of the
+        /// water rather than just under the limit: aimed at the nearest cell under the limit, a
+        /// unit in a rising pool was caught again a cell later, and hopped four times in 0.75 s.
+        /// </summary>
+        public const float ClearOfWater = 0.5f;
+
+        /// <summary>
         /// The way out for a unit the water has come up round: the cheapest path, driving through
         /// water (but never the void, and never up a step it could not climb), to the nearest cell
-        /// that is not water. False if there is none, or the unit is not in water.
+        /// that is not water and has under <see cref="ClearOfWater"/> of the deep-water depth on it.
+        /// False if there is none, or the unit is not in water.
         /// </summary>
         public bool TryFindWayOutOfWater(int startX, int startZ, List<Vector2Int> path)
         {
@@ -151,7 +159,12 @@ namespace TinyDiggers.Units
             _wading = true;
             try
             {
-                var found = Search(startX, startZ, cell => _grid.IsPassableGround(cell % width, cell / width), 0, 0, 0f, false);
+                var clear = _grid.DeepWater * ClearOfWater;
+                var found = Search(startX, startZ, cell =>
+                {
+                    int x = cell % width, z = cell / width;
+                    return _grid.IsPassableGround(x, z) && _grid.WaterDepth(x, z) < clear;
+                }, 0, 0, 0f, false);
                 return Reconstruct(found, path);
             }
             finally

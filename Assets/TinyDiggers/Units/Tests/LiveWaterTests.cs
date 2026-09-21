@@ -170,6 +170,23 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
+        public void TheWayOutGoesPastWaterJustUnderTheLimit()
+        {
+            // Deep in the middle, then a band at 0.45 m: under the 0.5 m limit, but where a rising
+            // pool would catch a unit again straight away. Beyond that, dry.
+            Flood(1, 1, 7, 7, 1.45f);
+            Flood(3, 3, 5, 5, 2f);
+            _grid.SetWaterSurfaces(_surfaces);
+            var path = new List<Vector2Int>();
+
+            Assert.That(new GridPathfinder(_grid).TryFindWayOutOfWater(4, 4, path), Is.True);
+            var exit = path[path.Count - 1];
+            Assert.That(_grid.WaterDepth(exit.x, exit.y), Is.LessThan(_grid.DeepWater * GridPathfinder.ClearOfWater),
+                $"ends clear of the water, not at the 0.45 m band ({exit})");
+            Assert.That(path.Count, Is.EqualTo(5), "out through the band");
+        }
+
+        [Test]
         public void RegionsFollowTheWater()
         {
             _grid.SetWaterSurfaces(_surfaces);

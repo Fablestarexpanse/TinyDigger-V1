@@ -2219,3 +2219,22 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   - the trench still reads 0.94–1.46 m deep and blocked.
 - Tests: `LiveWaterTests` +2. A band changes only its rows, and rows are refused before the
   whole map, as are partial rows and rows past the end.
+
+## Crew climbing out of a flood, watched in play (2026-09-21)
+- **Tool:** `TinyDiggers/Crew Flood Capture`.
+  - It levels a 21×21-cell rock platform at the crew's height. The crew starts on the central
+    mountain, and a first try cut the bowl straight into the 16.5–26 m slope, where the spring
+    simply ran off downhill.
+  - It carves a stepped bowl (middle 1 m down, ring 0.5 m down, every step climbable) and opens a
+    3 m³/s spring in the middle for 25 s.
+  - It logs every status change of every unit in the bowl, and shoots dry, escaping, out and end.
+- **First real run found a flaw.** The escape aimed for the nearest cell under 0.5 m. In a rising
+  pool that was the next cell at 0.49 m, so the water caught the unit again: unit 0 hopped four
+  times in 0.75 s and was twice "out of the water" standing in 0.50–0.54 m.
+- **Fix:** `GridPathfinder.ClearOfWater` = 0.5. A way out now ends where the water is under half
+  the deep-water depth (0.25 m). Test: `TheWayOutGoesPastWaterJustUnderTheLimit`.
+- **After the fix, in play:**
+  - the water reached 0.5 m over the crew 1.96 s after the spring opened;
+  - each of the 4 units (2 diggers, 2 haulers) made one escape, straight to the ring;
+  - all were out by 2.78 s, standing in 0.02–0.03 m;
+  - the haulers then went back to their diggers.
