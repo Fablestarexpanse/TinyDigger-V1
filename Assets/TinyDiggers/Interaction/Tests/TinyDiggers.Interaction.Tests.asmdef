@@ -3,6 +3,7 @@
     "rootNamespace": "TinyDiggers.Interaction.Tests",
     "references": [
         "TinyDiggers.Interaction",
+        "TinyDiggers.Units",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

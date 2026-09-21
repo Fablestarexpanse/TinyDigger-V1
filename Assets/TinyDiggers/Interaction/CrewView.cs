@@ -9,8 +9,9 @@ namespace TinyDiggers.Interaction
 {
     /// <summary>
     /// Scene side of the crew: it owns the <see cref="JobDispatcher"/> the units share, spawns
-    /// them, ticks them and draws a placeholder body (a box about two cells long) and the path of
-    /// each. Clicking a body selects that unit, which the readout then describes; Escape clears
+    /// them, ticks them and draws a body and the path of each. The body is the crew robot prefab,
+    /// playing the clip <see cref="CrewAnimation"/> picks, or a placeholder box when no prefab is
+    /// set. Clicking a body selects that unit, which the readout then describes; Escape clears
     /// the selection. No logic of its own.
     /// </summary>
     public sealed class CrewView : MonoBehaviour
@@ -63,9 +64,27 @@ namespace TinyDiggers.Interaction
         [SerializeField] Color _haulerColor = new Color(0.35f, 0.55f, 0.9f);
         [SerializeField] Color _selectedColor = new Color(1f, 1f, 1f);
 
+        [Tooltip("The crew robot (crew_unit.prefab), with an Animator holding Idle, Move, Work and Carry. Empty: placeholder boxes.")]
+        [SerializeField] GameObject _bodyPrefab;
+
+        [Tooltip("Tint on the selected robot.")]
+        [SerializeField] Color _selectedTint = new Color(1f, 0.95f, 0.55f);
+
+        [Tooltip("Seconds to blend from one clip to the next.")]
+        [SerializeField, Min(0f)] float _clipBlend = 0.15f;
+
+        /// <summary>Size of the robot body; 1 is as modelled, a ball 0.57 m across. Read every frame.</summary>
+        [Min(0.05f)] public float bodyScale = 1f;
+
+        static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+
         readonly List<CrewUnit> _units = new List<CrewUnit>();
         readonly List<Transform> _bodies = new List<Transform>();
         readonly List<MeshRenderer> _renderers = new List<MeshRenderer>();
+        readonly List<Renderer[]> _robotRenderers = new List<Renderer[]>();
+        readonly List<Animator> _animators = new List<Animator>();
+        readonly List<string> _clips = new List<string>();
+        MaterialPropertyBlock _tint;
         readonly List<LineRenderer> _lines = new List<LineRenderer>();
         readonly Vector3[] _pathPoints = new Vector3[512];
 
@@ -108,16 +127,10 @@ namespace TinyDiggers.Interaction
                 var role = i < _diggerCount ? UnitRole.Digger : UnitRole.Hauler;
                 _units.Add(new CrewUnit(Dispatcher, x, z, role, role == UnitRole.Digger ? _capacity : _haulerCapacity));
 
-                var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                body.name = $"{role} {i} Body";
-                body.hideFlags = HideFlags.DontSave;
-                body.transform.SetParent(transform, false);
-                // A unit is a one-cell machine to the crew logic, so its body is sized to the cell.
-                body.transform.localScale = (role == UnitRole.Digger ? _bodySize : _haulerBodySize) * grid.CellSize;
-                var bodyRenderer = body.GetComponent<MeshRenderer>();
-                bodyRenderer.material.color = role == UnitRole.Digger ? _bodyColor : _haulerColor;
-                _bodies.Add(body.transform);
-                _renderers.Add(bodyRenderer);
+                if (_bodyPrefab != null)
+                    AddRobot(role, i);
+                else
+                    AddBox(role, i, grid.CellSize);
 
                 var line = new GameObject($"{role} {i} Path") { hideFlags = HideFlags.DontSave };
                 line.transform.SetParent(transform, false);
@@ -129,6 +142,45 @@ namespace TinyDiggers.Interaction
                 pathLine.positionCount = 0;
                 _lines.Add(pathLine);
             }
+        }
+
+        void AddBox(UnitRole role, int i, float cellSize)
+        {
+            var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            body.name = $"{role} {i} Body";
+            body.hideFlags = HideFlags.DontSave;
+            body.transform.SetParent(transform, false);
+            // A unit is a one-cell machine to the crew logic, so its body is sized to the cell.
+            body.transform.localScale = (role == UnitRole.Digger ? _bodySize : _haulerBodySize) * cellSize;
+            var bodyRenderer = body.GetComponent<MeshRenderer>();
+            bodyRenderer.material.color = role == UnitRole.Digger ? _bodyColor : _haulerColor;
+            _bodies.Add(body.transform);
+            _renderers.Add(bodyRenderer);
+            _robotRenderers.Add(null);
+            _animators.Add(null);
+            _clips.Add(null);
+        }
+
+        void AddRobot(UnitRole role, int i)
+        {
+            var body = Instantiate(_bodyPrefab, transform, false);
+            body.name = $"{role} {i} Body";
+            body.hideFlags = HideFlags.DontSave;
+            var renderers = body.GetComponentsInChildren<Renderer>();
+
+            // A sphere round the model, for clicking; it scales with the body.
+            var bounds = new Bounds(body.transform.position, Vector3.zero);
+            foreach (var r in renderers)
+                bounds.Encapsulate(r.bounds);
+            var hit = body.AddComponent<SphereCollider>();
+            hit.center = body.transform.InverseTransformPoint(bounds.center);
+            hit.radius = bounds.extents.magnitude * 0.6f;
+
+            _bodies.Add(body.transform);
+            _renderers.Add(null);
+            _robotRenderers.Add(renderers);
+            _animators.Add(body.GetComponent<Animator>());
+            _clips.Add(null);
         }
 
         void Update()
@@ -178,12 +230,24 @@ namespace TinyDiggers.Interaction
                 var unit = _units[i];
                 // Unit positions are in cells; the terrain's local space is metres.
                 var position = unit.Position * cellSize;
-                var size = (unit.Role == UnitRole.Digger ? _bodySize : _haulerBodySize) * cellSize;
-                _bodies[i].SetPositionAndRotation(
-                    terrainTransform.TransformPoint(new Vector3(position.x, unit.Height + size.y * 0.5f, position.y)),
-                    terrainTransform.rotation * Quaternion.Euler(0f, unit.Heading, 0f));
-                _renderers[i].material.color = i == _selected ? _selectedColor
-                    : unit.Role == UnitRole.Digger ? _bodyColor : _haulerColor;
+                var rotation = terrainTransform.rotation * Quaternion.Euler(0f, unit.Heading, 0f);
+                if (_renderers[i] != null)
+                {
+                    var size = (unit.Role == UnitRole.Digger ? _bodySize : _haulerBodySize) * cellSize;
+                    _bodies[i].SetPositionAndRotation(
+                        terrainTransform.TransformPoint(new Vector3(position.x, unit.Height + size.y * 0.5f, position.y)), rotation);
+                    _renderers[i].material.color = i == _selected ? _selectedColor
+                        : unit.Role == UnitRole.Digger ? _bodyColor : _haulerColor;
+                }
+                else
+                {
+                    // The robot's origin is the ground under it; it hovers by itself.
+                    _bodies[i].SetPositionAndRotation(
+                        terrainTransform.TransformPoint(new Vector3(position.x, unit.Height, position.y)), rotation);
+                    _bodies[i].localScale = Vector3.one * bodyScale;
+                    PlayClip(i, CrewAnimation.StateFor(unit.State, !unit.Inventory.IsEmpty));
+                    Tint(i, i == _selected ? _selectedTint : Color.white);
+                }
 
 
                 // The path still ahead: from the body to each remaining waypoint's centre.
@@ -202,6 +266,28 @@ namespace TinyDiggers.Interaction
 
                 _lines[i].positionCount = count;
                 _lines[i].SetPositions(_pathPoints);
+            }
+        }
+
+        void PlayClip(int i, string clip)
+        {
+            var animator = _animators[i];
+            if (animator == null || _clips[i] == clip)
+                return;
+            _clips[i] = clip;
+            animator.CrossFadeInFixedTime(clip, _clipBlend);
+        }
+
+        void Tint(int i, Color colour)
+        {
+            _tint ??= new MaterialPropertyBlock();
+            foreach (var r in _robotRenderers[i])
+            {
+                if (r.name == "CrewGlow")
+                    continue;
+                r.GetPropertyBlock(_tint);
+                _tint.SetColor(BaseColorId, colour);
+                r.SetPropertyBlock(_tint);
             }
         }
 

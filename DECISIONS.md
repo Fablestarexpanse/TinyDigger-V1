@@ -2559,3 +2559,34 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   - `crew_unit.mat` has emission on, with that map and an emission colour of white × 2.2.
 - **Hover glow.** Its colour changed from (1, 0.7, 0.28) × 4 to (1, 0.62, 0.18) × 1.6. At × 4
   every channel saturated and the glow read white; at × 1.6 it stays warm yellow.
+
+### The crew robot in the game, and its size (2026-09-21)
+- **Ronan:** "add to game but we need to see various size scales of him in it to pick the one
+  that fits".
+- **CrewView.**
+  - With `_bodyPrefab` set (`crew_unit.prefab` in TerrainSandbox), each unit's body is the robot
+    instead of the placeholder box. With it empty, the boxes are still used.
+  - The robot's origin is the ground; it hovers by itself. `bodyScale` is read every frame; 1 is
+    as modelled.
+  - The clip comes from `CrewAnimation.StateFor(state, loaded)`:
+    - Digging, Tipping or Transferring plays Work;
+    - otherwise a loaded unit plays Carry;
+    - an empty unit on the move plays Move;
+    - anything else plays Idle.
+  - Clips cross-fade over 0.15 s.
+  - Selection tints the body (not the glow) through a property block, and a sphere collider
+    round the model takes the clicks.
+- **Roles look the same for now.** The boxes coloured diggers yellow and haulers blue.
+- **Size shots:** `TinyDiggers/Crew Scale Capture`, in play, stands a row at 0.5×, 0.75×, 1×,
+  1.5×, 2× and 3× in front of the crew. It shoots them from 12 m, 30 m and 70 m, at pitches of
+  35°, 45° and 55°. The shots are in `Screenshots/Crew/crew_scale_*.png`.
+
+  | Scale | Ball across | Tall, with the hover |
+  |-------|-------------|----------------------|
+  | 0.5× | 0.29 m | 0.43 m |
+  | 1× | 0.57 m | 0.85 m |
+  | 2× | 1.14 m | 1.70 m |
+  | 3× | 1.71 m | 2.55 m |
+
+- **Tests:** 389/389 pass, 8 of them new in `CrewAnimationTests`.
+- **Waiting on:** Ronan to pick the scale.
