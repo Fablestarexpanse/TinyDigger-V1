@@ -95,6 +95,8 @@ namespace TinyDiggers.Terrain
             var mediumOffset = Offset(random);
             var warpOffset = Offset(random);
             var ridgeOffset = Offset(random);
+            var ridgeWarp = Offset(random);
+            var materialOffset = Offset(random);
 
             var radius = TerrainGenerator.DiscRadius(grid);
             var centre = new Vector2(width * 0.5f, depth * 0.5f);
@@ -157,8 +159,15 @@ namespace TinyDiggers.Terrain
                     {
                         // Ridged multifractal: the noise is folded about its middle so the field
                         // has creases rather than lumps, which is what makes a ridge read as one.
-                        var crest = RidgedFbm(warped, ridgeOffset, settings.FeatureSize * 0.55f, 4);
-                        highGround[cell] = Smooth(alongRidge) * crest;
+                        //
+                        // Warped again before it is sampled, at about 25 m: without that the
+                        // creases run in the few directions the lattice allows and the mountain
+                        // comes out as a set of big diagonal facets. A medium octave over the
+                        // flanks breaks up what is left of them.
+                        var crestAt = warped + Direction(warped, ridgeWarp, settings.RidgeWarpSize) * settings.RidgeWarpStrength;
+                        var crest = RidgedFbm(crestAt, ridgeOffset, settings.FeatureSize * 0.55f, 4);
+                        crest += (Noise(crestAt, ridgeOffset + new Vector2(211f, 97f), settings.RidgeWarpSize * 1.6f) - 0.5f) * 0.22f;
+                        highGround[cell] = Smooth(alongRidge) * Mathf.Clamp01(crest);
                         height += highGround[cell] * settings.RidgeHeight;
                     }
 
@@ -210,7 +219,16 @@ namespace TinyDiggers.Terrain
             CleanUpShores(heights, inDisc, width, depth, settings, map.Shape, step, fillPockets: false);
             ReadRiverFloors(map, heights, width);
 
-            // --- 9: strata -------------------------------------------------------------------
+            // --- 9: surface materials --------------------------------------------------------
+            // Its own pass over the finished heights, so what a hillside is made of is decided by
+            // the hillside rather than cell by cell as columns are built. See SurfaceMaterials.
+            var wet = new bool[cells];
+            for (var cell = 0; cell < cells; cell++)
+                wet[cell] = inDisc[cell] && heights[cell] < World.SeaLevel + step;
+            var toWater = Distance(wet, inDisc, width, depth, from: true);
+            var surfaceMaterials = SurfaceMaterials.Assign(heights, inDisc, toWater, width, depth, settings, materialOffset);
+
+            // --- 10: strata ------------------------------------------------------------------
             var peak = -1;
             Span<Layer> column = stackalloc Layer[8];
             for (var z = 0; z < depth; z++)
@@ -222,7 +240,7 @@ namespace TinyDiggers.Terrain
                         continue;
                     if (peak < 0 || heights[cell] > heights[peak])
                         peak = cell;
-                    var count = BuildColumn(column, heights[cell], Steepness(heights, width, depth, x, z),
+                    var count = BuildColumn(column, heights[cell], surfaceMaterials[cell],
                         highGround[cell], ValleyStrength(accumulation[cell]), grid.Datum, settings);
                     grid.SetColumn(x, z, column.Slice(0, count));
                 }
@@ -973,7 +991,7 @@ namespace TinyDiggers.Terrain
         /// sand on beaches and under water, bare rock where it is too steep to hold soil, dirt and
         /// topsoil everywhere else.
         /// </summary>
-        static int BuildColumn(Span<Layer> column, float surface, float steepness, float high, float valley,
+        static int BuildColumn(Span<Layer> column, float surface, MaterialId top, float high, float valley,
             float datum, TerrainGenSettings settings)
         {
             var total = surface - datum;
@@ -984,26 +1002,30 @@ namespace TinyDiggers.Terrain
             }
 
             var underwater = surface < World.SeaLevel;
-            // How bare the ground is, from nothing at half a metre a cell to completely bare at
-            // one and a quarter. A hard threshold would draw a line across the hillside; ground
-            // does not work that way, and neither does this.
-            var bare = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.5f, 1.25f, steepness));
-            var steep = bare > 0.6f;
-            // A beach is low ground that is not steep; a steep shore is rock to the waterline.
-            var coastal = !steep && Mathf.Abs(surface - World.SeaLevel) <= settings.SandBand;
 
-            var topsoil = underwater || coastal ? 0f : settings.TopsoilThickness * (1f - bare);
-            // Turf thinner than this is not turf: the ground is bare from here on, which is what
-            // puts rock on the ridges and the steep flanks while the rolling land stays green.
-            if (topsoil < 0.12f)
-                topsoil = 0f;
-            var sand = underwater || coastal ? settings.SandThickness : 0f;
-            if (underwater && steep)
-                sand *= 0.3f;
-            var dirt = underwater ? 0.4f : Mathf.Lerp(settings.DirtOnPlains, settings.DirtOnSlopes, bare);
-            if (coastal && !underwater)
-                dirt *= 0.5f;
-            var clay = valley > 0.35f && !underwater ? settings.ClayInValleys * valley : 0f;
+            // The cap is whatever the surface pass chose, so a hillside is made of what it looks
+            // like it is made of, and one decision covers both.
+            var topsoil = top == MaterialTable.Topsoil ? settings.TopsoilThickness : 0f;
+            var sand = top == MaterialTable.Sand ? settings.SandThickness : 0f;
+            float dirt;
+            if (top == MaterialTable.Topsoil)
+                dirt = settings.DirtOnPlains;
+            else if (top == MaterialTable.Dirt)
+                dirt = settings.DirtOnSlopes * 2f;
+            else if (top == MaterialTable.Sand)
+                dirt = settings.DirtOnSlopes;
+            else
+                dirt = 0f; // Bare rock: nothing lying over it.
+            if (underwater)
+                dirt = Mathf.Min(dirt, 0.4f);
+
+            // Clay stays where it belongs: a band inside a valley, under the soil. On bare rock
+            // there is no soil to be under, so there is no clay either — otherwise a clay band
+            // surfaces on a rocky slope in the middle of a valley, which is both wrong and the
+            // source of single-cell material islands.
+            var clay = valley > 0.35f && !underwater && topsoil + sand + dirt >= MinLayerThickness
+                ? settings.ClayInValleys * valley
+                : 0f;
             var granite = high > 0.05f ? high * settings.RidgeHeight * settings.GraniteShare : 0f;
 
             var cap = topsoil + sand + dirt + clay;

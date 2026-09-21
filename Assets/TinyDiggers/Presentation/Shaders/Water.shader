@@ -104,13 +104,23 @@ Shader "TinyDiggers/Water"
                 float depth = max(0.0, input.water.x);
                 float along = input.water.y;
 
-                // Two crossing ripples, carried downstream on a river and standing still at sea.
+                // Two layers of ripple at different scales, turned against each other and drifting
+                // slowly. One layer of crossing sines lines up into diagonal bands that are
+                // obvious at a grazing angle; two at 5.2 and 1.9 times the scale, rotated by about
+                // fifty degrees, never repeat on top of each other at any distance worth looking at.
                 float time = _Time.y * _RippleSpeed;
                 float drift = along * 0.35 - _Time.y * _FlowSpeed;
                 float2 p = input.positionWS.xz / max(0.5, _RippleScale);
-                float waveA = sin(p.x * 2.1 + p.y * 1.3 + time + drift);
-                float waveB = sin(p.x * -1.4 + p.y * 2.3 + time * 1.31 + drift * 1.7);
-                float3 normalWS = normalize(float3(waveA * _RippleStrength, 1.0, waveB * _RippleStrength));
+
+                float2x2 turn = float2x2(0.64, -0.77, 0.77, 0.64);
+                float2 pA = p * 1.0;
+                float2 pB = mul(turn, p) * 2.7;
+
+                float waveA = sin(pA.x * 1.3 + pA.y * 0.7 + time + drift)
+                            + 0.5 * sin(pA.x * 0.6 - pA.y * 1.1 - time * 0.83);
+                float waveB = sin(pB.x * 0.9 - pB.y * 1.4 + time * 1.21 + drift * 1.7)
+                            + 0.5 * sin(pB.x * 1.6 + pB.y * 0.5 - time * 0.67);
+                float3 normalWS = normalize(float3(waveA * _RippleStrength * 0.6, 1.0, waveB * _RippleStrength * 0.6));
 
                 half4 water = lerp(_Shallow, _Deep, saturate(depth / max(0.5, _DepthRange)));
 

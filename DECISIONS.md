@@ -5,11 +5,12 @@ this records why.
 
 ---
 
-**NEXT:** Slice 8c (colour and light) is done, green (272/272) and pushed on `main`. Nothing is in
-flight. Known and deliberately left: the material boundaries still dither on freshly dug slopes,
-cliffs are still deferred, and the water has no dynamic effects yet (wakes, breaking shoreline
-waves, waterfalls). Still owed from before: a frame-time check on a mid-range machine, and the
-tilt-shift blur toggle.
+**NEXT:** Slice 8d (material assignment) is done, green (279/279) and pushed on `main`. Nothing is
+in flight. Known and deliberately left: the steep flanks still read as large facets — the ridge
+warp helped but the shape underneath is still made of long straight slopes, which is a terrain
+question rather than a material one; cliffs are still deferred; and the water has no dynamic
+effects yet (wakes, breaking shoreline waves, waterfalls). Still owed from before: a frame-time
+check on a mid-range machine, and the tilt-shift blur toggle.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1356,3 +1357,49 @@ was the condition for the whole pass.
 
 Before and after pairs of the same three shots (disc, ridge, coastline) are in
 `Screenshots/Slice8c/`. Tests 272/272 green.
+
+
+---
+
+## Slice 8d — material assignment (2026-09-20)
+
+Three faults, one cause and one cure.
+
+The faults: every slope banded along its contours, single cells of the wrong material speckled the
+whole island, and sand climbed mountains. The cause, in every case, was that a column decided what
+it was made of on its own, from its own steepness, while it was being built.
+
+**Surface material is now its own pass** (`SurfaceMaterials`), run over the finished heights, and
+`BuildColumn` just does as it is told. In that pass:
+
+- **Slope is measured on a smoothed heightfield** (5×5, run twice). This is the whole fix for
+  contour banding: on quantised land a uniform hillside is a staircase, so a per-cell slope
+  alternates row by row and paints the hill in stripes that follow the contours. Smoothed, a
+  uniform hillside is one slope and gets one material.
+- Thresholds are 15°, 30° and 45°, with a noise field about twenty metres across worth ±7°, so the
+  boundaries wander rather than tracing a threshold.
+- Patches under twelve cells are absorbed into whatever surrounds them most, the coastline's own
+  blob cleanup run over materials, twice.
+- **Sand is coastal by definition**: below +3 m and within ten cells of water, and the rule is
+  enforced again after every cleanup, because absorbing a speck can otherwise carry a beach up a
+  hillside. The cells that leaves alone are joined to their neighbours afterwards.
+
+Two bugs the tests found on the way:
+- **Clay was surfacing.** On a bare-rock cell there is no soil for it to be under, so the clay band
+  became the top layer — wrong in itself, and the source of most of the single-cell islands. Clay
+  is now only added when there is something above it.
+- **A cleanup pass can undo the rule that ran before it.** Order matters: despeckle, enforce,
+  despeckle, enforce, then repair whatever is left alone.
+
+Also in this pass: the ridge noise is warped again at about 25 m with a medium octave over its
+flanks, which breaks up the big diagonal facets the lattice was giving it; and the water reads its
+depth from a two-cell blur of the seabed, so the shallows are a gradient rather than a staircase of
+colour bands, with two layers of ripple at different scales and angles instead of one, which takes
+out the diagonal banding at grazing angles.
+
+### Tests (279/279 green)
+New: a uniform slope well inside a band is one material; a uniform 30° slope does not alternate
+along its contours; steeper ground gets a barer material; no patch survives below the minimum; sand
+is never above the beach or inland of it; and the island itself has no high sand and no speckle to
+speak of — "to speak of" being one cell in a thousand, because a one-cell knoll standing a metre
+above a beach is legitimately not sand.

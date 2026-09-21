@@ -111,6 +111,12 @@ namespace TinyDiggers.Terrain
         [Tooltip("Benches of flat ground cut into the lee of the ridge.")]
         [Range(0, 2)] public int Plateaus = 1;
 
+        [Tooltip("Metres across the warp applied to the ridge noise, which stops the crest running " +
+            "in the few directions the noise lattice allows.")]
+        [Min(4f)] public float RidgeWarpSize = 25f;
+
+        [Min(0f)] public float RidgeWarpStrength = 18f;
+
         [Tooltip("Cells across a bench.")]
         [Min(4f)] public float PlateauRadius = 45f;
 
@@ -157,6 +163,36 @@ namespace TinyDiggers.Terrain
 
         [Tooltip("How far the river is allowed to wander off the steepest way down, in cells.")]
         [Min(0f)] public float RiverWander = 1.4f;
+
+        [Header("Surface materials")]
+        [Tooltip("Cells either side of a cell that its slope is measured over. Slope is read from a " +
+            "smoothed heightfield: on quantised land a uniform hillside is a staircase, and a " +
+            "per-cell slope paints it in stripes that follow the contours.")]
+        [Range(1, 4)] public int SlopeSmoothing = 2;
+
+        [Tooltip("Degrees. Below this the ground is grass.")]
+        [Range(0f, 90f)] public float SlopeGrass = 15f;
+
+        [Tooltip("Degrees. Between the two the ground is grass with rock showing through.")]
+        [Range(0f, 90f)] public float SlopeMixed = 30f;
+
+        [Tooltip("Degrees. Past this the ground is bare rock.")]
+        [Range(0f, 90f)] public float SlopeBare = 45f;
+
+        [Tooltip("Metres across the noise that pushes material boundaries about, so they wander.")]
+        [Min(4f)] public float MaterialNoiseSize = 20f;
+
+        [Tooltip("Degrees of slope the noise is worth either way.")]
+        [Min(0f)] public float MaterialNoiseDegrees = 7f;
+
+        [Tooltip("Sand goes no higher than this.")]
+        public float SandMaxHeight = 3f;
+
+        [Tooltip("And no further than this many cells from water.")]
+        [Min(1f)] public float SandMaxDistance = 10f;
+
+        [Tooltip("Cells a patch of one surface material must cover; smaller ones are absorbed.")]
+        [Min(1)] public int MinMaterialPatch = 12;
 
         [Header("Strata")]
         [Min(0f)] public float TopsoilThickness = 0.3f;

@@ -71,6 +71,19 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
 - Generation stays under half a second for 512²: 280–340 ms across the
   archetypes, and a test says so.
 
+### Surface materials (built, slice 8d)
+- What the ground is made of is decided in **its own pass over the finished
+  heights**, not per column as columns are built.
+- **Slope for that decision is measured on a smoothed heightfield** (5×5, twice).
+  On quantised land a uniform hillside is a staircase, so a per-cell slope
+  alternates row by row and paints the hill in stripes along its contours.
+- Thresholds: < 15° grass, 15–30° grass with rock, 30–45° dirt with rock,
+  > 45° rock, with a ~20 m noise field worth ±7° so boundaries wander.
+- Every patch under 12 cells is absorbed into what surrounds it, twice.
+- Sand is coastal: below +3 m and within 10 cells of water, enforced after
+  every cleanup. Clay is a subsurface band in valleys and never the surface —
+  on bare rock there is nothing for it to be under, so there is none.
+
 ### Sea, depth and water cells (built, slice 8)
 - Heights are metres above **sea level, which is 0 m** and is the datum the
   whole world reads against (`World.SeaLevel`). A grid also has a **datum**:

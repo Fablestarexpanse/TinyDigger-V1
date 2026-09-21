@@ -136,13 +136,33 @@ namespace TinyDiggers.Presentation
             for (var i = 0; i < lookup.Length; i++)
                 lookup[i] = -1;
 
-            float DepthAt(int x, int z)
+            float RawDepthAt(int x, int z)
             {
                 x = Mathf.Clamp(x, 0, grid.Width - 1);
                 z = Mathf.Clamp(z, 0, grid.Height - 1);
                 if (!grid.IsGround(x, z))
                     return 12f; // Past the rim: as deep as the channel, so the edge stays dark.
                 return World.SeaLevel - grid.GetSurfaceHeight(x, z);
+            }
+
+            // Averaged over a couple of cells either way. The seabed is quantised to whole metres,
+            // so reading it a cell at a time gives the shallows a staircase of colour bands; a
+            // small blur turns that into the gradient the eye expects of shallow water.
+            float DepthAt(int x, int z)
+            {
+                const int Blur = 2;
+                var sum = 0f;
+                var count = 0;
+                for (var dz = -Blur; dz <= Blur; dz++)
+                {
+                    for (var dx = -Blur; dx <= Blur; dx++)
+                    {
+                        sum += RawDepthAt(x + dx, z + dz);
+                        count++;
+                    }
+                }
+
+                return sum / count;
             }
 
             int VertexAt(int column, int row)
@@ -177,8 +197,8 @@ namespace TinyDiggers.Presentation
                     var z = row * step;
                     // Keep a quad when any corner has water over it, plus a cell of slack so the
                     // sheet runs under the shore rather than stopping short of it.
-                    var wet = DepthAt(x, z) > -1f || DepthAt(x + step, z) > -1f
-                        || DepthAt(x, z + step) > -1f || DepthAt(x + step, z + step) > -1f;
+                    var wet = RawDepthAt(x, z) > -1f || RawDepthAt(x + step, z) > -1f
+                        || RawDepthAt(x, z + step) > -1f || RawDepthAt(x + step, z + step) > -1f;
                     if (!wet)
                         continue;
 

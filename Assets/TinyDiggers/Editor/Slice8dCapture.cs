@@ -10,21 +10,21 @@ using Debug = UnityEngine.Debug;
 namespace TinyDiggers.EditorTools
 {
     /// <summary>
-    /// The Slice 8c evidence run: the same three shots as 8b, from the same poses, so the colour
-    /// and light pass can be judged against the "before" pair rather than against memory.
+    /// The Slice 8d evidence run: the same three shots, from the same poses as 8c, so the material
+    /// pass can be judged against the 8c set rather than against memory.
     ///
     /// Play mode only, and always the Continent seed, because that is what the pass was judged on.
     /// </summary>
-    static class Slice8cCapture
+    static class Slice8dCapture
     {
-        public const string Folder = "Screenshots/Slice8c";
+        public const string Folder = "Screenshots/Slice8d";
 
-        [MenuItem("TinyDiggers/Slice 8c Capture")]
+        [MenuItem("TinyDiggers/Slice 8d Capture")]
         static void Run()
         {
             if (!Application.isPlaying)
             {
-                Debug.LogError("Slice 8c capture: enter play mode first.");
+                Debug.LogError("Slice 8d capture: enter play mode first.");
                 return;
             }
 
@@ -43,7 +43,7 @@ namespace TinyDiggers.EditorTools
                 var camera = FindFirstObjectByType<RtsCamera>();
                 if (view == null || camera == null || view.Settings == null)
                 {
-                    Debug.LogError("Slice 8c capture: no island in the scene.");
+                    Debug.LogError("Slice 8d capture: no island in the scene.");
                     Destroy(gameObject);
                     yield break;
                 }
@@ -55,18 +55,18 @@ namespace TinyDiggers.EditorTools
 
                 camera.GoHome();
                 yield return Frames(60);
-                Capture(camera, "disc-after", "the whole disc under the new light");
+                Capture(camera, "disc", "the whole disc under the new light");
 
                 var grid = view.Grid;
                 var peak = view.Island.Peak;
                 yield return Pose(camera, new Vector3(peak.x, grid.GetSurfaceHeight(peak.x, peak.y), peak.y), 180f, 40f, 28f);
-                Capture(camera, "ridge-after", "the ridge and its valleys");
+                Capture(camera, "ridge", "the ridge and its valleys");
 
                 var shore = FindShore(grid, view);
                 yield return Pose(camera, new Vector3(shore.x, World.SeaLevel, shore.y), 80f, 25f, 26f);
-                Capture(camera, "coastline-after", "beach, shallows and deep water");
+                Capture(camera, "coastline", "beach, shallows and deep water");
 
-                Debug.Log($"Slice 8c capture: done. Shots in {Path.GetFullPath(Folder)}");
+                Debug.Log($"Slice 8d capture: done. Shots in {Path.GetFullPath(Folder)}");
                 Destroy(gameObject);
             }
 
@@ -132,7 +132,7 @@ namespace TinyDiggers.EditorTools
                 Destroy(image);
                 target.Release();
                 Destroy(target);
-                Debug.Log($"Slice 8c capture: {name} — {what}");
+                Debug.Log($"Slice 8d capture: {name} — {what}");
             }
         }
     }
