@@ -10,21 +10,22 @@ using Debug = UnityEngine.Debug;
 namespace TinyDiggers.EditorTools
 {
     /// <summary>
-    /// The Slice 8d evidence run: the same three shots, from the same poses as 8c, so the material
-    /// pass can be judged against the 8c set rather than against memory.
+    /// The Slice 8e evidence run: the same three shots from the same poses again, so cliffs can be
+    /// judged against the 8d set rather than against memory. It also reports how long the land took
+    /// to generate, because the budget is half a second.
     ///
     /// Play mode only, and always the Continent seed, because that is what the pass was judged on.
     /// </summary>
-    static class Slice8dCapture
+    static class Slice8eCapture
     {
-        public const string Folder = "Screenshots/Slice8d";
+        public const string Folder = "Screenshots/Slice8e";
 
-        [MenuItem("TinyDiggers/Slice 8d Capture")]
+        [MenuItem("TinyDiggers/Slice 8e Capture")]
         static void Run()
         {
             if (!Application.isPlaying)
             {
-                Debug.LogError("Slice 8d capture: enter play mode first.");
+                Debug.LogError("Slice 8e capture: enter play mode first.");
                 return;
             }
 
@@ -43,7 +44,7 @@ namespace TinyDiggers.EditorTools
                 var camera = FindFirstObjectByType<RtsCamera>();
                 if (view == null || camera == null || view.Settings == null)
                 {
-                    Debug.LogError("Slice 8d capture: no island in the scene.");
+                    Debug.LogError("Slice 8e capture: no island in the scene.");
                     Destroy(gameObject);
                     yield break;
                 }
@@ -52,6 +53,7 @@ namespace TinyDiggers.EditorTools
                 view.Settings.Shape = LandShape.Continent;
                 view.Regenerate(11);
                 yield return Frames(40);
+                Debug.Log($"Slice 8e: the land generated in {view.Island.Milliseconds:0} ms.");
 
                 camera.GoHome();
                 yield return Frames(60);
@@ -66,7 +68,7 @@ namespace TinyDiggers.EditorTools
                 yield return Pose(camera, new Vector3(shore.x, World.SeaLevel, shore.y), 80f, 25f, 26f);
                 Capture(camera, "coastline", "beach, shallows and deep water");
 
-                Debug.Log($"Slice 8d capture: done. Shots in {Path.GetFullPath(Folder)}");
+                Debug.Log($"Slice 8e capture: done. Shots in {Path.GetFullPath(Folder)}");
                 Destroy(gameObject);
             }
 
@@ -132,7 +134,7 @@ namespace TinyDiggers.EditorTools
                 Destroy(image);
                 target.Release();
                 Destroy(target);
-                Debug.Log($"Slice 8d capture: {name} — {what}");
+                Debug.Log($"Slice 8e capture: {name} — {what}");
             }
         }
     }

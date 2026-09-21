@@ -59,13 +59,13 @@ namespace TinyDiggers.Presentation
         [Range(0f, 2f)] public float DetailStrength = 1f;
 
         /// <summary>Metres one cycle of the slow brightness mottle covers.</summary>
-        [Min(1f)] public float MottleRepeat = 12f;
+        [Min(1f)] public float MottleRepeat = 11.3f;
 
         /// <summary>How far the mottle lifts and drops brightness, either way.</summary>
         [Range(0f, 0.4f)] public float MottleStrength = 0.1f;
 
         /// <summary>Cells a material boundary is blended across.</summary>
-        [Range(0.05f, 1f)] public float BlendWidth = 0.5f;
+        [Range(0.05f, 4f)] public float BlendWidth = 2f;
 
         /// <summary>
         /// Metres. Generated surfaces snap to this, and digs, fills and slumps move whole

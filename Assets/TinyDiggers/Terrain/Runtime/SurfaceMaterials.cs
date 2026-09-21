@@ -102,6 +102,49 @@ namespace TinyDiggers.Terrain
         }
 
         /// <summary>
+        /// Makes both sides of every step taller than one metre rock, because that is what a cliff
+        /// is. The relaxation lets rock stand in such a step; this is the other half of the same
+        /// rule, and it promotes the ground rather than flattening it — the face of a cliff is
+        /// stone, whatever the slope thresholds made of it before the land settled.
+        /// </summary>
+        public static void PromoteCliffFaces(MaterialId[] materials, float[] heights, bool[] inDisc,
+            int width, int depth, float step)
+        {
+            var limit = step + 1e-3f;
+            for (var z = 0; z < depth; z++)
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var cell = z * width + x;
+                    if (!inDisc[cell] || heights[cell] < World.SeaLevel)
+                        continue;
+                    for (var n = 0; n < 4; n++)
+                    {
+                        var nx = x + StepX[n];
+                        var nz = z + StepZ[n];
+                        if (nx < 0 || nz < 0 || nx >= width || nz >= depth)
+                            continue;
+                        var next = nz * width + nx;
+                        if (!inDisc[next] || heights[next] < World.SeaLevel)
+                            continue;
+                        if (Mathf.Abs(heights[cell] - heights[next]) <= limit)
+                            continue;
+                        materials[cell] = MaterialTable.Rock;
+                        materials[next] = MaterialTable.Rock;
+                    }
+                }
+            }
+        }
+
+        /// <summary>Joins whatever a later pass left on its own to its neighbours.</summary>
+        public static void Tidy(MaterialId[] materials, float[] heights, bool[] inDisc, float[] toWater,
+            int width, int depth, TerrainGenSettings settings)
+        {
+            RepairLonelyCells(materials, heights, inDisc, toWater, width, depth, settings);
+            RepairLonelyCells(materials, heights, inDisc, toWater, width, depth, settings);
+        }
+
+        /// <summary>
         /// The material for one cell: sand only low and near water, then grass, grass-and-rock,
         /// dirt-and-rock and bare rock as the ground gets steeper.
         /// </summary>

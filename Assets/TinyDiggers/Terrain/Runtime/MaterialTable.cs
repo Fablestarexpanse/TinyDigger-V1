@@ -83,6 +83,14 @@ namespace TinyDiggers.Terrain
         /// where cut faces hold. Slopes of one 1 m step per cell never slump (a move needs a 2 m
         /// drop), so generated terraces are stable.
         /// </summary>
+        /// <summary>
+        /// Whether a material stands up rather than slumping: rock, granite and bedrock. A step
+        /// taller than one height step is only allowed between two of these — that is what a cliff
+        /// is — and the crew works such a face from its foot rather than walking up it.
+        /// </summary>
+        public static bool IsStone(MaterialId material) =>
+            material == Rock || material == Granite || material == Bedrock;
+
         public static MaterialTable CreateDefault()
         {
             return new MaterialTable(

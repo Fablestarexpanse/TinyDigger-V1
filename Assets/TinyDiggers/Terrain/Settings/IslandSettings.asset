@@ -12,15 +12,37 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 934791ea661cec745b0ef9fe58960cfb, type: 3}
   m_Name: IslandSettings
   m_EditorClassIdentifier: TinyDiggers.Terrain::TinyDiggers.Terrain.TerrainGenSettings
-  Seed: 1
+  Seed: 11
   Datum: -45
   FeatureSize: 120
   BaseRelief: 26
   BaseHeight: 14
   MediumSize: 40
   MediumRelief: 1.5
+  DetailSize: 8
+  DetailRelief: 1.1
   WarpSize: 45
   WarpStrength: 14
+  Shape: 1
+  LandFeatureSize: 150
+  LandThreshold: -0.02
+  LandWarpStrength: 34
+  RimWaterCells: 25
+  MinLandBlob: 40
+  MinWaterPocket: 12
+  BeachCells: 5
+  BeachHeight: 2
+  BeachMaxSlope: 0.55
+  ShallowCells: 10
+  MaxCliffStep: 3
+  CliffSlope: 44
+  RidgeHeight: 40
+  RidgeWidth: 110
+  ValleyCut: 9
+  Plateaus: 1
+  RidgeWarpSize: 25
+  RidgeWarpStrength: 18
+  PlateauRadius: 45
   ShelfCells: 40
   ShelfNearDepth: -3
   ShelfFarDepth: -8
@@ -36,6 +58,15 @@ MonoBehaviour:
   RiverWidth: 4
   RiverDepth: 2.5
   RiverWander: 1.4
+  SlopeSmoothing: 2
+  SlopeGrass: 15
+  SlopeMixed: 30
+  SlopeBare: 45
+  MaterialNoiseSize: 20
+  MaterialNoiseDegrees: 7
+  SandMaxHeight: 3
+  SandMaxDistance: 10
+  MinMaterialPatch: 12
   TopsoilThickness: 0.3
   DirtOnPlains: 2.2
   DirtOnSlopes: 0.5

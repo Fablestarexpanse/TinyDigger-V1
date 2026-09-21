@@ -5,12 +5,12 @@ this records why.
 
 ---
 
-**NEXT:** Slice 8d (material assignment) is done, green (279/279) and pushed on `main`. Nothing is
-in flight. Known and deliberately left: the steep flanks still read as large facets — the ridge
-warp helped but the shape underneath is still made of long straight slopes, which is a terrain
-question rather than a material one; cliffs are still deferred; and the water has no dynamic
-effects yet (wakes, breaking shoreline waves, waterfalls). Still owed from before: a frame-time
-check on a mid-range machine, and the tilt-shift blur toggle.
+**NEXT:** Slice 8e (cliffs) is done, green (283/283) and pushed on `main`. Nothing is in flight.
+Open for Ronan's call: with the facets gone the island now reads alpine rather than cosy — the land
+is steeper overall, so the slope thresholds put rock on most of the ridge. The levers are
+`RidgeHeight`, `DetailRelief` and `SlopeGrass`/`SlopeMixed` on the settings asset; this is a tuning
+decision, not a bug. Still deferred: water dynamic effects; still owed: a frame-time check on a
+mid-range machine and the tilt-shift blur toggle.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1403,3 +1403,53 @@ along its contours; steeper ground gets a barer material; no patch survives belo
 is never above the beach or inland of it; and the island itself has no high sand and no speckle to
 speak of — "to speak of" being one cell in a thousand, because a one-cell knoll standing a metre
 above a beach is legitimately not sand.
+
+
+---
+
+## Slice 8e — let mountains be mountains (2026-09-20)
+
+Ronan's diagnosis, confirmed: the flat facets were the one-metre neighbour rule clamping every
+steep face to forty-five degrees. Noise could not fix that, because the relaxation undid whatever
+the noise did.
+
+### Cliffs
+Rock may now stand in a step of up to `MaxCliffStep` (3 m) to a neighbour of rock; soil keeps the
+one-metre rule, because soil slumps and rock does not. The relaxation cannot ask the materials
+which cells are rock — they are decided afterwards — so it works from a **cliff mask** taken off the
+slope of the unrelaxed field: where the land already wants to stand up, it is allowed to. After the
+materials are assigned, **both sides of every step taller than a metre are promoted to rock**, which
+is the same rule from the other end and keeps the two consistent without a second material pass.
+That second pass was tried and cost the half-second budget (504 ms); promoting the faces instead
+brought it back to 450 ms.
+
+### The crew and cliffs
+- A cliff is a wall: the pathfinder already refused any step over the climb limit, and there is a
+  test that says so for a six-metre face.
+- **But a wall must not make a hill unworkable.** Two rules made a cliffed hill a deadlock:
+  1. Dig reach was symmetrical, so a unit at the foot of a face could not touch anything six metres
+     above it. A digger may now work a **rock** face up to `CliffReachLevels` (6) above its stand,
+     taking the top step off at a time — the way a machine works a high face from below. Soil is
+     not worked this way; a soil face that tall cannot exist.
+  2. **Benching** held every dig cell within one climbable step of its highest dig neighbour, so
+     the face could not come down until the cells behind it did, and those could not be reached
+     until the face came down. Rock neighbours now only have to stay within `CliffWorkDepth` (6 m).
+  With both, two diggers and a hauler take a bite out of a six-metre rock cliff from the plain,
+  hands off, and there is a test that says so.
+
+### Relief, blend and mottle
+Peaks 35–45 m, ridge flanks twice as wide, and a fine 8 m octave over every slope so no face is a
+plane. The material blend is two cells wide with its edge pushed about by noise, and the mottle is
+at 11.3 m so it no longer beats against the one-metre grid.
+
+### Slump
+A freshly generated island, every cell queued, settles without a single cell moving — rock's angle
+of repose already holds a cliff up, and there is a test that says so.
+
+Generation: **450 ms** for 512², inside the budget.
+
+### Tests (283/283 green)
+New: only rock stands in a cliff and none is taller than the limit; a freshly generated cliff is
+stable once the slump has settled; a cliff is a wall to the crew; a crew takes a cliffed hill down
+from the bottom. The old "land never steps more than a metre" test now says the rule as it is:
+soil never steps more than a metre, rock never more than a cliff.

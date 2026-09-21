@@ -28,9 +28,9 @@ Shader "TinyDiggers/Terrain Triplanar"
         _AlbedoRepeat ("Albedo repeat (m)", Range(0.1, 8)) = 0.5
         _DetailRepeat ("Detail normal repeat (m)", Range(0.05, 4)) = 0.25
         _DetailStrength ("Detail normal strength", Range(0, 2)) = 1
-        _MottleRepeat ("Mottle repeat (m)", Range(2, 40)) = 12
+        _MottleRepeat ("Mottle repeat (m)", Range(2, 40)) = 11.3
         _MottleStrength ("Mottle strength", Range(0, 0.4)) = 0.1
-        _BlendWidth ("Material blend width (cells)", Range(0.05, 1)) = 0.5
+        _BlendWidth ("Material blend width (cells)", Range(0.05, 4)) = 2
         _TriplanarSharpness ("Triplanar sharpness", Range(1, 16)) = 4
         _SteepStart ("Cut starts (degrees)", Range(0, 90)) = 40
         _SteepEnd ("Cut complete (degrees)", Range(0, 90)) = 55
@@ -199,6 +199,10 @@ Shader "TinyDiggers/Terrain Triplanar"
                 // of the cell is at +0.5, and the fragment blends toward whichever centres are
                 // near it.
                 float2 cell = positionWS.xz - _TerrainOrigin.xy;
+                // The boundary is pushed about by a little noise before the blend is worked out,
+                // so a material edge is a ragged line rather than a straight one between two cell
+                // centres. Metres, not cells, so it does not scale with the blend width.
+                cell += (float2(ValueNoise(positionWS.xz * 0.35), ValueNoise(positionWS.zx * 0.35 + 17.0)) - 0.5) * 1.6;
                 float2 centred = cell - 0.5;
                 float2 baseCell = floor(centred);
                 float2 f = centred - baseCell;

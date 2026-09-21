@@ -71,6 +71,14 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
 - Generation stays under half a second for 512²: 280–340 ms across the
   archetypes, and a test says so.
 
+### Cliffs (built, slice 8e)
+- Rock (and granite and bedrock) may stand in a step of up to 3 m to a
+  neighbour of rock. Soil keeps the one-metre rule, because soil slumps.
+- To the crew a cliff is a wall. It is still workable: a digger can take the
+  top off a rock face up to 6 m above where it stands, and benching lets a rock
+  neighbour sit up to 6 m above the cell being cut, so a cliffed hill comes
+  down from its foot without being told how.
+
 ### Surface materials (built, slice 8d)
 - What the ground is made of is decided in **its own pass over the finished
   heights**, not per column as columns are built.

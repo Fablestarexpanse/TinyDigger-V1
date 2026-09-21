@@ -57,6 +57,11 @@ namespace TinyDiggers.Terrain
 
         [Min(0f)] public float MediumRelief = 1.5f;
 
+        [Tooltip("Metres across the finest octave of the land, the one that stops a slope being planar.")]
+        [Min(2f)] public float DetailSize = 8f;
+
+        [Min(0f)] public float DetailRelief = 1.1f;
+
         [Tooltip("Metres across the features of the domain warp, which bends every contour.")]
         [Min(4f)] public float WarpSize = 45f;
 
@@ -98,12 +103,21 @@ namespace TinyDiggers.Terrain
         [Tooltip("Cells of shallow shelf out from the shore before the sea drops away.")]
         [Min(1)] public int ShallowCells = 10;
 
+        [Header("Cliffs")]
+        [Tooltip("Metres two neighbouring cells of rock may differ by. Soil keeps the one-metre " +
+            "rule, because soil slumps. Clamping every steep face to one metre is what planes a " +
+            "mountain into flat forty-five degree facets.")]
+        [Min(1f)] public float MaxCliffStep = 3f;
+
+        [Tooltip("Degrees of smoothed slope at which ground is allowed to stand in a cliff.")]
+        [Range(10f, 80f)] public float CliffSlope = 44f;
+
         [Header("Ridge and valleys")]
         [Tooltip("Metres the ridge stands at its highest.")]
-        [Min(0f)] public float RidgeHeight = 52f;
+        [Min(0f)] public float RidgeHeight = 40f;
 
         [Tooltip("Cells from the ridge line to where it has faded out.")]
-        [Min(4f)] public float RidgeWidth = 55f;
+        [Min(4f)] public float RidgeWidth = 110f;
 
         [Tooltip("How deep the rivers cut their valleys. 0 leaves the land as the noise made it.")]
         [Min(0f)] public float ValleyCut = 9f;

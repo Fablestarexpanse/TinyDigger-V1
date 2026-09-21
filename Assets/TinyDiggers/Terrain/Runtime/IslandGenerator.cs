@@ -153,6 +153,10 @@ namespace TinyDiggers.Terrain
                     var warped = Warp(x, z, warpOffset, settings.WarpSize, settings.WarpStrength);
                     var height = settings.BaseHeight + Fbm(warped, baseOffset, settings.FeatureSize, 4) * settings.BaseRelief;
                     height += (Noise(warped, mediumOffset, settings.MediumSize) - 0.5f) * settings.MediumRelief;
+                    // A fine octave over everything: at five to twelve metres it is too small to
+                    // read as a hill and too big to be noise, which is exactly what stops a slope
+                    // coming out as one flat plane.
+                    height += (Fbm(warped, mediumOffset + new Vector2(313f, 77f), settings.DetailSize, 2) * 2f) * settings.DetailRelief;
 
                     var alongRidge = 1f - DistanceToCurve(warped, ridge) / Mathf.Max(4f, settings.RidgeWidth);
                     if (alongRidge > 0f)
@@ -199,21 +203,25 @@ namespace TinyDiggers.Terrain
                 isLand[cell] = land[cell];
             }
 
-            var sweeps = Relax(heights, isLand, width, depth, step);
+            // Where the land wants to stand up, it is allowed to: a cliff mask from the slope of
+            // the field before it is relaxed, so the relaxation knows which faces are rock before
+            // there are any materials to ask.
+            var cliff = CliffMask(heights, inDisc, width, depth, settings);
+            var sweeps = Relax(heights, isLand, cliff, width, depth, step, settings.MaxCliffStep);
 
             // --- 8: rivers -------------------------------------------------------------------
             CarveRivers(map, heights, land, accumulation, width, depth, grid, settings, step);
 
             for (var cell = 0; cell < cells; cell++)
                 isLand[cell] = land[cell] && heights[cell] >= World.SeaLevel;
-            sweeps = Mathf.Max(sweeps, Relax(heights, isLand, width, depth, step));
+            sweeps = Mathf.Max(sweeps, Relax(heights, isLand, cliff, width, depth, step, settings.MaxCliffStep));
 
             // The mask's cleanup was about where land was meant to be; this one is about where it
             // ended up, because relaxing, beaching and carving all move cells across the waterline.
             CleanUpShores(heights, inDisc, width, depth, settings, map.Shape, step, fillPockets: true);
             for (var cell = 0; cell < cells; cell++)
                 isLand[cell] = heights[cell] >= World.SeaLevel;
-            sweeps = Mathf.Max(sweeps, Relax(heights, isLand, width, depth, step));
+            sweeps = Mathf.Max(sweeps, Relax(heights, isLand, cliff, width, depth, step, settings.MaxCliffStep));
             // Once more, dropping specks only: relaxing lowers cells, which can cut a corner of
             // land off from the rest, and a one-cell island is not somewhere to play.
             CleanUpShores(heights, inDisc, width, depth, settings, map.Shape, step, fillPockets: false);
@@ -227,6 +235,13 @@ namespace TinyDiggers.Terrain
                 wet[cell] = inDisc[cell] && heights[cell] < World.SeaLevel + step;
             var toWater = Distance(wet, inDisc, width, depth, from: true);
             var surfaceMaterials = SurfaceMaterials.Assign(heights, inDisc, toWater, width, depth, settings, materialOffset);
+
+            // Both sides of a cliff are rock by definition — the relaxation only lets a step stand
+            // where the land was already steep — so the faces are promoted to rock rather than the
+            // land being flattened to suit the materials. One material pass, not two: assigning
+            // them is the expensive part of generating a map and the budget is half a second.
+            SurfaceMaterials.PromoteCliffFaces(surfaceMaterials, heights, inDisc, width, depth, step);
+            SurfaceMaterials.Tidy(surfaceMaterials, heights, inDisc, toWater, width, depth, settings);
 
             // --- 10: strata ------------------------------------------------------------------
             var peak = -1;
@@ -726,7 +741,26 @@ namespace TinyDiggers.Terrain
         /// Water is left alone: a shelf may fall away as steeply as it likes, it is only what the
         /// crew walks on that has to stay climbable.
         /// </summary>
-        static int Relax(float[] heights, bool[] isLand, int width, int depth, float step)
+        /// <summary>Rock, granite and bedrock stand up; everything else slumps.</summary>
+        public static bool IsStone(MaterialId material) => MaterialTable.IsStone(material);
+
+        /// <summary>
+        /// Which cells are allowed to stand in a cliff: the ones the land is already steep at,
+        /// measured on a smoothed field so the answer is about the hillside rather than about one
+        /// cell of a staircase. These are the cells the material pass will call rock.
+        /// </summary>
+        static bool[] CliffMask(float[] heights, bool[] inDisc, int width, int depth, TerrainGenSettings settings)
+        {
+            var smoothed = SurfaceMaterials.Smooth(heights, inDisc, width, depth, Mathf.Max(1, settings.SlopeSmoothing));
+            var cliff = new bool[heights.Length];
+            for (var z = 0; z < depth; z++)
+                for (var x = 0; x < width; x++)
+                    cliff[z * width + x] = inDisc[z * width + x]
+                        && SurfaceMaterials.SlopeDegrees(smoothed, inDisc, width, depth, x, z) >= settings.CliffSlope;
+            return cliff;
+        }
+
+        static int Relax(float[] heights, bool[] isLand, bool[] cliff, int width, int depth, float step, float cliffStep)
         {
             for (var sweep = 0; sweep < MaxRelaxSweeps; sweep++)
             {
@@ -734,19 +768,19 @@ namespace TinyDiggers.Terrain
 
                 for (var z = 0; z < depth; z++)
                     for (var x = 1; x < width; x++)
-                        moved |= Pull(heights, isLand, z * width + x, z * width + x - 1, step);
+                        moved |= Pull(heights, isLand, cliff, z * width + x, z * width + x - 1, step, cliffStep);
 
                 for (var z = 0; z < depth; z++)
                     for (var x = width - 2; x >= 0; x--)
-                        moved |= Pull(heights, isLand, z * width + x, z * width + x + 1, step);
+                        moved |= Pull(heights, isLand, cliff, z * width + x, z * width + x + 1, step, cliffStep);
 
                 for (var z = 1; z < depth; z++)
                     for (var x = 0; x < width; x++)
-                        moved |= Pull(heights, isLand, z * width + x, (z - 1) * width + x, step);
+                        moved |= Pull(heights, isLand, cliff, z * width + x, (z - 1) * width + x, step, cliffStep);
 
                 for (var z = depth - 2; z >= 0; z--)
                     for (var x = 0; x < width; x++)
-                        moved |= Pull(heights, isLand, z * width + x, (z + 1) * width + x, step);
+                        moved |= Pull(heights, isLand, cliff, z * width + x, (z + 1) * width + x, step, cliffStep);
 
                 if (!moved)
                     return sweep;
@@ -755,15 +789,23 @@ namespace TinyDiggers.Terrain
             return MaxRelaxSweeps;
         }
 
-        /// <summary>Lowers <paramref name="cell"/> to one step above <paramref name="from"/> if it stands higher than that.</summary>
-        static bool Pull(float[] heights, bool[] isLand, int cell, int from, float step)
+        /// <summary>
+        /// Lowers <paramref name="cell"/> until it stands no more than one step above
+        /// <paramref name="from"/> — or, where both cells are rock, no more than a cliff's worth.
+        ///
+        /// That exception is the whole point of it: clamping every steep face to one metre a cell
+        /// is what planes a mountain into flat forty-five degree facets. Rock stands up; soil does
+        /// not, and keeps the one-metre rule, which is also the rule the slump simulator enforces.
+        /// </summary>
+        static bool Pull(float[] heights, bool[] isLand, bool[] cliff, int cell, int from, float step, float cliffStep)
         {
             if (!isLand[cell])
                 return false;
-            var limit = heights[from] + step;
+            var allowed = cliff != null && cliff[cell] && cliff[from] ? cliffStep : step;
+            var limit = heights[from] + allowed;
             if (heights[cell] <= limit + 1e-4f)
                 return false;
-            heights[cell] = limit;
+            heights[cell] = Mathf.Round(limit / step) * step;
             return true;
         }
 

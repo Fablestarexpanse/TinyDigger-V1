@@ -110,7 +110,7 @@ namespace TinyDiggers.Terrain.Tests
         }
 
         [Test]
-        public void LandNeverStepsMoreThanOneMetreToANeighbour()
+        public void SoilNeverStepsMoreThanOneMetreAndRockNeverMoreThanACliff()
         {
             var grid = NewGrid();
             IslandGenerator.Generate(grid, _settings);
@@ -127,8 +127,16 @@ namespace TinyDiggers.Terrain.Tests
                         if (!grid.IsGround(x + dx, z + dz) || grid.IsWater(x + dx, z + dz))
                             continue;
                         var neighbour = grid.GetSurfaceHeight(x + dx, z + dz);
-                        Assert.That(Mathf.Abs(height - neighbour), Is.LessThanOrEqualTo(1f + 1e-3f),
-                            $"cell ({x}, {z}) steps to ({x + dx}, {z + dz})");
+                        var difference = Mathf.Abs(height - neighbour);
+                        if (difference <= 1f + 1e-3f)
+                            continue;
+
+                        // Rock is allowed to stand in a cliff; soil is not, because soil slumps.
+                        Assert.That(IslandGenerator.IsStone(grid.GetTopMaterial(x, z))
+                            && IslandGenerator.IsStone(grid.GetTopMaterial(x + dx, z + dz)), Is.True,
+                            $"cell ({x}, {z}) steps {difference} m to ({x + dx}, {z + dz}) on soil");
+                        Assert.That(difference, Is.LessThanOrEqualTo(_settings.MaxCliffStep + 1e-3f),
+                            $"cell ({x}, {z}) steps {difference} m to ({x + dx}, {z + dz})");
                     }
                 }
             }

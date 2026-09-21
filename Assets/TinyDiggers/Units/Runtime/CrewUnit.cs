@@ -116,6 +116,12 @@ namespace TinyDiggers.Units
         /// <summary>How many height steps above its own cell the unit can dig, or tip up to.</summary>
         public int DigReachLevels = 2;
 
+        /// <summary>
+        /// How far up a rock face a unit can work from its foot, in height steps. Taller than the
+        /// ordinary dig reach on purpose: see <see cref="WithinDigReach"/>.
+        /// </summary>
+        public int CliffReachLevels = 6;
+
         /// <summary>Seconds per height step dug, or per tip.</summary>
         public float WorkInterval = 0.4f;
 
@@ -331,6 +337,25 @@ namespace TinyDiggers.Units
         /// <summary>Whether a unit standing at height <paramref name="standHeight"/> can dig or fill a cell at <paramref name="cellHeight"/>.</summary>
         public bool WithinReach(float standHeight, float cellHeight) =>
             Math.Abs(cellHeight - standHeight) <= DigReachLevels * Step + Epsilon;
+
+        /// <summary>
+        /// Whether a unit standing at <paramref name="standHeight"/> can dig the cell at
+        /// (<paramref name="x"/>, <paramref name="z"/>).
+        ///
+        /// Ordinary reach, plus one exception: a **rock face** standing over the unit can be worked
+        /// from its foot, up to <see cref="CliffReachLevels"/> above it, taking the top step off at
+        /// a time. Without that a cliff is not merely unclimbable, which it should be, but
+        /// unworkable, and a hill with a cliff on it can never be taken down at all. Soil is not
+        /// worked this way: a soil face that tall cannot exist, because it slumps.
+        /// </summary>
+        public bool WithinDigReach(float standHeight, int x, int z)
+        {
+            var cellHeight = _grid.GetSurfaceHeight(x, z);
+            if (WithinReach(standHeight, cellHeight))
+                return true;
+            return cellHeight - standHeight <= CliffReachLevels * Step + Epsilon
+                && MaterialTable.IsStone(_grid.GetTopMaterial(x, z));
+        }
 
         /// <summary>Whether a unit on (standX, standZ) can work the adjacent cell (targetX, targetZ).</summary>
         public bool CanWork(int standX, int standZ, int targetX, int targetZ)
@@ -731,7 +756,7 @@ namespace TinyDiggers.Units
             {
                 case CrewJobKind.Dig:
                     return Role == UnitRole.Digger
-                        && WithinReach(standHeight, _grid.GetSurfaceHeight(x, z))
+                        && WithinDigReach(standHeight, x, z)
                         && !_dispatcher.IsClaimedByOther(x, z, Id)
                         && CanDigStep(standHeight, x, z);
                 case CrewJobKind.Fill:
@@ -922,7 +947,7 @@ namespace TinyDiggers.Units
                         continue;
                     var standHeight = _grid.GetSurfaceHeight(standX, standZ);
                     if (kind == DesignationKind.Dig
-                        ? Role == UnitRole.Digger && WithinReach(standHeight, _grid.GetSurfaceHeight(x, z)) && CanDigStep(standHeight, x, z)
+                        ? Role == UnitRole.Digger && WithinDigReach(standHeight, x, z) && CanDigStep(standHeight, x, z)
                         : CanTipOnto(standX, standZ, standHeight, x, z, FillCap(x, z)))
                         return true;
                 }
@@ -1134,7 +1159,7 @@ namespace TinyDiggers.Units
         {
             var target = JobTarget;
             var standHeight = _grid.GetSurfaceHeight(JobStand.x, JobStand.y);
-            if (!WithinReach(standHeight, _grid.GetSurfaceHeight(target.x, target.y)) || !CanDigStep(standHeight, target.x, target.y))
+            if (!WithinDigReach(standHeight, target.x, target.y) || !CanDigStep(standHeight, target.x, target.y))
             {
                 if (_designations.GetKind(target.x, target.y) == DesignationKind.Dig && !HasDiggableTop(target.x, target.y))
                 {

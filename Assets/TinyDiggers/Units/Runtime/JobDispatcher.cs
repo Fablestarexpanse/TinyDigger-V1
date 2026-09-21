@@ -38,6 +38,13 @@ namespace TinyDiggers.Units
         /// <summary>Seconds a target is left alone after no ramp to it could be planned.</summary>
         public float RampBlockedSeconds = 10f;
 
+        /// <summary>
+        /// Metres of rock face a unit may take off from its foot. Benching holds a soil neighbour
+        /// within one climbable step; rock only has to stay within this, because a face of it can
+        /// be worked from below. See <see cref="CrewUnit.WithinDigReach"/>.
+        /// </summary>
+        public float CliffWorkDepth = 6f;
+
         /// <summary>Extra corridor cost per metre a step is over the climb limit.</summary>
         public float RampSteepPenalty = 20f;
 
@@ -418,8 +425,16 @@ namespace TinyDiggers.Units
             {
                 var nx = x + NeighbourX[n];
                 var nz = z + NeighbourZ[n];
-                if (_grid.InBounds(nx, nz) && _designations.GetKind(nx, nz) == DesignationKind.Dig)
-                    floor = Math.Max(floor, _grid.GetSurfaceHeight(nx, nz) - climb);
+                if (!_grid.InBounds(nx, nz) || _designations.GetKind(nx, nz) != DesignationKind.Dig)
+                    continue;
+
+                // Rock is worked from below: a unit at the foot of a face cuts the top off it a
+                // step at a time, so a rock neighbour only has to stay within that reach rather
+                // than within a climbable step. Holding it to a step is what deadlocks a cliffed
+                // hill — the face cannot come down until its neighbour does, and the neighbour
+                // cannot be reached until the face comes down.
+                var depth = MaterialTable.IsStone(_grid.GetTopMaterial(nx, nz)) ? CliffWorkDepth : climb;
+                floor = Math.Max(floor, _grid.GetSurfaceHeight(nx, nz) - depth);
             }
 
             return floor;
@@ -536,7 +551,7 @@ namespace TinyDiggers.Units
                     return Blocked($"ramp would cut into designated ({high.x}, {high.y})");
                 var standHeight = _grid.GetSurfaceHeight(stand.x, stand.y);
                 var highHeight = _grid.GetSurfaceHeight(high.x, high.y);
-                if (!unit.WithinReach(standHeight, highHeight))
+                if (!unit.WithinReach(standHeight, highHeight) && !MaterialTable.IsStone(_grid.GetTopMaterial(high.x, high.y)))
                     return Blocked($"{highHeight - standHeight:0.#} m cliff at ({high.x}, {high.y}) is out of reach");
 
                 _designations.Designate(high.x, high.y, DesignationKind.Dig, lowHeight + step, auto: true);
@@ -546,7 +561,7 @@ namespace TinyDiggers.Units
             }
 
             var last = _corridor[_corridor.Count - 2];
-            return Blocked(unit.WithinReach(_grid.GetSurfaceHeight(last.x, last.y), _grid.GetSurfaceHeight(target.x, target.y))
+            return Blocked(unit.WithinDigReach(_grid.GetSurfaceHeight(last.x, last.y), target.x, target.y)
                 ? $"nowhere to stand beside ({target.x}, {target.y})"
                 : $"({target.x}, {target.y}) is out of reach of every way up");
         }
