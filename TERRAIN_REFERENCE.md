@@ -111,6 +111,13 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
 - The plinth wall's top stands a metre above the sea, so the water is held
   inside the table rather than running off it.
 
+### Ore underground (built, slice 10)
+- Coal (a seam at one height, around 6 m below sea level), limestone (shallow beds under the
+  lowlands), iron (lenses 4–15 m down) and copper (small bodies near ridges). Each lies inside the
+  rock and bedrock, never in the soil, and never moves the surface.
+- Each has a loose form that keeps its identity once dug.
+- F7 shows the nearest ore within 20 m. The toolbar tallies what the crew has dug.
+
 ### Materials (to add)
 - **Disturbed variants are separate materials**, not a flag:
   `Rock -> RockLoose`, `Dirt -> DirtLoose`, `Topsoil -> Dirt` (when dug or driven

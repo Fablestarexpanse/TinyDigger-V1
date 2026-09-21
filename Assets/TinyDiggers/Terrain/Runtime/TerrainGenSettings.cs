@@ -229,5 +229,20 @@ namespace TinyDiggers.Terrain
 
         [Tooltip("Metres of rock kept between the soil and the bedrock wherever there is room.")]
         [Min(0f)] public float RockCover = 4f;
+
+        [Header("Ore (slice 10)")]
+        [Tooltip("Lay ore into the rock at all. Off gives exactly the land and strata without it.")]
+        public bool Ores = true;
+
+        [Tooltip("Metres above sea level the coal seam's top runs at, give or take 3 m.")]
+        public float CoalSeamHeight = -6f;
+
+        [Tooltip("Limestone thins out above this height, so it lies under the lowlands.")]
+        [Min(1f)] public float LimestoneBelowHeight = 14f;
+
+        public OreSpec CoalOre = new OreSpec(abundance: 0.45f, patchSize: 90f, depthMin: 3f, depthMax: 3f, maxThickness: 2.5f);
+        public OreSpec IronOre = new OreSpec(abundance: 0.32f, patchSize: 45f, depthMin: 4f, depthMax: 15f, maxThickness: 4f);
+        public OreSpec CopperOre = new OreSpec(abundance: 0.4f, patchSize: 32f, depthMin: 3f, depthMax: 12f, maxThickness: 3f);
+        public OreSpec LimestoneOre = new OreSpec(abundance: 0.4f, patchSize: 110f, depthMin: 1.5f, depthMax: 5f, maxThickness: 6f);
     }
 }

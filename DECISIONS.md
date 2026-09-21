@@ -5,10 +5,13 @@ this records why.
 
 ---
 
-**NEXT:** Rock edges are smooth and pushed; 297/297 tests pass. Waiting on Ronan's look at
-`Screenshots/Look/e2_*`. Open: vertical streaks on steep cut faces (triplanar cut variant), tan
-beach bands, and too much rock on the central range. Timing tests (land 500 ms, water bake 60 ms)
-flake when Blender and ComfyUI are loading the machine; a re-run passed.
+**NEXT:** Slice 10 (ore underground) is built, green (309/309) and pushed. Waiting on Ronan's look at
+`Screenshots/Slice10/`. Open:
+- seams don't show as bands on pit walls (the shader has no strata-by-height);
+- deep stone pit walls collapse into loose rock and bury a seam;
+- the crew is too slow to reach ore 5–7 m down in a short test, and small deep pits block the
+  auto-ramp.
+The next CoI step after ore is stockpiles (count what the haulers bring).
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1675,3 +1678,48 @@ as the one-metre cell staircase.
 put between grass and rock reads as sparse turf instead of a khaki outline.
 
 **Test.** One new cell-map test: the stone flag, plus a stone field that falls off with distance.
+
+## Slice 10 — ore underground (2026-09-21)
+
+Ronan chose "ore underground" as the next Captain of Industry step, ahead of stockpiles,
+foundations and retaining walls. The plan is in `C:/Users/Brian/.claude/plans/synthetic-munching-frog.md`.
+
+**Materials** (ids 10–17): Coal, Iron ore, Copper ore and Limestone, each with its own loose form.
+- In place, each stands like rock; `IsStone` includes them, so cliffs and the smooth rock edges
+  treat them as stone.
+- Dug, each becomes its loose form, bulking 1.4–1.5, angle of repose 36–38°. So a load of iron is
+  still iron in the hauler.
+- The atlas needs 20 of its 24 slices.
+
+**Generation** (`OreDeposits`, run after `BuildColumn` in the strata pass):
+- Ore converts rock, granite **and bedrock** inside each ore's patch mask and depth window,
+  splitting layers.
+- Bedrock is included because the rock under grassland is only about 4 m thick; with rock and
+  granite only, coverage was 1–2%.
+- The surface never moves: a sliver under 5 cm now joins the layer below instead of being dropped.
+  Dropping it moved heights off the step and broke three existing tests.
+- Offsets are drawn last off the island's random stream, so existing seeds keep their land.
+- Coverage on Continent seed 11 (share of land cells whose nearest ore within 20 m is this one):
+  coal 15%, iron 5%, copper 7%, limestone 7%.
+- Cost: about 20–30 ms warm (in play, 415–442 ms with ores against 392 ms without). Cheap because
+  cells under the sea are skipped, the fine noise octave is only computed where the coarse one can
+  reach the threshold, and the depth wander is computed lazily.
+
+**Ore view:** F7 (`OreOverlayView` over the plain-C# `OreSurvey`).
+- It shows the nearest ore within 20 m, coloured by ore; deeper deposits are fainter.
+- It updates as cells change.
+
+**Tally:** `MiningLedger` on `JobDispatcher` records every dig's in-place volumes, and the toolbar
+shows "Dug: Iron ore 12 m³ · …".
+
+**Tests:** 12 new (OreDeposit, OreSurvey, OreMining).
+- The 512² timing test is now best of three: a single run in a busy editor swung 430–560 ms. The
+  500 ms budget is unchanged.
+
+**Not proven in play** (said plainly):
+1. The crew digging all the way into an iron lens. It started on a 10×10 pit, but 5–7 m of rock
+   is more than a short time box allows; a 4×4 pit blocked the auto-ramp ("nowhere to stand
+   beside"). The unit tests prove dug ore goes into the load and the ledger.
+2. A coal seam seen on a pit wall. The terrain shader colours faces by the column's top and next
+   layer, not by strata at that height, and a 7 m stone wall collapsed into loose rock over the
+   seam anyway.

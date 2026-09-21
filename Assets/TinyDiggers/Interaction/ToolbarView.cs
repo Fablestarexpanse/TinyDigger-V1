@@ -21,6 +21,9 @@ namespace TinyDiggers.Interaction
         [SerializeField] PlayerTools _tools;
         [SerializeField] CrewView _crew;
 
+        int _dugVersion = -1;
+        string _dug = string.Empty;
+
         [Tooltip("The land, for the F2 settings panel's seed and Regenerate.")]
         [SerializeField] TerrainView _terrain;
         [SerializeField] Color _idleColor = new Color(0.16f, 0.17f, 0.19f, 0.9f);
@@ -252,6 +255,19 @@ namespace TinyDiggers.Interaction
             _text.Append("   designations ").Append(map.Count);
             if (map.DumpZoneCount > 0)
                 _text.Append(", zone ").Append(map.DumpZoneCount);
+
+            if (_crew != null && _crew.Dispatcher != null)
+            {
+                var ledger = _crew.Dispatcher.Ledger;
+                if (ledger.Version != _dugVersion)
+                {
+                    _dugVersion = ledger.Version;
+                    _dug = ledger.OreSummary(_crew.Dispatcher.Designations.Grid.Materials);
+                }
+
+                if (_dug.Length > 0)
+                    _text.Append("   ").Append(_dug);
+            }
 
             var stuck = 0;
             if (_crew != null)

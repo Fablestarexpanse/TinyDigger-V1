@@ -484,6 +484,134 @@ namespace TinyDiggers.EditorTools
                         Relief = 0.3f, Shade = 0.08f, Evenness = 220f,
                     },
                 },
+
+                // --- ores (slice 10): each in place, then as dug rubble -----------------------
+                new Recipe
+                {
+                    Id = MaterialTable.Coal, Name = "Coal", Smoothness = 0.35f,
+                    // Black and bedded, with bright glints where a face catches the light.
+                    Main = new Pattern
+                    {
+                        File = "coal",
+                        Base = new Color(0.10f, 0.10f, 0.11f),
+                        Fleck = new Color(0.42f, 0.42f, 0.44f),
+                        Height = (x, y) => 0.5f * Band(x, y, 9f) + 0.3f * (1f - Angular(x, y, Feature(60f)))
+                                         + 0.2f * Fbm(x, y, Feature(5f), 2),
+                        Flecks = (x, y) => Mathf.SmoothStep(0.82f, 0.95f, Fbm(x, y, Feature(6f), 2)),
+                        Relief = 0.6f, Shade = 0.1f, Evenness = 240f,
+                    },
+                },
+                new Recipe
+                {
+                    Id = MaterialTable.CoalLoose, Name = "CoalLoose", Smoothness = 0.06f,
+                    // Dug ore: the same fist-sized rubble as loose rock, in the ore's colour.
+                    Main = new Pattern
+                    {
+                        File = "coal_loose",
+                        Base = new Color(0.13f, 0.13f, 0.14f),
+                        Fleck = new Color(0.08f, 0.08f, 0.09f),
+                        Height = (x, y) => 0.75f * (1f - Angular(x, y, Feature(100f)))
+                                         + 0.15f * (1f - Angular(x, y, Feature(30f)))
+                                         + 0.1f * Fbm(x, y, Feature(6f), 2),
+                        Flecks = (x, y) => Mathf.SmoothStep(0.5f, 0.85f, Angular(x, y, Feature(100f))),
+                        Relief = 0.95f, Shade = 0.13f, Evenness = 300f,
+                    },
+                },
+                new Recipe
+                {
+                    Id = MaterialTable.IronOre, Name = "IronOre", Smoothness = 0.1f,
+                    // Rust red-brown, blotched darker where the ore is rich.
+                    Main = new Pattern
+                    {
+                        File = "iron_ore",
+                        Base = new Color(0.52f, 0.24f, 0.14f),
+                        Fleck = new Color(0.30f, 0.14f, 0.10f),
+                        Height = (x, y) => 0.6f * Smooth(1f - Worley(x, y, Feature(90f)))
+                                         + 0.25f * Fbm(x, y, Feature(18f), 3)
+                                         + 0.15f * Fbm(x, y, Feature(4f), 2),
+                        Flecks = (x, y) => Mathf.SmoothStep(0.5f, 0.8f, Fbm(x, y, Feature(30f), 3)),
+                        Relief = 0.7f, Shade = 0.11f, Evenness = 260f,
+                    },
+                },
+                new Recipe
+                {
+                    Id = MaterialTable.IronOreLoose, Name = "IronOreLoose", Smoothness = 0.06f,
+                    // Dug ore: the same fist-sized rubble as loose rock, in the ore's colour.
+                    Main = new Pattern
+                    {
+                        File = "iron_ore_loose",
+                        Base = new Color(0.55f, 0.27f, 0.16f),
+                        Fleck = new Color(0.32f, 0.15f, 0.10f),
+                        Height = (x, y) => 0.75f * (1f - Angular(x, y, Feature(100f)))
+                                         + 0.15f * (1f - Angular(x, y, Feature(30f)))
+                                         + 0.1f * Fbm(x, y, Feature(6f), 2),
+                        Flecks = (x, y) => Mathf.SmoothStep(0.5f, 0.85f, Angular(x, y, Feature(100f))),
+                        Relief = 0.95f, Shade = 0.13f, Evenness = 300f,
+                    },
+                },
+                new Recipe
+                {
+                    Id = MaterialTable.CopperOre, Name = "CopperOre", Smoothness = 0.1f,
+                    // Grey rock streaked with malachite green-teal.
+                    Main = new Pattern
+                    {
+                        File = "copper_ore",
+                        Base = new Color(0.34f, 0.37f, 0.36f),
+                        Fleck = new Color(0.20f, 0.62f, 0.50f),
+                        Height = (x, y) => 0.6f * Smooth(1f - Worley(x, y, Feature(100f)))
+                                         + 0.25f * Fbm(x, y, Feature(20f), 3)
+                                         + 0.15f * Fbm(x, y, Feature(4f), 2),
+                        Flecks = (x, y) => Mathf.SmoothStep(0.55f, 0.75f, Ridge(Fbm(x, y, Feature(24f), 3))),
+                        Relief = 0.7f, Shade = 0.11f, Evenness = 260f,
+                    },
+                },
+                new Recipe
+                {
+                    Id = MaterialTable.CopperOreLoose, Name = "CopperOreLoose", Smoothness = 0.06f,
+                    // Dug ore: the same fist-sized rubble as loose rock, in the ore's colour.
+                    Main = new Pattern
+                    {
+                        File = "copper_ore_loose",
+                        Base = new Color(0.30f, 0.46f, 0.40f),
+                        Fleck = new Color(0.18f, 0.28f, 0.25f),
+                        Height = (x, y) => 0.75f * (1f - Angular(x, y, Feature(100f)))
+                                         + 0.15f * (1f - Angular(x, y, Feature(30f)))
+                                         + 0.1f * Fbm(x, y, Feature(6f), 2),
+                        Flecks = (x, y) => Mathf.SmoothStep(0.5f, 0.85f, Angular(x, y, Feature(100f))),
+                        Relief = 0.95f, Shade = 0.13f, Evenness = 300f,
+                    },
+                },
+                new Recipe
+                {
+                    Id = MaterialTable.Limestone, Name = "Limestone", Smoothness = 0.08f,
+                    // Pale warm grey in beds, speckled with small fossils.
+                    Main = new Pattern
+                    {
+                        File = "limestone",
+                        Base = new Color(0.78f, 0.75f, 0.66f),
+                        Fleck = new Color(0.62f, 0.59f, 0.52f),
+                        Height = (x, y) => 0.45f * Band(x, y, 6f) + 0.35f * Fbm(x, y, Feature(12f), 3)
+                                         + 0.2f * Fbm(x, y, Feature(4f), 2),
+                        Flecks = (x, y) => 1f - Mathf.SmoothStep(0.1f, 0.25f, Worley(x, y, Feature(30f))),
+                        Relief = 0.45f, Shade = 0.08f, Evenness = 220f,
+                    },
+                },
+                new Recipe
+                {
+                    Id = MaterialTable.LimestoneLoose, Name = "LimestoneLoose", Smoothness = 0.06f,
+                    // Dug ore: the same fist-sized rubble as loose rock, in the ore's colour.
+                    Main = new Pattern
+                    {
+                        File = "limestone_loose",
+                        Base = new Color(0.76f, 0.73f, 0.64f),
+                        Fleck = new Color(0.60f, 0.57f, 0.50f),
+                        Height = (x, y) => 0.75f * (1f - Angular(x, y, Feature(100f)))
+                                         + 0.15f * (1f - Angular(x, y, Feature(30f)))
+                                         + 0.1f * Fbm(x, y, Feature(6f), 2),
+                        Flecks = (x, y) => Mathf.SmoothStep(0.5f, 0.85f, Angular(x, y, Feature(100f))),
+                        Relief = 0.95f, Shade = 0.13f, Evenness = 300f,
+                    },
+                },
             };
         }
 

@@ -1172,6 +1172,7 @@ namespace TinyDiggers.Units
             }
 
             var report = Excavation.Dig(_grid, Inventory, target.x, target.y, 0, Step);
+            _dispatcher.Ledger.Record(report.InPlaceBySource);
             if (report.WasFull)
             {
                 _loadFull = true;

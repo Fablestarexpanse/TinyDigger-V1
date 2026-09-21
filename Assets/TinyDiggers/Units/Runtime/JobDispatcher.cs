@@ -92,6 +92,9 @@ namespace TinyDiggers.Units
 
         public DesignationMap Designations => _designations;
 
+        /// <summary>Everything the crew has dug out of the ground, by material (slice 10).</summary>
+        public MiningLedger Ledger { get; } = new MiningLedger();
+
         public RegionMap Regions { get; }
 
         public TerrainGrid Grid => _grid;

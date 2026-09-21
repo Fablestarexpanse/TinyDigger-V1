@@ -244,8 +244,11 @@ namespace TinyDiggers.Terrain
             SurfaceMaterials.Tidy(surfaceMaterials, heights, inDisc, toWater, width, depth, settings);
 
             // --- 10: strata ------------------------------------------------------------------
+            // Ore offsets come last off the island's random stream, so turning ores on changed
+            // nothing about the land any existing seed already made.
+            var oreFields = OreDeposits.Fields.Draw(random);
             var peak = -1;
-            Span<Layer> column = stackalloc Layer[8];
+            Span<Layer> column = stackalloc Layer[TerrainGrid.MaxLayersPerCell];
             for (var z = 0; z < depth; z++)
             {
                 for (var x = 0; x < width; x++)
@@ -257,6 +260,7 @@ namespace TinyDiggers.Terrain
                         peak = cell;
                     var count = BuildColumn(column, heights[cell], surfaceMaterials[cell],
                         highGround[cell], ValleyStrength(accumulation[cell]), grid.Datum, settings);
+                    OreDeposits.Apply(column, ref count, x, z, heights[cell], grid.Datum, highGround[cell], oreFields, settings);
                     grid.SetColumn(x, z, column.Slice(0, count));
                 }
             }

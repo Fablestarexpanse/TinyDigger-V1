@@ -182,6 +182,66 @@ MonoBehaviour:
   _bodyColor: {r: 1, g: 0.78, b: 0.1, a: 1}
   _haulerColor: {r: 0.35, g: 0.55, b: 0.9, a: 1}
   _selectedColor: {r: 1, g: 1, b: 1, a: 1}
+--- !u!1 &283174201
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 283174203}
+  - component: {fileID: 283174202}
+  m_Layer: 0
+  m_Name: Ore View
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &283174202
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283174201}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 68f9e776d5b3b724a86af44fff8ec5ba, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: TinyDiggers.Interaction::TinyDiggers.Interaction.OreOverlayView
+  _terrain: {fileID: 551060599}
+  _overlayMaterial: {fileID: 2100000, guid: 189053e189be60c4eb80f5df95575af8, type: 2}
+  _surveyDepth: 20
+  _visible: 0
+  _coal:
+    serializedVersion: 2
+    rgba: 3357021204
+  _iron:
+    serializedVersion: 2
+    rgba: 3358082760
+  _copper:
+    serializedVersion: 2
+    rgba: 3366635560
+  _limestone:
+    serializedVersion: 2
+    rgba: 3369922805
+--- !u!4 &283174203
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283174201}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &353738627
 GameObject:
   m_ObjectHideFlags: 0
@@ -1043,3 +1103,4 @@ SceneRoots:
   - {fileID: 846250962}
   - {fileID: 1212779772}
   - {fileID: 353738629}
+  - {fileID: 283174203}

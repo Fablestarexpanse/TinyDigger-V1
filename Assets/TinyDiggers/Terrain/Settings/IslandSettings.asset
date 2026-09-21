@@ -75,3 +75,30 @@ MonoBehaviour:
   SandBand: 6
   GraniteShare: 0.55
   RockCover: 4
+  Ores: 1
+  CoalSeamHeight: -6
+  LimestoneBelowHeight: 14
+  CoalOre:
+    Abundance: 0.45
+    PatchSize: 90
+    DepthMin: 3
+    DepthMax: 3
+    MaxThickness: 2.5
+  IronOre:
+    Abundance: 0.32
+    PatchSize: 45
+    DepthMin: 4
+    DepthMax: 15
+    MaxThickness: 4
+  CopperOre:
+    Abundance: 0.4
+    PatchSize: 32
+    DepthMin: 3
+    DepthMax: 12
+    MaxThickness: 3
+  LimestoneOre:
+    Abundance: 0.4
+    PatchSize: 110
+    DepthMin: 1.5
+    DepthMax: 5
+    MaxThickness: 6

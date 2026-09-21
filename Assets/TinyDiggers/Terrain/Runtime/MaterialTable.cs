@@ -76,6 +76,23 @@ namespace TinyDiggers.Terrain
         public static readonly MaterialId RockLoose = new MaterialId(8);
         public static readonly MaterialId DirtLoose = new MaterialId(9);
 
+        // Ores (slice 10): each in-place ore stands like rock and digs out into its own loose form,
+        // so a load of iron ore is still iron ore in the hauler.
+        public static readonly MaterialId Coal = new MaterialId(10);
+        public static readonly MaterialId CoalLoose = new MaterialId(11);
+        public static readonly MaterialId IronOre = new MaterialId(12);
+        public static readonly MaterialId IronOreLoose = new MaterialId(13);
+        public static readonly MaterialId CopperOre = new MaterialId(14);
+        public static readonly MaterialId CopperOreLoose = new MaterialId(15);
+        public static readonly MaterialId Limestone = new MaterialId(16);
+        public static readonly MaterialId LimestoneLoose = new MaterialId(17);
+
+        /// <summary>The in-place ores, in the order generation and the ore view use.</summary>
+        public static readonly MaterialId[] Ores = { Coal, IronOre, CopperOre, Limestone };
+
+        /// <summary>Whether a material is an ore, in place or dug.</summary>
+        public static bool IsOre(MaterialId material) => material.Value >= Coal.Value && material.Value <= LimestoneLoose.Value;
+
         /// <summary>
         /// The seed material set, per TERRAIN_REFERENCE.md section 2. Undisturbed ground stands
         /// steep; once dug it becomes a loose variant with a lower angle of repose and swells by
@@ -84,12 +101,14 @@ namespace TinyDiggers.Terrain
         /// drop), so generated terraces are stable.
         /// </summary>
         /// <summary>
-        /// Whether a material stands up rather than slumping: rock, granite and bedrock. A step
+        /// Whether a material stands up rather than slumping: rock, granite, bedrock and the
+        /// in-place ores (ore in a rock face is part of the face). A step
         /// taller than one height step is only allowed between two of these — that is what a cliff
         /// is — and the crew works such a face from its foot rather than walking up it.
         /// </summary>
         public static bool IsStone(MaterialId material) =>
-            material == Rock || material == Granite || material == Bedrock;
+            material == Rock || material == Granite || material == Bedrock
+            || material == Coal || material == IronOre || material == CopperOre || material == Limestone;
 
         public static MaterialTable CreateDefault()
         {
@@ -106,7 +125,15 @@ namespace TinyDiggers.Terrain
                 new MaterialDefinition(Sand, "Sand", new Color32(228, 210, 170, 255), 0.15f, 34f, bulkingFactor: 1.1f, isLoose: true),
                 new MaterialDefinition(Topsoil, "Topsoil", new Color32(140, 154, 100, 255), 0.10f, 50f, disturbed: Dirt, bulkingFactor: 1.25f),
                 new MaterialDefinition(RockLoose, "Loose rock", new Color32(182, 175, 164, 255), 0.30f, 38f, isLoose: true),
-                new MaterialDefinition(DirtLoose, "Loose dirt", new Color32(190, 152, 110, 255), 0.10f, 32f, isLoose: true));
+                new MaterialDefinition(DirtLoose, "Loose dirt", new Color32(190, 152, 110, 255), 0.10f, 32f, isLoose: true),
+                new MaterialDefinition(Coal, "Coal", new Color32(40, 40, 44, 255), 0.45f, 80f, disturbed: CoalLoose, bulkingFactor: 1.4f),
+                new MaterialDefinition(CoalLoose, "Loose coal", new Color32(52, 52, 56, 255), 0.20f, 38f, isLoose: true),
+                new MaterialDefinition(IronOre, "Iron ore", new Color32(140, 72, 48, 255), 0.70f, 85f, disturbed: IronOreLoose, bulkingFactor: 1.5f),
+                new MaterialDefinition(IronOreLoose, "Loose iron ore", new Color32(150, 82, 56, 255), 0.30f, 38f, isLoose: true),
+                new MaterialDefinition(CopperOre, "Copper ore", new Color32(78, 140, 118, 255), 0.65f, 85f, disturbed: CopperOreLoose, bulkingFactor: 1.5f),
+                new MaterialDefinition(CopperOreLoose, "Loose copper ore", new Color32(88, 148, 124, 255), 0.30f, 38f, isLoose: true),
+                new MaterialDefinition(Limestone, "Limestone", new Color32(214, 206, 184, 255), 0.50f, 85f, disturbed: LimestoneLoose, bulkingFactor: 1.45f),
+                new MaterialDefinition(LimestoneLoose, "Loose limestone", new Color32(222, 214, 192, 255), 0.25f, 36f, isLoose: true));
         }
     }
 }

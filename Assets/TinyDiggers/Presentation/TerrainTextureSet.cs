@@ -18,7 +18,7 @@ namespace TinyDiggers.Presentation
         [Serializable]
         public sealed class Entry
         {
-            [Tooltip("The material id this is the look of: 1 Bedrock, 2 Granite, 3 Rock, 4 Clay, 5 Dirt, 6 Sand, 7 Topsoil, 8 Loose rock, 9 Loose dirt.")]
+            [Tooltip("The material id this is the look of: 1 Bedrock, 2 Granite, 3 Rock, 4 Clay, 5 Dirt, 6 Sand, 7 Topsoil, 8 Loose rock, 9 Loose dirt, 10/11 Coal, 12/13 Iron ore, 14/15 Copper ore, 16/17 Limestone (odd = loose).")]
             public int MaterialId;
 
             public string Name;
