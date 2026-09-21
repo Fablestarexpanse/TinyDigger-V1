@@ -24,6 +24,8 @@ namespace TinyDiggers.Presentation
 
         [SerializeField] int _seed = 7;
 
+        static readonly int DamCentreId = Shader.PropertyToID("_DamCentre");
+
         readonly List<GameObject> _built = new List<GameObject>();
 
         /// <summary>The ring as laid out. Empty until built.</summary>
@@ -55,19 +57,23 @@ namespace TinyDiggers.Presentation
                 sectors[i] = new SectorBuilder();
             var circumference = 2f * Mathf.PI * InnerRadius;
 
+            var tones = new System.Random(_seed);
             foreach (var slot in slots)
             {
                 var angle = slot.Centre / InnerRadius;
                 var sector = sectors[Mathf.Clamp(Mathf.FloorToInt(slot.Centre / circumference * _sectors), 0, _sectors - 1)];
-                sector.Add(Piece(slot.Kind), angle, InnerRadius, slot.Stretch);
+                // Each piece a slightly different pour: its tone rides in uv0.w.
+                var tone = (float)tones.NextDouble();
+                sector.Add(Piece(slot.Kind), angle, InnerRadius, slot.Stretch, tone);
                 if (slot.Kind == DamPieceKind.Spillway)
-                    sector.Add(_kit.SpillwayWater, angle, InnerRadius, slot.Stretch);
+                    sector.Add(_kit.SpillwayWater, angle, InnerRadius, slot.Stretch, tone);
                 if (slot.Kind == DamPieceKind.Tower)
-                    sector.Add(_kit.Tower, angle, InnerRadius, slot.Stretch);
+                    sector.Add(_kit.Tower, angle, InnerRadius, slot.Stretch, (float)tones.NextDouble());
             }
 
             var centre = _terrain.DiscCentre;
             var origin = _terrain.transform.TransformPoint(new Vector3(centre.x, 0f, centre.y));
+            Shader.SetGlobalVector(DamCentreId, origin);
             for (var i = 0; i < sectors.Length; i++)
             {
                 var solid = sectors[i].Solid(_kit, $"Dam Sector {i}");
@@ -162,6 +168,8 @@ namespace TinyDiggers.Presentation
         {
             readonly List<Vector3> _vertices = new List<Vector3>();
             readonly List<Color> _colours = new List<Color>();
+            readonly List<Vector4> _wall = new List<Vector4>();
+            readonly List<Vector4> _waterWall = new List<Vector4>();
             readonly List<int>[] _triangles = new List<int>[DamKit.SurfaceCount];
             readonly List<Vector3> _waterVertices = new List<Vector3>();
             readonly List<Color> _waterColours = new List<Color>();
@@ -173,7 +181,12 @@ namespace TinyDiggers.Presentation
                     _triangles[i] = new List<int>();
             }
 
-            public void Add(GameObject piece, float angle, float radius, float stretch)
+            /// <summary>
+            /// Bends a piece into the sector. uv0 carries where each vertex sits on the wall, for
+            /// the concrete shader's formwork: x metres along the ring (measured at the inner face),
+            /// y height, z metres out from the inner face, w the piece's tone.
+            /// </summary>
+            public void Add(GameObject piece, float angle, float radius, float stretch, float tone)
             {
                 if (piece == null)
                     return;
@@ -194,6 +207,7 @@ namespace TinyDiggers.Presentation
                     var water = surface == DamSurface.SpillWater;
                     var vertices = water ? _waterVertices : _vertices;
                     var vertexColours = water ? _waterColours : _colours;
+                    var wall = water ? _waterWall : _wall;
                     var triangles = water ? _waterTriangles : _triangles[(int)surface];
 
                     // Each submesh copies the vertices it uses, so a piece's vertices are never
@@ -207,6 +221,8 @@ namespace TinyDiggers.Presentation
                             remap[index] = mapped;
                             vertices.Add(DamBend.Point(source[index], angle, radius, stretch));
                             vertexColours.Add(index < colours.Length ? colours[index] : Color.white);
+                            var kit = source[index];
+                            wall.Add(new Vector4(angle * radius - kit.x * stretch, kit.y, -kit.z, tone));
                         }
 
                         triangles.Add(mapped);
@@ -221,6 +237,7 @@ namespace TinyDiggers.Presentation
                 var mesh = new Mesh { name = name, hideFlags = HideFlags.DontSave, indexFormat = IndexFormat.UInt32 };
                 mesh.SetVertices(_vertices);
                 mesh.SetColors(_colours);
+                mesh.SetUVs(0, _wall);
                 var used = new List<Material>();
                 var subs = new List<List<int>>();
                 for (var s = 0; s < _triangles.Length; s++)
@@ -246,6 +263,7 @@ namespace TinyDiggers.Presentation
                 var mesh = new Mesh { name = name, hideFlags = HideFlags.DontSave, indexFormat = IndexFormat.UInt32 };
                 mesh.SetVertices(_waterVertices);
                 mesh.SetColors(_waterColours);
+                mesh.SetUVs(0, _waterWall);
                 mesh.SetTriangles(_waterTriangles, 0);
                 mesh.RecalculateNormals();
                 mesh.RecalculateBounds();

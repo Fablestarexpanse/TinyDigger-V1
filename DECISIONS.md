@@ -1961,3 +1961,28 @@ Found along the way:
    was merged into `DamLayout.cs`.
 5. **Since the 11:00 crash, Unity logs to `%LOCALAPPDATA%/Unity/Editor/Editor.log`**, not the
    project's `Logs/Editor.log`. Read the `TESTS` line there.
+
+**Step 3 done: concrete.**
+- **Detail tile** (`Editor/DamTextureGenerator.cs`, menu *TinyDiggers > Generate Dam Textures*):
+  1024² over 4 m (4 mm a pixel), tileable by construction; an albedo, a normal and a mask (R
+  cavity, G air void, B roughness). It holds only close-up grain: paste blotches, sand, aggregate
+  and air voids. Nothing in it is big enough to show a repeat. Code-generated rather than Krea2,
+  because a generated image is not guaranteed to tile. The periodic noise was moved into
+  `Editor/TileableNoise.cs`, shared with `TerrainTextureGenerator` (same functions, so the terrain
+  output is unchanged).
+- **Shader** (`TinyDiggers/Concrete`): the tile, triplanar in world space, plus weathering drawn
+  from position, so none of it repeats:
+  - 2.4 × 1.2 m formwork panels with joints, four tie holes each and a tone per panel. They follow
+    the curve because `DamView` writes metres-along-the-ring and metres-out into uv0 (and a tone
+    per piece into uv0.w); on faces looking along the ring the panels run outward.
+  - Rain streaks, grime on ledges, a sheltered underside, a slow mottle round the ring.
+  - A wet band and algae at the waterline, on the inner face only (outside is void).
+  - It has the same passes and light keywords as the terrain shader (ShadowCaster, DepthNormals,
+    DepthOnly).
+- **Found tuning in play:**
+  1. Joints and tie holes at full strength read as a tiled bathroom wall from 100 m. They now fade
+     out past 3.5 cm a pixel, leaving the panel tones at a distance.
+  2. Faces out of the sun came out olive-green: the navy sky's ambient, through the +28 saturation
+     grade. The concrete now takes its ambient mostly desaturated (`_AmbientSaturation` 0.25), so
+     shade reads grey.
+  3. The light strips blew out to white at 3× emission. They are now cyan × 1.6.
