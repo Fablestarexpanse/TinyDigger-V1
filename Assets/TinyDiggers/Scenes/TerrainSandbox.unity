@@ -610,6 +610,7 @@ MonoBehaviour:
   _bandHeight: 1.5
   _plinthColor: {r: 0.17, g: 0.155, b: 0.16, a: 1}
   _bandColor: {r: 0.11, g: 0.1, b: 0.105, a: 1}
+  _sky: {fileID: 2100000, guid: 5f0099f9af6befe45bcbc534662c8739, type: 2}
   _skyTop: {r: 0.25, g: 0.29, b: 0.34, a: 1}
   _skyBottom: {r: 0.15, g: 0.18, b: 0.22, a: 1}
   _plinth: 0

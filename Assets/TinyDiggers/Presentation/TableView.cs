@@ -26,6 +26,9 @@ namespace TinyDiggers.Presentation
 
         [SerializeField] Color _plinthColor = new Color(0.68f, 0.64f, 0.58f);
         [SerializeField] Color _bandColor = new Color(0.52f, 0.47f, 0.41f);
+        [Tooltip("A sky material to draw instead of the gradient: the starfield, since the world floats in space. Left empty, the two-colour gradient below is used.")]
+        [SerializeField] Material _sky;
+
         [SerializeField] Color _skyTop = new Color(0.93f, 0.91f, 0.87f);
         [SerializeField] Color _skyBottom = new Color(0.78f, 0.75f, 0.70f);
 
@@ -65,6 +68,14 @@ namespace TinyDiggers.Presentation
             {
                 AddRing("Plinth", centre, top, _depth, radius, _terrain.DiscRadius - 2f, capBottom: true, _plinthMaterial);
                 AddRing("Plinth Band", centre, top, _bandHeight, radius + 0.025f, radius - 0.025f, capBottom: false, _bandMaterial);
+            }
+
+            if (_sky != null)
+            {
+                _previousSkybox = RenderSettings.skybox;
+                RenderSettings.skybox = _sky;
+                DynamicGI.UpdateEnvironment();
+                return;
             }
 
             var shader = Shader.Find("TinyDiggers/Gradient Sky");
@@ -182,6 +193,8 @@ namespace TinyDiggers.Presentation
         void OnDestroy()
         {
             if (_skyMaterial != null && ReferenceEquals(RenderSettings.skybox, _skyMaterial))
+                RenderSettings.skybox = _previousSkybox;
+            if (_sky != null && ReferenceEquals(RenderSettings.skybox, _sky))
                 RenderSettings.skybox = _previousSkybox;
             if (_plinthMaterial != null)
                 Destroy(_plinthMaterial);

@@ -8,7 +8,6 @@ this records why.
 **NEXT:** Dam rim steps 1–4 are done (kit, ring, concrete, spillway water); waiting on Ronan's
 look. Open:
 - a proper sci-fi underside for the floating disc (for now a flat concrete floor at −24 m);
-- a space backdrop (stars) instead of the navy gradient;
 - ship models and arrivals, then the supply gameplay;
 - the Slice 11 items: crew size, stripes on slopes, the regenerate hitch.
 
@@ -2001,4 +2000,18 @@ Found along the way:
   the further it has fallen, and tears into strands and then spray until it is gone 30 m down.
 - **First pass:** the water was white paint (too much foam, round blotchy noise). Deeper blue,
   sharpened streaks and the step bursts fixed it.
+
+## Space backdrop (2026-09-21)
+
+Ronan: "add a starfield space backdrop". `TinyDiggers/Space Sky` (Art/Sky/SpaceSky.mat) is
+assigned through the new `TableView._sky` slot; left empty, the old two-colour gradient is used.
+It is all procedural from the view direction, so nothing tiles or seams:
+- three layers of stars (rare bright, medium, a faint dust thickest in the band), each with its
+  own colour temperature, the fainter two twinkling slowly;
+- a galaxy band on a tilted great circle, with dark dust lanes;
+- faint violet and teal nebulae, strongest near the band.
+
+Stars are held at least about a pixel wide (by `fwidth`), so they don't flicker as the camera
+turns. The island's lighting is unchanged: the ambient comes from LightingView's trilight colours,
+not from the sky.
 
