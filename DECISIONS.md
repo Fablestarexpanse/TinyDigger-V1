@@ -5,10 +5,11 @@ this records why.
 
 ---
 
-**NEXT:** Phase 1 (tree_a) stopped after the 5-loop cap. Best result is loop 5, and it is waiting
-on Ronan's look. Scores and open misses are in `Assets/TinyDiggers/Art/ASSET_LOG.md`; shots are in
-`Screenshots/Art/tree_a_loops.png`. Phase 2 does not start without approval. Open decisions: vehicle
-scale (STYLE §5); adding glTFast (Unity has no GLB importer, so the FBX is used).
+**NEXT:** tree_a v2 (leaf cards) passes the evaluation (all sections 4/5) and is pushed. It is
+waiting on Ronan's look and on approval of STYLE.md §9 (trees as cards, SPRITE core). Next asks:
+- a foliage wind shader (the weights are already in vertex colour R);
+- Phase 2 (tree_b and tree_c as variations, then rocks, shrubs, a dead tree, grass, vehicles);
+- vehicle scale.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1572,3 +1573,33 @@ The loop-by-loop record is in `Art/ASSET_LOG.md`. Facts a fresh session needs:
   1.7 sun they go neon, so the albedo is swatch × 0.72.
 - **Importing an asset while in play mode unbinds the terrain's textures** (grey land). Evaluation
   shots must come from a fresh play session: reimport in edit mode, then enter play.
+
+## Art workflow v2 — Blender as hub, leaf-card trees (2026-09-21)
+
+Ronan's rulings:
+- Blender is the hub for cleaning, converting and animating Trellis items.
+- Props are never voxel-remeshed; only the terrain is cells.
+- Tree canopies are leaf cards (chosen over a higher budget with LODs).
+
+**Pipeline modules.** The stages live in `Art/Tools/td_pipeline.py` and `td_cards.py`, and the
+atlas builder is `leaf_atlas.py`. They run both headless and in the live Blender session through
+the Blender MCP. `clean_export.py` is the Phase 1 record, not the current path.
+
+**Facts a fresh session needs:**
+- **The Blender MCP runs code with no window context** (`bpy.context.screen` is None). Operators
+  then fail their poll or act on the GUI selection, and `transform_apply` silently left a ×9 scale.
+  The pipeline therefore applies modifiers by depsgraph evaluation, bakes transforms into mesh
+  data, and wraps every other operator in `td_pipeline.run()`, which adds a window/3D-view
+  override.
+- **Trellis2 geometry is thin, open shells**, both the leaves and the wood.
+  - Voxel remesh of them gives almost nothing (about 100 triangles).
+  - Collapse decimation floors at about 32k.
+  - GPU QEM at 1.5k, 4k and 15k shatters.
+  - Hence cards for leaves and tubes for wood.
+- **The Trellis2 workflow's own postprocess** (`TinyDiggers_Trellis2`: RemeshMesh udf 768 →
+  DecimateMesh → Unwrap → BakeTextureFromVoxel with back-projection) can make a low mesh inside
+  ComfyUI. It is useful for solid props (rocks, vehicles) whose shells aren't thin; untested on
+  them yet.
+- **A Unity editor dialog appeared** when one RunCommand did a texture import, material creation,
+  FBX reimport and asset deletes together ("User interactions are not supported"). Split into
+  steps without `DeleteAsset`, it ran; leftovers are removed through git.

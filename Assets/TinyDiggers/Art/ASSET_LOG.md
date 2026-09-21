@@ -52,3 +52,50 @@ form and surface come from loop 4.
   distance, not zero.
 - **GLB into Unity needs a package.** The project has no glTF importer, so Unity uses the FBX that
   the same script writes beside the GLB. Adding `com.unity.cloud.gltfast` is Ronan's call.
+
+### tree_a, workflow v2: leaf cards (2026-09-21) — **current**
+
+Ronan changed the workflow after Phase 1:
+- Blender is the hub for cleaning, improving and converting Trellis items, and adds animation
+  where needed.
+- **Props are never voxel-remeshed; only the terrain is cells.**
+- He chose leaf cards over a higher triangle budget with LODs.
+
+**Why cards.** A Trellis2 canopy is thin leaf shells. Decimated directly (Blender collapse stalls
+at about 32k faces; the ComfyUI workflow's own GPU decimation was tried at 1.5k, 4k and 15k faces),
+it shatters into spikes at every budget (`Screenshots/Art/tree_a_direct_decimation.png`, against
+the raw `tree_a_trellis_raw.png`).
+
+**Build.**
+- The same Trellis2 mesh as Phase 1, split into foliage and wood by base colour
+  (`td_pipeline.split_parts`).
+- **Canopy:** 280 square cards (`td_cards.leaf_cards`). The leaf surface is clustered by k-means,
+  and each cluster gets a card on its best-fit plane at 2.0× its extent, facing out, spun at
+  random.
+  - UVs point into a 2×2 leaf-cluster atlas: `leaf_atlas_a.png`, four Krea2 sprites (seeds
+    7210–7213, workflow `TinyDiggers_Sprite_Krea2`), cut out by birefnet, palette-pulled, and
+    colour-bled so the mips don't fringe.
+  - Normals lean 65% toward "out from the canopy centre", so the canopy shades as soft clumps.
+  - Vertex colour R is the wind weight.
+- **Trunk and branches:** 8 tapered 6-sided tubes chained through height slices of Trellis's wood
+  (`td_cards.branch_tubes`). No remesh.
+- **Result:** 1,240 triangles (560 of them cards), 9.6 m tall, two materials:
+  - `tree_a_leaves`: URP Lit, alpha clip 0.5, double-sided, mip coverage preserved.
+  - `tree_a_bark`: flat bark albedo.
+- The source is `Art/Blender~/tree_a.blend`, which keeps the raw mesh, the parts and the prop.
+
+| Loop | Changed (one thing) | Palette | Form | Surface | Light | Scale | Worst miss |
+|------|---------------------|---------|------|---------|-------|-------|------------|
+| c1 | first card build: 280 cards at 2.0×, 8 branch tubes | 4 | 4 | 3 | 4 | 4 | cream fringe round every leaf (the cut-out's anti-aliased edge kept the white background) |
+| c2 | atlas colour only from fully opaque texels (alpha > 0.95), bled outward | 4 | 4 | 4 | 4 | 4 | small: red-brown twig spots on some cards; blunt branch-tube ends poking through the canopy at close zoom |
+
+**Every section is 4 or better: this passes.**
+
+**Open:**
+- **Wind.** The weights are in the mesh (vertex colour R), but URP Lit ignores them. Sway needs a
+  small foliage shader.
+- **Branch ends.** Tube ends sometimes show through gaps in the canopy; cap the chains a metre
+  inside the canopy.
+- **Bark.** It is a flat colour, with no painted texture yet.
+- **One atlas for every card.** At close zoom the repetition is faint but visible; a second atlas
+  row would add variety.

@@ -112,3 +112,7 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Python caches from the art tools (Assets/TinyDiggers/Art/Tools)
+__pycache__/
+__pycache__.meta

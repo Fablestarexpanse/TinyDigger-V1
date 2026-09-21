@@ -220,3 +220,20 @@ words ("no outlines, not photographic…"). That is the only lever that works on
 - **Final.** Split into core + category clauses, with the foliage wording only in the PLANT clause
   and an explicit "no plants" in the STONE and VEHICLE clauses. All four subjects came out
   isolated and consistent (`STYLE_TEST_SHEET.png`).
+
+## 9. Additions since approval (need Ronan's OK)
+
+- **Trees are leaf cards.** This follows from Ronan's choice on 2026-09-21. The canopy is
+  200–300 alpha-clipped, double-sided cards carrying a leaf-cluster atlas. Card normals lean out
+  from the canopy centre, so the two-tone comes from our light. Trunk and branches are tapered
+  tubes along the generated wood. No voxel remesh on any prop; only the terrain is cells.
+- **SPRITE core** (leaf-cluster sprites for the atlas; used with a subject sentence and the plant
+  clause's even-green wording):
+
+  > Stylized hand-painted game texture for a cosy strategy game. Only this one leaf cluster,
+  > flat and centred, on a plain flat pure white background, with no shadow and no ground. Soft
+  > even overcast light from all sides, almost no shading. Matte surfaces with subtle painterly
+  > brush variation, no outlines, not photographic, not realistic, not pixel art.
+
+  Saved as the ComfyUI workflow `TinyDiggers_Sprite_Krea2` (the style workflow plus a birefnet
+  cut-out). Its alpha comes out inverted, and `Art/Tools/leaf_atlas.py` flips it back.

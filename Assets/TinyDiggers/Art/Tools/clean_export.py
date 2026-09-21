@@ -1,4 +1,7 @@
 """
+SUPERSEDED (2026-09-21): this is the Phase 1 record. Props are no longer voxel-remeshed (Ronan:
+only the terrain is cells). The current path is td_pipeline.py + td_cards.py, run in live Blender.
+
 TinyDiggers prop export: every generated mesh goes through this, so scale, pivot, triangle budget
 and palette are identical across the set (STYLE.md).
 
