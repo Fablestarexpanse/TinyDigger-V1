@@ -20,9 +20,9 @@ RenderSettings:
   m_FogDensity: 0.01
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
-  m_AmbientSkyColor: {r: 0.68200004, g: 0.79200006, b: 0.94600004, a: 1.1}
-  m_AmbientEquatorColor: {r: 0.77, g: 0.748, b: 0.704, a: 1.1}
-  m_AmbientGroundColor: {r: 0.55, g: 0.484, b: 0.39600003, a: 1.1}
+  m_AmbientSkyColor: {r: 0.35999998, g: 0.45, b: 0.55799997, a: 0.9}
+  m_AmbientEquatorColor: {r: 0.324, g: 0.378, b: 0.306, a: 0.9}
+  m_AmbientGroundColor: {r: 0.198, g: 0.23399998, b: 0.144, a: 0.9}
   m_AmbientIntensity: 1
   m_AmbientMode: 1
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
@@ -269,8 +269,8 @@ MonoBehaviour:
   DetailRepeat: 0.25
   DetailStrength: 1
   MottleRepeat: 12
-  MottleStrength: 0.1
-  BlendWidth: 0.5
+  MottleStrength: 0.18
+  BlendWidth: 1
   HeightStep: 1
   SlumpTilesPerTick: 1000
 --- !u!4 &551060600
@@ -345,8 +345,8 @@ Light:
   m_Enabled: 1
   serializedVersion: 13
   m_Type: 1
-  m_Color: {r: 1, g: 0.75345445, b: 0.5683641, a: 1}
-  m_Intensity: 1.7
+  m_Color: {r: 1, g: 0.91525865, b: 0.9145541, a: 1}
+  m_Intensity: 2.3
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -355,7 +355,7 @@ Light:
     m_Type: 2
     m_Resolution: -1
     m_CustomResolution: -1
-    m_Strength: 0.75
+    m_Strength: 0.95
     m_Bias: 0.1
     m_NormalBias: 0.6
     m_NearPlane: 0.2
@@ -408,7 +408,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 730936062}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.31049988, y: -0.28432295, z: 0.097900234, w: 0.9017571}
+  m_LocalRotation: {x: 0.27883983, y: -0.2875664, z: 0.08791786, w: 0.91204405}
   m_LocalPosition: {x: 0, y: 3, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -497,10 +497,10 @@ MonoBehaviour:
   _overhang: 2
   _depth: 14
   _bandHeight: 1.5
-  _plinthColor: {r: 0.72, g: 0.69, b: 0.64, a: 1}
-  _bandColor: {r: 0.42, g: 0.4, b: 0.37, a: 1}
-  _skyTop: {r: 0.88, g: 0.87, b: 0.85, a: 1}
-  _skyBottom: {r: 0.55, g: 0.54, b: 0.52, a: 1}
+  _plinthColor: {r: 0.17, g: 0.155, b: 0.16, a: 1}
+  _bandColor: {r: 0.11, g: 0.1, b: 0.105, a: 1}
+  _skyTop: {r: 0.25, g: 0.29, b: 0.34, a: 1}
+  _skyBottom: {r: 0.15, g: 0.18, b: 0.22, a: 1}
   TiltShift: 0
 --- !u!4 &882830153
 Transform:
@@ -761,7 +761,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1212779771
 MonoBehaviour:
   m_ObjectHideFlags: 0

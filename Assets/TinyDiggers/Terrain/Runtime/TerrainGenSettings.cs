@@ -190,10 +190,10 @@ namespace TinyDiggers.Terrain
         [Range(0f, 90f)] public float SlopeGrass = 25f;
 
         [Tooltip("Degrees. Between the two the ground is grass with rock showing through.")]
-        [Range(0f, 90f)] public float SlopeMixed = 38f;
+        [Range(0f, 90f)] public float SlopeMixed = 44f;
 
         [Tooltip("Degrees. Past this the ground is bare rock.")]
-        [Range(0f, 90f)] public float SlopeBare = 45f;
+        [Range(0f, 90f)] public float SlopeBare = 50f;
 
         [Tooltip("Metres across the noise that pushes material boundaries about, so they wander.")]
         [Min(4f)] public float MaterialNoiseSize = 20f;

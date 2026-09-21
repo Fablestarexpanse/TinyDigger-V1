@@ -5,9 +5,10 @@ this records why.
 
 ---
 
-**NEXT:** Grass and wind are in and pushed; 296/296 tests pass. Waiting on Ronan's look at
-`Screenshots/Art/grass2_wind.gif`. Open: wind strength and density tuning, grass on steep topsoil,
-no grass LOD beyond 220 m, and the STYLE.md §9 approval. Then Phase 2 (tree variations, rocks...).
+**NEXT:** Terrain look pass (loop 6) is done and pushed; 296/296 tests pass. Vegetation is off (the
+Grass object is disabled in the scene). Waiting on Ronan's look at `Screenshots/Look/l6_*`. Open:
+blocky per-cell rock outlines, warm tan beach bands, the rock faces show little texture at
+distance, and too much rock on the central range compared with the references.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1631,3 +1632,31 @@ hand (the capture tools' `camera.Render()`), so the first capture showed no gras
 `GrassView` now draws in `RenderPipelineManager.beginCameraRendering`, per camera.
 
 **Motion check.** 24 frames 0.1 s apart. On average 8.2% of pixels change between frames.
+
+## Terrain look pass — diorama references (2026-09-21)
+
+**The big one: the sun never reached the terrain.** The renderer is Forward+ with light layers on
+(it has been since the first commit), and the terrain, water and foliage shaders were not compiled
+with `_LIGHT_LAYERS` / `_CLUSTER_LIGHT_LOOP`. So URP skipped the main light for them, and
+everything we have ever tuned as "lighting" was really the trilight ambient. A URP Lit cube beside
+the terrain lit fine, which proved it. The fix is the same multi_compile set URP's Lit uses. Rule:
+every custom lit shader copies URP Lit's light keyword pragmas.
+
+**Look changes, measured against the references** (lit grass #B4BF23, rock #3F4A3A, background
+#3B454F):
+- Sun 34° elevation, 6200 K, intensity 2.3, shadow 0.95. Ambient 0.9, with a cool sky and a green
+  equator and ground. Slope tint off. Grade: saturation +28, contrast +16, +0.1 EV.
+- Texture recipes:
+  - grass: yellow-green (0.50, 0.60, 0.13) with yellow flecks;
+  - rock: dark green-grey;
+  - dirt: dark olive, with dark flecks (the pale stone flecks had made dirt average a cream
+    #A8A293);
+  - granite and loose rock: in the rock family;
+  - sand: toned down to (0.70, 0.62, 0.44).
+- Grass on steeper ground: SlopeMixed 38→44 and SlopeBare 45→50, in the code and the asset.
+- Terrain BlendWidth 0.5→1.0 (the softest the four-cell blend can go) and MottleStrength 0.18.
+- Table: dark plinth #2C2729-ish, navy gradient sky.
+
+**Workflow gotcha.** Running "Generate Terrain Textures" inside a RunCommand timed out the MCP, and
+Unity restarted, losing the unsaved changes. Now: save settings in one command, trigger the
+generator through ManageMenuItem, and watch the log for "Terrain textures: wrote".

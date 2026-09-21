@@ -60,8 +60,8 @@ MonoBehaviour:
   RiverWander: 1.4
   SlopeSmoothing: 2
   SlopeGrass: 25
-  SlopeMixed: 38
-  SlopeBare: 45
+  SlopeMixed: 44
+  SlopeBare: 50
   MaterialNoiseSize: 20
   MaterialNoiseDegrees: 7
   SandMaxHeight: 3

@@ -12,25 +12,25 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3e3bfafd0ac1bb34e9911405fd700533, type: 3}
   m_Name: Lighting
   m_EditorClassIdentifier: TinyDiggers.Presentation::TinyDiggers.Presentation.LightingSettings
-  Elevation: 38
+  Elevation: 34
   AzimuthFromCamera: -35
-  Temperature: 4800
-  Intensity: 1.7
+  Temperature: 6200
+  Intensity: 2.3
   SoftShadows: 1
   ShadowDistance: 300
   ShadowCascades: 4
   ShadowResolution: 4096
-  ShadowStrength: 0.75
+  ShadowStrength: 0.95
   ShadowBias: 0.1
   ShadowNormalBias: 0.6
-  SkyColour: {r: 0.62, g: 0.72, b: 0.86, a: 1}
-  GroundColour: {r: 0.5, g: 0.44, b: 0.36, a: 1}
-  EquatorColour: {r: 0.7, g: 0.68, b: 0.64, a: 1}
-  AmbientIntensity: 1.1
+  SkyColour: {r: 0.4, g: 0.5, b: 0.62, a: 1}
+  GroundColour: {r: 0.22, g: 0.26, b: 0.16, a: 1}
+  EquatorColour: {r: 0.36, g: 0.42, b: 0.34, a: 1}
+  AmbientIntensity: 0.9
   AmbientOcclusion: 1
   OcclusionRadius: 0.6
   OcclusionIntensity: 0.25
-  SlopeTint: 0.12
+  SlopeTint: 0
   SlopeColour: {r: 0.72, g: 0.68, b: 0.62, a: 1}
   SlopeFullAt: 45
   Contours: 0
