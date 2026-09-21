@@ -42,6 +42,15 @@ namespace TinyDiggers.Presentation
         [SerializeField] Material _material;
         [SerializeField] TerrainRendererKind _renderer = TerrainRendererKind.Smoothed;
 
+        [Tooltip("Draw chunks far from the camera with fewer quads (smoothed renderer only).")]
+        [SerializeField] bool _levelsOfDetail = true;
+
+        [Tooltip("Metres from the camera beyond which a chunk uses one quad per 2x2, 4x4 and 8x8 cells.")]
+        [SerializeField] float[] _lodDistances = { 120f, 300f, 650f };
+
+        [Tooltip("Most chunk levels of detail built in one frame.")]
+        [SerializeField, Min(1)] int _lodBuildsPerFrame = 48;
+
         [Header("Land")]
         [SerializeField] TerrainGeneratorKind _generator = TerrainGeneratorKind.Island;
 
@@ -178,13 +187,34 @@ namespace TinyDiggers.Presentation
             stopwatch.Restart();
             _terrainRenderer = _renderer == TerrainRendererKind.Walled
                 ? new WalledTerrainRenderer(Grid, transform, material, _chunkSize)
-                : new SmoothedTerrainRenderer(Grid, transform, material, _chunkSize);
+                : new SmoothedTerrainRenderer(Grid, transform, material, _chunkSize, LevelsOfDetail());
             var built = stopwatch.Elapsed.TotalMilliseconds;
 
             Debug.Log(
                 $"TerrainView: {_width}x{_height} cells, {_renderer} renderer, " +
                 $"{_terrainRenderer.ChunkCountX * _terrainRenderer.ChunkCountZ} chunks, " +
                 $"{_terrainRenderer.TriangleCount:N0} triangles. Generated in {generated:0} ms, meshed in {built:0} ms.");
+        }
+
+        /// <summary>
+        /// Levels of detail for the smoothed renderer, starting from where the camera is now, so
+        /// the first build makes each chunk once at the level it will be seen at.
+        /// </summary>
+        TerrainLod LevelsOfDetail()
+        {
+            if (!_levelsOfDetail)
+                return null;
+            var lod = new TerrainLod { Distances = _lodDistances, BuildsPerFrame = _lodBuildsPerFrame };
+            lod.HasViewer = TryViewer(out lod.Viewer);
+            return lod;
+        }
+
+        /// <summary>The main camera's position in the terrain's own space.</summary>
+        bool TryViewer(out Vector3 viewer)
+        {
+            var camera = Camera.main;
+            viewer = camera != null ? transform.InverseTransformPoint(camera.transform.position) : default;
+            return camera != null;
         }
 
         /// <summary>Generates the land into the existing grid and settles it once.</summary>
@@ -227,6 +257,8 @@ namespace TinyDiggers.Presentation
 
         void LateUpdate()
         {
+            if (_levelsOfDetail && TryViewer(out var viewer))
+                _terrainRenderer.UpdateLod(viewer);
             using (RebuildMarker.Auto())
                 _terrainRenderer.Rebuild();
 

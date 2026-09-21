@@ -5,10 +5,10 @@ this records why.
 
 ---
 
-**NEXT:** Slices 14 (sea floor) and 15 (load, about 11 s down to about 7 s) are done; next is Slice 16, a terrain LOD. PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
+**NEXT:** Slices 14 (sea floor), 15 (load) and 16 (terrain LOD) are done: start-up about 5.3 s, frames 9.5 ms median; waiting on Ronan's look. PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
 swell, spillway overflows (a safety valve at sea level), game logic reading it and a Basic Zone sample; waiting on Ronan's look. Open:
-- start-up is about 7 s at 3104² (generate 5.4 s, mesh 1.7 s);
-- the frame is 10.5 ms median, with 15 M terrain triangles, mostly flat seabed (a seabed LOD is the lever);
+- start-up is about 5.3 s at 3104², nearly all generation (5.0 s);
+- `WaterTests.BakingAFullMapIsCheap` is a flaky 60 ms timing check;
 - the water stops 4 m short of the dam's inner face (the gap between disc edge and dam);
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
@@ -2401,3 +2401,40 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   cell for cell.
 - **Left:** the mesh upload (about 1.7 s; the terrain LOD should shrink it); strata+ore (0.77 s,
   a serial SetColumn per cell raising events); two shore clean-ups that each flood the whole sea.
+
+## Slice 16: terrain levels of detail (2026-09-21)
+- **Asked for:** simplify the mesh far from the camera to cut the frame cost (15.1 M triangles,
+  mostly flat seabed).
+- **`TerrainLod`** (TerrainView: `_levelsOfDetail` on; distances 120 / 300 / 650 m; 48 builds a
+  frame). A chunk is drawn at level 0 (one quad a cell), 1 (2×2 cells), 2 (4×4) or 3 (8×8),
+  chosen by the distance from the camera to its middle, with 10% hysteresis.
+  - A level is built only when first wanted, nearest first, up to the budget a frame. Until
+    then a chunk keeps what it shows. A level already built and still fresh swaps in with no
+    build.
+  - An edit rebuilds the level on screen and marks the chunk's other levels stale.
+  - Start-up builds each chunk once, at the level the camera wants it.
+- **`SmoothedTerrainRenderer.BuildCoarse`:**
+  - Corners are the grid's own corner heights every 2^level corners, averaged over in-world
+    cells only; with none it gives NaN and the quad is left out, so the disc edge doesn't sag.
+  - Each quad takes the colour of its middle cell, and its steep-face colour from what lies a
+    metre under that cell.
+  - Skirts (0.75 + 1.5 × s × cell metres deep, both faces) hang from every chunk edge to cover
+    the cracks where a coarse edge meets a finer neighbour.
+  - The terrain shader colours from the cell map by world position, so the textures hold at
+    every level.
+- Without a `TerrainLod` the renderer is level 0 only, as before, and the existing renderer tests
+  are unchanged.
+- **Tests (`TerrainLodTests`, 4):**
+  - the first build makes each chunk at its wanted level;
+  - a moving viewer refines within the budget and swaps back without a build;
+  - an edit rebuilds the shown level and stales the rest;
+  - coarse corners sit on the grid's corner heights with no NaN.
+- **Measured in play at 3104²:**
+  - "Generated in 5014 ms, meshed in 279 ms" (meshing was 1726 ms);
+  - start-up 782 k triangles (was 15.1 M); 1.3–2.1 M in game views; 703 k for the whole disc;
+  - clean 20 s profile: all frames under 16.6 ms, median 9.5 ms CPU and 4.5 ms GPU (was 10.5
+    and 6.0), worst 12.1 ms (was 16.0);
+  - no cracks seen at the level boundaries on a low oblique view.
+- `WaterTests.BakingAFullMapIsCheap` (60 ms) failed again at 60.5 ms on a loaded editor. It
+  measures the old static sea's bake, which the dynamic water has replaced; its margin is too
+  thin for an editor holding a 3 GB map.

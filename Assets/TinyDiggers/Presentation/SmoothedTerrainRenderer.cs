@@ -37,14 +37,19 @@ namespace TinyDiggers.Presentation
 
         readonly List<Workspace> _workspaces = new List<Workspace>();
 
-        public SmoothedTerrainRenderer(TerrainGrid grid, Transform parent, Material material, int chunkSize = DefaultChunkSize)
-            : base(grid, parent, material, chunkSize)
+        public SmoothedTerrainRenderer(TerrainGrid grid, Transform parent, Material material, int chunkSize = DefaultChunkSize, TerrainLod lod = null)
+            : base(grid, parent, material, chunkSize, lod)
         {
             _workspaces.Add(new Workspace(this));
             Rebuild();
         }
 
         protected override int ParallelWorkers => Math.Max(1, Math.Min(Environment.ProcessorCount, 16));
+
+        protected override int LodLevels => MaxLodLevels;
+
+        protected override void BuildChunkLevel(int worker, int level, int originX, int originZ, int width, int depth, TerrainMeshBuilder builder) =>
+            _workspaces[worker].BuildCoarse(level, originX, originZ, width, depth, builder);
 
         /// <summary>
         /// The smooth normal at grid corner (cornerX, cornerZ), from central differences of the
@@ -179,6 +184,150 @@ namespace TinyDiggers.Presentation
                                 DiffersFrom(topMaterial, x, z + 1)));
                     }
                 }
+            }
+
+            float[] _coarseHeights = Array.Empty<float>();
+            Vector3[] _coarseNormals = Array.Empty<Vector3>();
+
+            /// <summary>
+            /// Level <paramref name="level"/>: one quad per s = 2^level cells square. The corners are
+            /// the grid's own corner heights every s corners, so a coarse chunk meets the land in
+            /// the same places a fine one does, only with less between. Each quad is coloured by
+            /// the cell in its middle, and its steep-face colour is what lies a metre under that
+            /// cell. A skirt hangs from every edge, deeper for coarser levels, to cover the cracks
+            /// where a coarse chunk's straight edge meets a finer neighbour's.
+            /// </summary>
+            public void BuildCoarse(int level, int originX, int originZ, int width, int depth, TerrainMeshBuilder builder)
+            {
+                var palette = _renderer.Palette;
+                var s = 1 << level;
+                var nx = (width + s - 1) / s;
+                var nz = (depth + s - 1) / s;
+                var row = nx + 1;
+                if (_coarseHeights.Length < row * (nz + 1))
+                {
+                    _coarseHeights = new float[row * (nz + 1)];
+                    _coarseNormals = new Vector3[row * (nz + 1)];
+                }
+
+                for (var b = 0; b <= nz; b++)
+                {
+                    for (var a = 0; a <= nx; a++)
+                    {
+                        var cx = originX + Math.Min(a * s, width);
+                        var cz = originZ + Math.Min(b * s, depth);
+                        var here = CornerOrNaN(cx, cz);
+                        _coarseHeights[b * row + a] = here;
+                        _coarseNormals[b * row + a] = CoarseNormal(cx, cz, s, here);
+                    }
+                }
+
+                var drop = 0.75f + 1.5f * s * _grid.CellSize;
+                for (var b = 0; b < nz; b++)
+                {
+                    for (var a = 0; a < nx; a++)
+                    {
+                        var x0 = a * s;
+                        var z0 = b * s;
+                        var x1 = Math.Min(x0 + s, width);
+                        var z1 = Math.Min(z0 + s, depth);
+                        var h00 = _coarseHeights[b * row + a];
+                        var h10 = _coarseHeights[b * row + a + 1];
+                        var h01 = _coarseHeights[(b + 1) * row + a];
+                        var h11 = _coarseHeights[(b + 1) * row + a + 1];
+                        if (float.IsNaN(h00) || float.IsNaN(h10) || float.IsNaN(h01) || float.IsNaN(h11))
+                            continue;
+                        var cellX = originX + Math.Min(x0 + s / 2, width - 1);
+                        var cellZ = originZ + Math.Min(z0 + s / 2, depth - 1);
+                        if (_grid.IsVoid(cellX, cellZ))
+                            continue;
+
+                        var top = palette[_grid.GetTopMaterial(cellX, cellZ).Value];
+                        var exposed = palette[ExposedBelow(cellX, cellZ).Value];
+                        builder.AddQuad(
+                            new Vector3(x0, h00, z0),
+                            new Vector3(x0, h01, z1),
+                            new Vector3(x1, h11, z1),
+                            new Vector3(x1, h10, z0),
+                            _coarseNormals[b * row + a],
+                            _coarseNormals[(b + 1) * row + a],
+                            _coarseNormals[(b + 1) * row + a + 1],
+                            _coarseNormals[b * row + a + 1],
+                            top,
+                            exposed,
+                            Vector4.zero);
+
+                        // Skirts on the chunk's own borders only.
+                        if (b == 0)
+                            Skirt(builder, new Vector3(x0, h00, z0), new Vector3(x1, h10, z0), drop, top, exposed);
+                        if (b == nz - 1)
+                            Skirt(builder, new Vector3(x0, h01, z1), new Vector3(x1, h11, z1), drop, top, exposed);
+                        if (a == 0)
+                            Skirt(builder, new Vector3(x0, h00, z0), new Vector3(x0, h01, z1), drop, top, exposed);
+                        if (a == nx - 1)
+                            Skirt(builder, new Vector3(x1, h10, z0), new Vector3(x1, h11, z1), drop, top, exposed);
+                    }
+                }
+            }
+
+            /// <summary>A strip hanging <paramref name="drop"/> metres under the edge from p to q, both faces.</summary>
+            static void Skirt(TerrainMeshBuilder builder, Vector3 p, Vector3 q, float drop, Color32 colour, Color32 exposed)
+            {
+                var pDown = p + Vector3.down * drop;
+                var qDown = q + Vector3.down * drop;
+                builder.AddQuad(p, q, qDown, pDown, Vector3.up, colour, exposed);
+                builder.AddQuad(p, pDown, qDown, q, Vector3.up, colour, exposed);
+            }
+
+            /// <summary>Average height of the in-world cells round a grid corner, or NaN where there are none.</summary>
+            float CornerOrNaN(int cornerX, int cornerZ)
+            {
+                var sum = 0f;
+                var count = 0;
+                for (var z = cornerZ - 1; z <= cornerZ; z++)
+                {
+                    for (var x = cornerX - 1; x <= cornerX; x++)
+                    {
+                        if (!_grid.IsGround(x, z))
+                            continue;
+                        sum += _grid.GetSurfaceHeight(x, z);
+                        count++;
+                    }
+                }
+
+                return count == 0 ? float.NaN : sum / count;
+            }
+
+            /// <summary>The slope at a coarse corner from the corners s either side, in the same units as level 0.</summary>
+            Vector3 CoarseNormal(int cornerX, int cornerZ, int s, float here)
+            {
+                var west = Math.Max(cornerX - s, 0);
+                var east = Math.Min(cornerX + s, _grid.Width);
+                var south = Math.Max(cornerZ - s, 0);
+                var north = Math.Min(cornerZ + s, _grid.Height);
+                var hw = CornerOrNaN(west, cornerZ);
+                var he = CornerOrNaN(east, cornerZ);
+                var hs = CornerOrNaN(cornerX, south);
+                var hn = CornerOrNaN(cornerX, north);
+                if (float.IsNaN(here))
+                    return Vector3.up;
+                if (float.IsNaN(hw)) { hw = here; west = cornerX; }
+                if (float.IsNaN(he)) { he = here; east = cornerX; }
+                if (float.IsNaN(hs)) { hs = here; south = cornerZ; }
+                if (float.IsNaN(hn)) { hn = here; north = cornerZ; }
+                var slopeX = east > west ? (he - hw) / (east - west) : 0f;
+                var slopeZ = north > south ? (hn - hs) / (north - south) : 0f;
+                return new Vector3(-slopeX, 1f, -slopeZ).normalized;
+            }
+
+            /// <summary>What lies a metre under the cell's surface: the colour a steep coarse face shows.</summary>
+            MaterialId ExposedBelow(int x, int z)
+            {
+                var top = _grid.GetTopMaterial(x, z);
+                if (_grid.GetLayerCount(x, z) == 0)
+                    return top;
+                var below = _grid.GetMaterialAt(x, z, _grid.GetSurfaceHeight(x, z) - 1f);
+                return below.Value == 0 ? top : below;
             }
 
             /// <summary>Copies heights and top materials of the chunk plus <see cref="Halo"/> cells around it.</summary>
