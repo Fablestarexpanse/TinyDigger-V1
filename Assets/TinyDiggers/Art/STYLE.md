@@ -109,6 +109,7 @@ The world is 1 unit = 1 m = one terrain cell. Target heights:
 | Dead tree | 6–9 m | 3–5 m |
 | Boulder | 1.5–5 m | 2–6 m |
 | Tall grass tuft | 0.6–1 m | 0.8 m |
+| Crew robot (human scale) | 0.43 m to the top, ball 0.285 m across, floating 0.125 m up | 0.4 m with arms |
 
 **Open question for Ronan — vehicles.** The crew placeholders are 0.7 × 0.55 × 0.95 m, one cell.
 Beside real-size trees a 10 m tree is 14 diggers tall, which reads as toy diggers in a real
@@ -166,6 +167,13 @@ verbatim. Only the subject sentence changes per asset.
 
 > Vehicle: simple rounded panels like a sturdy wooden toy, few parts, big readable shapes, paint
 > slightly worn at the edges. No plants or bushes anywhere.
+
+**ROBOT clause** (crew robots; added with Ronan's OK on 2026-09-21):
+
+> Robot: a small hovering round robot about the size of a football, clearly floating in the air
+> a hand's width above its soft shadow, with a gentle glow underneath where it floats. Smooth
+> rounded shell panels like a sturdy toy, few parts, big readable shapes, a simple friendly
+> face, paint slightly worn at the edges. No plants or bushes anywhere.
 
 **Negative block.** Kept for the record and for any non-distilled model:
 
