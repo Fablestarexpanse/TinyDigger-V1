@@ -7,20 +7,28 @@ namespace TinyDiggers.Presentation
 {
     /// <summary>
     /// The water: one sheet over the sea, clipped to the disc, and a ribbon down the river the
-    /// generator cut. Both are built here rather than bought, because all they have to be is a
-    /// flat sheet that reads as water from an RTS camera.
+    /// generator cut. Both are built here rather than bought.
     ///
-    /// How deep the water is over each vertex is read from the terrain when the sheet is built and
-    /// baked into the mesh, so the shader can shade the shallows and foam the shoreline without
-    /// reading scene depth. That also means the sheets are rebuilt when the land changes, which is
-    /// what <see cref="Rebuild"/> is for: reclaiming the shallows should push the shoreline back.
+    /// What the shader needs to know about the land (depth, distance to the shore, which way the
+    /// shore lies) is baked by <see cref="WaterField"/> into the mesh when the sheet is built. The
+    /// sheets are rebuilt when the land changes, which is what <see cref="Rebuild"/> is for:
+    /// reclaiming the shallows should push the shoreline, and the breaking waves, back.
+    ///
+    /// The swell is a <see cref="WaveSet"/> made from <see cref="WaterSettings"/> and handed to the
+    /// shader as globals; everything else in the settings goes onto the material.
     /// </summary>
     public sealed class WaterView : MonoBehaviour
     {
-        [SerializeField] TerrainView _terrain;
+        static readonly int WaveCountId = Shader.PropertyToID("_TDWaveCount");
+        static readonly int WaveAId = Shader.PropertyToID("_TDWaveA");
+        static readonly int WaveBId = Shader.PropertyToID("_TDWaveB");
 
-        [Tooltip("Cells between vertices of the sea sheet. Coarser is cheaper; the sea is flat.")]
-        [SerializeField, Min(1)] int _seaResolution = 4;
+        [SerializeField] TerrainView _terrain;
+        [SerializeField] WaterSettings _settings;
+
+        [Tooltip("Cells between vertices of the sea sheet. The swell needs a vertex every couple of " +
+            "metres or its shortest waves turn into spikes.")]
+        [SerializeField, Min(1)] int _seaResolution = 2;
 
         [Tooltip("Cells the sea runs past the edge of the land, so it meets the plinth wall.")]
         [SerializeField, Min(0f)] float _seaOverhang = 5f;
@@ -32,6 +40,10 @@ namespace TinyDiggers.Presentation
         [SerializeField, Min(0f)] float _rebuildDelay = 0.5f;
 
         Material _material;
+        Texture2D _detail;
+        Wave[] _waves;
+        readonly Vector4[] _waveA = new Vector4[8];
+        readonly Vector4[] _waveB = new Vector4[8];
         GameObject _sea;
         GameObject _river;
         Mesh _seaMesh;
@@ -41,10 +53,26 @@ namespace TinyDiggers.Presentation
         /// <summary>Triangles across both sheets, for the perf report.</summary>
         public int TriangleCount { get; private set; }
 
+        /// <summary>The field the sheets were last built from.</summary>
+        public WaterField Field { get; private set; }
+
+        /// <summary>The swell the shader is running, for anything that wants to float on it.</summary>
+        public IReadOnlyList<Wave> Waves => _waves;
+
+        public WaterSettings Settings => _settings;
+
+        void OnValidate()
+        {
+            if (_material != null)
+                Apply();
+        }
+
         void Start()
         {
             if (_terrain == null || _terrain.Grid == null)
                 return;
+            if (_settings == null)
+                _settings = ScriptableObject.CreateInstance<WaterSettings>();
 
             var shader = Shader.Find("TinyDiggers/Water");
             if (shader == null)
@@ -55,6 +83,8 @@ namespace TinyDiggers.Presentation
             }
 
             _material = new Material(shader) { name = "Water", hideFlags = HideFlags.DontSave };
+            _detail = WaterDetailTexture.Create();
+            Apply();
             _sea = NewSheet("Sea");
             _river = NewSheet("River");
             Rebuild();
@@ -73,8 +103,75 @@ namespace TinyDiggers.Presentation
             }
 
             Destroy(_material);
+            Destroy(_detail);
             Destroy(_seaMesh);
             Destroy(_riverMesh);
+        }
+
+        /// <summary>Puts the settings onto the material and the swell into the shader's globals.</summary>
+        public void Apply()
+        {
+            if (_material == null || _settings == null)
+                return;
+
+            var s = _settings;
+            _material.SetTexture("_Detail", _detail);
+            _material.SetColor("_ScatterShallow", s.ScatterShallow);
+            _material.SetColor("_ScatterDeep", s.ScatterDeep);
+            _material.SetVector("_Absorption", s.Absorption);
+            _material.SetFloat("_ScatterDensity", s.ScatterDensity);
+            _material.SetFloat("_Refraction", s.Refraction);
+
+            var wind = s.WindDegrees * Mathf.Deg2Rad;
+            _material.SetVector("_Wind", new Vector4(Mathf.Cos(wind), Mathf.Sin(wind), 0f, 0f));
+            _material.SetFloat("_GustSize", s.GustSize);
+            _material.SetFloat("_GustCalm", s.GustCalm);
+            _material.SetFloat("_DampDepth", s.DampDepth);
+            _material.SetFloat("_DampDistance", s.DampDistance);
+            _material.SetFloat("_Whitecaps", s.Whitecaps);
+            _material.SetFloat("_ShoreReach", s.ShoreReach);
+            _material.SetFloat("_ShoreSpacing", s.ShoreSpacing);
+            _material.SetFloat("_ShoreSpeed", s.ShoreSpeed);
+            _material.SetFloat("_ShoreLift", s.ShoreLift);
+            _material.SetFloat("_ShoreFoam", s.ShoreFoam);
+            _material.SetFloat("_RippleSize", s.RippleSize);
+            _material.SetFloat("_RippleDetailSize", s.RippleDetailSize);
+            _material.SetFloat("_RippleStrength", s.RippleStrength);
+            _material.SetFloat("_RippleSpeed", s.RippleSpeed);
+            _material.SetFloat("_RippleFade", s.RippleFade);
+            _material.SetColor("_SkyHorizon", s.SkyHorizon);
+            _material.SetColor("_SkyZenith", s.SkyZenith);
+            _material.SetFloat("_Reflection", s.Reflection);
+            _material.SetFloat("_FresnelPower", s.FresnelPower);
+            _material.SetFloat("_SunGlint", s.SunGlint);
+            _material.SetFloat("_SunSharpness", s.SunSharpness);
+            _material.SetFloat("_Caustics", s.Caustics);
+            _material.SetFloat("_CausticSize", s.CausticSize);
+            _material.SetColor("_Foam", s.Foam);
+            _material.SetFloat("_ContactFoam", s.ContactFoam);
+
+            _waves = WaveSet.Generate(s);
+            var tallest = 0f;
+            for (var i = 0; i < _waveA.Length; i++)
+            {
+                if (i < _waves.Length)
+                {
+                    var wave = _waves[i];
+                    _waveA[i] = new Vector4(wave.Direction.x, wave.Direction.y, wave.Amplitude, wave.Number);
+                    _waveB[i] = new Vector4(wave.Steepness, wave.Speed, wave.Phase, 0f);
+                    tallest += wave.Amplitude;
+                }
+                else
+                {
+                    _waveA[i] = Vector4.zero;
+                    _waveB[i] = Vector4.zero;
+                }
+            }
+
+            _material.SetFloat("_SwellHeight", Mathf.Max(0.05f, tallest));
+            Shader.SetGlobalInt(WaveCountId, _waves.Length);
+            Shader.SetGlobalVectorArray(WaveAId, _waveA);
+            Shader.SetGlobalVectorArray(WaveBId, _waveB);
         }
 
         void OnCellChanged(int x, int z) => _dirtyAt = Time.time;
@@ -107,6 +204,7 @@ namespace TinyDiggers.Presentation
             if (_terrain == null || _terrain.Grid == null || _sea == null)
                 return;
 
+            Field = WaterField.Bake(_terrain.Grid);
             _seaMesh = BuildSea(_seaMesh);
             _riverMesh = BuildRiver(_riverMesh);
             _sea.GetComponent<MeshFilter>().sharedMesh = _seaMesh;
@@ -131,38 +229,24 @@ namespace TinyDiggers.Presentation
             var rows = grid.Height / step + 1;
             var vertices = new List<Vector3>(columns * rows);
             var depths = new List<Vector2>(columns * rows);
+            var shores = new List<Vector2>(columns * rows);
+            var directions = new List<Vector2>(columns * rows);
             var indices = new List<int>(columns * rows * 6);
             var lookup = new int[columns * rows];
             for (var i = 0; i < lookup.Length; i++)
                 lookup[i] = -1;
 
+            var field = Field;
+
+            // Dry land under a corner, read from the land itself rather than the smoothed depth,
+            // so the sheet stops where the water does.
             float RawDepthAt(int x, int z)
             {
                 x = Mathf.Clamp(x, 0, grid.Width - 1);
                 z = Mathf.Clamp(z, 0, grid.Height - 1);
                 if (!grid.IsGround(x, z))
-                    return 12f; // Past the rim: as deep as the channel, so the edge stays dark.
+                    return 12f; // Past the rim: open water.
                 return World.SeaLevel - grid.GetSurfaceHeight(x, z);
-            }
-
-            // Averaged over a couple of cells either way. The seabed is quantised to whole metres,
-            // so reading it a cell at a time gives the shallows a staircase of colour bands; a
-            // small blur turns that into the gradient the eye expects of shallow water.
-            float DepthAt(int x, int z)
-            {
-                const int Blur = 2;
-                var sum = 0f;
-                var count = 0;
-                for (var dz = -Blur; dz <= Blur; dz++)
-                {
-                    for (var dx = -Blur; dx <= Blur; dx++)
-                    {
-                        sum += RawDepthAt(x + dx, z + dz);
-                        count++;
-                    }
-                }
-
-                return sum / count;
             }
 
             int VertexAt(int column, int row)
@@ -185,7 +269,9 @@ namespace TinyDiggers.Presentation
 
                 lookup[slot] = vertices.Count;
                 vertices.Add(position);
-                depths.Add(new Vector2(DepthAt(x, z), 0f));
+                depths.Add(new Vector2(field.DepthAt(x, z), 0f));
+                shores.Add(new Vector2(field.ShoreDistanceAt(x, z), 0f));
+                directions.Add(field.ShoreDirectionAt(x, z));
                 return lookup[slot];
             }
 
@@ -211,7 +297,7 @@ namespace TinyDiggers.Presentation
                 }
             }
 
-            return Fill(mesh, "Sea", vertices, depths, indices);
+            return Fill(mesh, "Sea", vertices, depths, shores, directions, indices);
         }
 
         /// <summary>
@@ -224,9 +310,12 @@ namespace TinyDiggers.Presentation
             var island = _terrain.Island;
             var vertices = new List<Vector3>();
             var depths = new List<Vector2>();
+            var flows = new List<Vector2>();
+            var directions = new List<Vector2>();
             var indices = new List<int>();
             if (island == null || island.River.Count < 2)
-                return Fill(mesh, "River", vertices, depths, indices);
+                return Fill(mesh, "River", vertices, depths, flows, directions, indices);
+            var flowSpeed = _settings != null ? _settings.FlowSpeed : 1.2f;
 
             var settings = _terrain.Settings;
             var halfWidth = Mathf.Max(1f, (settings != null ? settings.RiverWidth : 4) * 0.5f);
@@ -257,8 +346,19 @@ namespace TinyDiggers.Presentation
                 vertices.Add(right);
                 var depth = surface - point.y;
                 // The banks are shallow, the middle is not: that is what foams the edges.
-                depths.Add(new Vector2(depth * 0.25f, travelled));
-                depths.Add(new Vector2(depth * 0.25f, travelled));
+                depths.Add(new Vector2(depth, travelled));
+                depths.Add(new Vector2(depth, travelled));
+
+                // Steeper reaches run faster: a metre of drop in ten metres doubles the speed.
+                var run = Mathf.Max(0.5f, new Vector2(next.x - previous.x, next.z - previous.z).magnitude);
+                var drop = Mathf.Max(0f, previous.y - next.y) / run;
+                var speed = flowSpeed * (1f + drop * 10f);
+                // Past the reach of the shore waves, so none break on a river.
+                flows.Add(new Vector2(WaterField.Open, speed));
+                flows.Add(new Vector2(WaterField.Open, speed));
+                var flowDirection = new Vector2(along.x, along.z);
+                directions.Add(flowDirection);
+                directions.Add(flowDirection);
 
                 if (i == 0)
                     continue;
@@ -275,10 +375,11 @@ namespace TinyDiggers.Presentation
                 vertices[i + 1] = Vector3.Lerp(middle, vertices[i + 1], 1.05f);
             }
 
-            return Fill(mesh, "River", vertices, depths, indices);
+            return Fill(mesh, "River", vertices, depths, flows, directions, indices);
         }
 
-        static Mesh Fill(Mesh mesh, string name, List<Vector3> vertices, List<Vector2> depths, List<int> indices)
+        static Mesh Fill(Mesh mesh, string name, List<Vector3> vertices, List<Vector2> depths,
+            List<Vector2> shores, List<Vector2> directions, List<int> indices)
         {
             if (mesh == null)
                 mesh = new Mesh { name = name, hideFlags = HideFlags.DontSave };
@@ -289,9 +390,15 @@ namespace TinyDiggers.Presentation
             mesh.indexFormat = vertices.Count > 65000 ? IndexFormat.UInt32 : IndexFormat.UInt16;
             mesh.SetVertices(vertices);
             mesh.SetUVs(1, depths);
+            mesh.SetUVs(2, shores);
+            mesh.SetUVs(3, directions);
             mesh.SetTriangles(indices, 0);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
+            // The swell moves the surface in the shader; keep the sheet from being culled for it.
+            var bounds = mesh.bounds;
+            bounds.Expand(new Vector3(2f, 4f, 2f));
+            mesh.bounds = bounds;
             return mesh;
         }
     }

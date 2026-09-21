@@ -20,9 +20,9 @@ RenderSettings:
   m_FogDensity: 0.01
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
-  m_AmbientSkyColor: {r: 0.46, g: 0.53, b: 0.62, a: 1}
-  m_AmbientEquatorColor: {r: 0.42, g: 0.42, b: 0.42, a: 1}
-  m_AmbientGroundColor: {r: 0.34, g: 0.32, b: 0.29, a: 1}
+  m_AmbientSkyColor: {r: 0.68200004, g: 0.79200006, b: 0.94600004, a: 1.1}
+  m_AmbientEquatorColor: {r: 0.77, g: 0.748, b: 0.704, a: 1.1}
+  m_AmbientGroundColor: {r: 0.55, g: 0.484, b: 0.39600003, a: 1.1}
   m_AmbientIntensity: 1
   m_AmbientMode: 1
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
@@ -300,8 +300,8 @@ Light:
   m_Enabled: 1
   serializedVersion: 13
   m_Type: 1
-  m_Color: {r: 1, g: 0.8052827, b: 0.6704276, a: 1}
-  m_Intensity: 1.35
+  m_Color: {r: 1, g: 0.75345445, b: 0.5683641, a: 1}
+  m_Intensity: 1.7
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -310,7 +310,7 @@ Light:
     m_Type: 2
     m_Resolution: -1
     m_CustomResolution: -1
-    m_Strength: 0.85
+    m_Strength: 0.75
     m_Bias: 0.1
     m_NormalBias: 0.6
     m_NearPlane: 0.2
@@ -730,7 +730,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: TinyDiggers.Presentation::TinyDiggers.Presentation.WaterView
   _terrain: {fileID: 551060599}
-  _seaResolution: 4
+  _settings: {fileID: 11400000, guid: 8fef7eea4dbb6c14f8e1ada339c017fb, type: 2}
+  _seaResolution: 2
   _seaOverhang: 5
   _riverDepth: 1.2
   _rebuildDelay: 0.5

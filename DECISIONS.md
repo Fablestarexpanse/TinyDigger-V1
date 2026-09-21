@@ -5,9 +5,9 @@ this records why.
 
 ---
 
-**NEXT:** Haze pass (grade repaired, ambient down) is done and pushed. Waiting on Ronan's approval
-of the water proposal (waves, shoreline, the milky shallows) before any water code. Still owed: a
-frame-time check on a mid-range machine and the tilt-shift blur toggle.
+**NEXT:** Slice 9 (water) is done and pushed; 291/291. Waiting on Ronan's look at the shots in
+`Screenshots/Slice9/`. Still owed: a real frame-time check on a mid-range machine (the in-editor
+number is not trustworthy, see Slice 9), the tilt-shift blur toggle, unit wakes, and waterfalls.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1502,3 +1502,43 @@ went olive, so the middle value was kept.
 Left for the water pass: the shallow band is an opaque milky cyan (`_Shallow` alpha 0.45, very
 pale) and reads as fog on the sea. Shots: `Screenshots/Haze/` (light_ =
 ambient 0.85, mid_ = chosen).
+
+## Slice 9 — water (2026-09-21)
+
+Approved by Ronan on 2026-09-20. Refraction: yes. Wave height: "random, a mix".
+
+**What was built.** `WaterField` bakes depth, shore distance and shore direction per cell (29–57 ms
+on 512², in-scene). `WaveSet` makes a seeded Gerstner mix from `WaterSettings`. The first wave is
+always 85–100% of the height range and the second 0–15%, the rest lean small, and each is capped
+at 1/14 of its length. The sum of Q·k·A is held at `Steepness` (≤ 1), so no crest ever loops. The
+shader does the swell with calm and rough patches (`GustSize` 140 m, calmest 30%). The swell dies
+in the shallows and near the shore. Beach waves are bands on the shore distance. The seabed is
+refracted, absorbed per channel (0.45 / 0.16 / 0.11 per metre) with scatter, caustics, Fresnel
+sky, sun glints, and four kinds of foam. Tests: 8 new, 291/291.
+
+**Found on the way: the terrain was missing from the depth texture.** The SSAO renderer feature is
+set to Depth Normals, so URP draws the DepthNormals pass to build the depth texture, and neither
+terrain shader had one. So SSAO has never shaded the terrain since 8b, and the first water run saw
+the sea as bottomless: navy right to the beach, with foam lines floating offshore. Both terrain
+shaders now have a DepthNormals pass. Rule: every opaque shader needs one.
+
+**Tuning after the first shots.**
+- Offshore beach-wave bands looked like painted lines, so they now foam only within 40% of
+  `ShoreReach` of the shore.
+- Foam lit by the 4800 K sun read pink over blue water, so foam is lit by the sun's brightness only.
+- Ripples at 0.55 speckled white close up, so they are now 0.35, and whitecaps need a higher ripple.
+- Refraction at 0.025 dragged beach colour into the water, so it is now 0.015 and scaled by a
+  quarter of the thickness.
+
+**Sea mesh.** Vertex every 2 cells, not 4, so the shortest waves (7 m) have enough vertices:
+99,334 triangles on the Continent map.
+
+**Frame time, honestly.** The capture times the coastline view with the water hidden and shown,
+through `FrameTimingManager`. In the editor it reports about 1.6 ms GPU either way, which is not
+believable for a 2560×1440 frame. Treat it as "no measurable cost in the editor", not as a budget
+figure. The mid-range machine check is still owed.
+
+**Not done.** The river shot lands on a round pool at the river's midpoint on this seed rather than
+on a running channel, so rapids foam is untested by eye. Unit wakes and waterfalls are not built.
+Rebuilding the field after digging costs up to ~57 ms in one frame; if that hitches, bake only the
+dirty region.

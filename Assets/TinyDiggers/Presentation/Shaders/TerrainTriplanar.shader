@@ -380,6 +380,54 @@ Shader "TinyDiggers/Terrain Triplanar"
             ENDHLSL
         }
 
+        // URP draws this, not DepthOnly, whenever anything asks for normals, and SSAO does. Without
+        // it the terrain was missing from the depth texture: no ambient occlusion on the land, and
+        // the water thought every pixel of sea was bottomless.
+        Pass
+        {
+            Name "DepthNormals"
+            Tags { "LightMode" = "DepthNormals" }
+
+            ZWrite On
+
+            HLSLPROGRAM
+            #pragma vertex DepthNormalsVert
+            #pragma fragment DepthNormalsFrag
+            #pragma multi_compile_fragment _ _GBUFFER_NORMALS_OCT
+
+            struct DepthNormalsAttributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+            };
+
+            struct DepthNormalsVaryings
+            {
+                float4 positionCS : SV_POSITION;
+                float3 normalWS : TEXCOORD0;
+            };
+
+            DepthNormalsVaryings DepthNormalsVert(DepthNormalsAttributes input)
+            {
+                DepthNormalsVaryings output;
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                return output;
+            }
+
+            half4 DepthNormalsFrag(DepthNormalsVaryings input) : SV_Target
+            {
+                float3 normalWS = normalize(input.normalWS);
+                #if defined(_GBUFFER_NORMALS_OCT)
+                    float2 octahedral = PackNormalOctQuadEncode(normalWS);
+                    return half4(PackFloat2To888(saturate(octahedral * 0.5 + 0.5)), 0.0);
+                #else
+                    return half4(normalWS, 0.0);
+                #endif
+            }
+            ENDHLSL
+        }
+
         Pass
         {
             Name "DepthOnly"

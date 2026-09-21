@@ -1,0 +1,55 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e90acc56fc274646807a28ab141f0d0, type: 3}
+  m_Name: Water
+  m_EditorClassIdentifier: TinyDiggers.Presentation::TinyDiggers.Presentation.WaterSettings
+  ScatterShallow: {r: 0.2, g: 0.62, b: 0.62, a: 1}
+  ScatterDeep: {r: 0.04, g: 0.2, b: 0.33, a: 1}
+  Absorption: {x: 0.45, y: 0.16, z: 0.11}
+  ScatterDensity: 0.12
+  Refraction: 0.015
+  Seed: 7
+  WaveCount: 6
+  MinAmplitude: 0.05
+  MaxAmplitude: 0.45
+  MinWavelength: 7
+  MaxWavelength: 45
+  WindDegrees: 35
+  Spread: 60
+  Steepness: 0.55
+  SpeedScale: 0.7
+  GustSize: 140
+  GustCalm: 0.3
+  DampDepth: 4
+  DampDistance: 6
+  Whitecaps: 0.75
+  ShoreReach: 16
+  ShoreSpacing: 6
+  ShoreSpeed: 0.18
+  ShoreLift: 0.12
+  ShoreFoam: 0.9
+  RippleSize: 9
+  RippleDetailSize: 3.1
+  RippleStrength: 0.35
+  RippleSpeed: 0.35
+  RippleFade: 220
+  FlowSpeed: 1.2
+  SkyHorizon: {r: 0.78, g: 0.84, b: 0.88, a: 1}
+  SkyZenith: {r: 0.38, g: 0.56, b: 0.78, a: 1}
+  Reflection: 0.8
+  FresnelPower: 5
+  SunGlint: 3
+  SunSharpness: 600
+  Caustics: 0.45
+  CausticSize: 4
+  Foam: {r: 0.95, g: 0.97, b: 0.96, a: 1}
+  ContactFoam: 0.6

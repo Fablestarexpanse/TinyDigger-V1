@@ -209,22 +209,39 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
   rendering, 4× less memory.)
 - Triplanar-mapped material textures; weathered vs freshly-cut rock variants.
 
-### Water (built, slice 8)
-Ours, not a bought asset: all it has to be is a flat sheet that reads as water
-from an RTS camera.
-- One sheet over the sea, clipped to the disc and dropped onto the circle at
-  its outer ring; one ribbon down the river the generator cut.
-- **Depth is baked into the mesh** when the sheet is built, so the shallows are
-  pale, the channel is dark and the shoreline foams without a scene-depth read.
-  Distance down the channel is baked in too, so a river's surface runs
-  downstream rather than in one world direction.
-- The surface itself is two crossing sine ripples perturbing the normal, which
-  at this distance does the work of a normal map.
-- The sheets are rebuilt a moment after the land last changed, so reclaiming
-  the shallows pushes the shoreline back.
-- Wanted later, and not built: dynamic interaction (wakes and ripples around
-  units), shoreline waves that break, and waterfalls. That is a tool set of its
-  own; the sheets above are the surface it would drive.
+### Water (built, slices 8 and 9)
+Ours, not a bought asset. The same sheets as slice 8 (one over the sea, clipped
+to the disc; one ribbon down the river), with a real surface since slice 9.
+Everything it needs is in `WaterSettings` (`Presentation/Settings/Water.asset`).
+- **Baked per cell when the land changes** (`WaterField`): depth (smoothed two
+  cells), distance through the water to the nearest dry cell, and which way that
+  shore lies. These go into the mesh as UV1 to UV3. The sheets are rebuilt a
+  moment after the land last changes, so reclaiming the shallows moves the
+  breaking waves too.
+- **Swell**: Gerstner waves from `WaveSet`, a seeded random mix of heights
+  (Ronan's ruling: never one height). The set always has one big wave and one
+  small one, and no wave is taller than 1/14 of its length. It also varies over
+  the map in calm and rough patches. The swell dies away in water shallower
+  than `DampDepth` and within `DampDistance` of the shore, so no wave floods a
+  beach. Rivers have no swell.
+- **Waves on the beach**: bands on the shore distance that travel inland,
+  broken into sets. They lift the surface and foam only in the breaking zone.
+- **Looking into it**: the seabed comes from URP's opaque texture, bent by the
+  ripples. It is dimmed per channel by how much water the eye looks through,
+  read from the depth texture, and scattered colour builds up in its place.
+  That is why the shallows are turquoise and the deep water navy. Faint
+  caustics show on shallow seabed.
+- **Surface**: two scrolling layers of a generated tileable ripple texture
+  (`WaterDetailTexture`), mipmapped so the distance never aliases into a grid.
+  The sky is reflected by Fresnel, and the sun makes sharp glints.
+- **Foam**: wherever the water meets anything (from the depth texture, so a new
+  cut foams too), where waves break, on the tallest crests, and on fast rivers.
+- **Needs**: URP depth and opaque textures (on in `PC_RPAsset`, opaque
+  downsampling off). Every opaque shader needs a DepthNormals pass, because
+  SSAO makes URP build the depth texture from that pass. Anything without one
+  is invisible to the water's depth maths.
+- Wanted later, and not built: wakes and ripples around units (needs an
+  interaction render texture), and waterfalls.
 
 ### Material detail (built, slice 7)
 Everything is in the fragment shader; the mesh and the terrain data are untouched.
