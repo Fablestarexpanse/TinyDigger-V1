@@ -2476,3 +2476,52 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   brutalist (concrete panels and cyan slits, 8002), two-tone (cream over teal with a face screen,
   8003). The fifth (rotor, 8004) stalled in ComfyUI on a full GPU (23.5 of 24.5 GB with Unity
   open), and the rest were not run once Ronan picked.
+
+### The crew unit model: rigged and animated (2026-09-21)
+- **Ronan:** "make sure to animate and rig it in blender as well".
+- **Pipeline.**
+  1. The picked concept was re-rendered de-lit (the same prompt with even studio light;
+     `Art/Concepts~/crew_lens_delit_8000_00001_.png`).
+  2. It went through `TinyDiggers_Trellis2`, with the reduction done **inside ComfyUI**: the
+     `DecimateMesh` node set to 20,000 faces in **qem** placement, then the texture baked onto the
+     low mesh. The raw GLB is kept as `Art/Blender~/crew_lens_q20k.glb`.
+  3. `Art/Tools/td_crew.py` (headless Blender) finds the parts, rigs, animates and exports. Its
+     source file is `Art/Blender~/crew_unit.blend`.
+- **What refused on the way, and the fix:**
+  - Blender collapse decimation of the 690k Trellis2 shell shattered it into a crumpled mess, and
+    so did ComfyUI's decimation to 8k in **midpoint** mode. QEM at 20k keeps the shape.
+  - Face windings came out about half wrong (6,976 of 14,301 faces). In URP they showed as dark
+    mirror-like patches. `orient_outward` turns each face away from its part's centre, the ball
+    or an arm; after that the material is back-face culled.
+  - The lens is dark teal, not bright cyan, and Trellis2 painted a second lens on the back it
+    never saw. The lens is now found by face colour (green and blue above red), keeping only the
+    biggest group of faces pointing one way.
+  - The ball fit (shrink toward the median) came out at 0.139 m. A trimmed least-squares sphere
+    fit gives 0.283 m.
+  - Arm swing turned about the side axis, but Trellis2's arms stick out sideways, so the swing
+    only twisted each arm about its own length. The turns are now about axes square to the arm.
+  - The FBX option `bake_space_transform` flattened the clips in Unity; Blender itself marks it
+    broken with armatures. It is off, and the Unity importer bakes the axis conversion instead.
+  - A front on Blender −Y imported facing Unity **−Z**. The FBX axis options cannot change that,
+    because Unity reads the declared axes and undoes them. The robot is placed facing Blender +Y,
+    which imports as Unity +Z.
+- **Result, as measured in Unity:**
+  - 14,301 triangles, one 2048² albedo, bones Root/Body/Arm.L/Arm.R, every vertex rigid to one
+    bone;
+  - the ball is 0.283 m in radius, its centre 0.53 m up, the bottom about 0.25 m off the ground.
+  - `crew_unit.prefab`: Animator with `crew_unit.controller`, default state Idle.
+
+    | Clip | Length | Body turns up to | Arm turns up to |
+    |------|--------|------------------|-----------------|
+    | Idle | 2.0 s | 13.6° | 14.1° |
+    | Move | 1.0 s | 11.5° | 46.7° |
+    | Work | 1.2 s | 11.2° | 55.3° |
+    | Carry | 1.0 s | 7.5° | 50.3° |
+
+  - Sheets: `Screenshots/Art/Crew/crew_contact_sheet.png` (Blender) and `crew_unity_sheet.png`.
+- **Open:**
+  - The band came out orange, not the concept's sunny yellow.
+  - There is a second lens on the back.
+  - The arms are rather big.
+  - There is no hover glow mesh yet.
+  - `CrewView` still draws primitive crew; putting the prefab in is the next step.

@@ -99,3 +99,17 @@ the raw `tree_a_trellis_raw.png`).
 - **Bark.** It is a flat colour, with no painted texture yet.
 - **One atlas for every card.** At close zoom the repetition is faint but visible; a second atlas
   row would add variety.
+
+## crew_unit (2026-09-21)
+- **Source:** concept `crew_0_lens_8000`, re-rendered de-lit
+  (`Concepts~/crew_lens_delit_8000_00001_.png`).
+- **Trellis2:** `TinyDiggers_Trellis2`, with `DecimateMesh` at 20,000 faces in qem mode and a
+  2048 bake. Output: `Blender~/crew_lens_q20k.glb`.
+- **Blender:**
+  `blender -b --factory-startup -P Art/Tools/td_crew.py -- --in Blender~/crew_lens_q20k.glb --out Props/Crew/crew_unit --blend Blender~/crew_unit.blend --tris 20000 --shots Screenshots/Art/Crew`
+- **Result:**
+  - 14,301 triangles, 4 bones (rigid), clips Idle, Move, Work and Carry at 30 fps;
+  - URP Lit material with back-face culling and smoothness 0.35;
+  - a prefab with an Animator.
+- **Open:** the band is orange rather than yellow; Trellis2 added a back lens; there is no glow
+  underneath yet.
