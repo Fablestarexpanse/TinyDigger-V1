@@ -6,8 +6,8 @@ this records why.
 ---
 
 **NEXT:** PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
-swell, spillway overflows (a safety valve at sea level) and game logic reading it; waiting on Ronan's look. Open:
-- a package sample scene.
+swell, spillway overflows (a safety valve at sea level), game logic reading it and a Basic Zone sample; waiting on Ronan's look. Open:
+- nothing on the water list; next is Ronan's call.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -2238,3 +2238,32 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   - each of the 4 units (2 diggers, 2 haulers) made one escape, straight to the ring;
   - all were out by 2.78 s, standing in 0.02–0.03 m;
   - the haulers then went back to their diggers.
+
+## PromptWaffle Dynamic Water: Basic Zone sample (2026-09-21)
+- It follows the approved design's `package.json` entry: "a procedural basin with a source, a
+  drain and a force". It also shows what the package gained since then: an overflow, the swell,
+  and `TrySample` (a floating buoy).
+- **Contents:**
+  - `ProceduralBasinGround`, a ground provider plus a matching mesh: an upper and a lower pool,
+    a sill with a notch between them, an island, and a spillway notch in the rim;
+  - effectors: a spring, a current (force), a drain, and an overflow at the notch;
+  - `BasicZoneDemo`: hold left mouse to pour, right mouse to dig a crater (shows
+    `RaiseChanged`), R to refill, and a readout;
+  - `SampleFloater`.
+- **Input:** Input System when it is installed (via a version define), legacy input otherwise.
+- **Authoring:** Samples~ is hidden from Unity's import. The sample is built and checked in
+  `Assets/_PWSampleDev/BasicZone`, then moved with its .meta files (so its GUIDs hold) into
+  `Packages/com.promptwaffle.dynamicwater/Samples~/BasicZone`. To edit it later: import it with
+  Package Manager > Samples, change it, and copy it back.
+- **Built and checked in play** (from the dev folder):
+  - both pools fill to 0 m and hold level;
+  - the hose poured at 20 m³/s on the dry west rim ran down into the lower pool, 17.6 m/s on
+    the steep rim, 1.7 m deep at its foot;
+  - a crater dug 2.5 m deep beside the lower pool filled to 1.54 m from it;
+  - the buoys ride 0.25 m under the surface.
+- **Current retuned:** the first scene's force was 1.5 m/s², as strong as a 15% slope. After
+  3 s the lower pool read -0.69 m, with buoys sitting in a trough. It is now 0.1 m/s².
+- **Imported the way a user would** (`Sample.Import`, into `Assets/Samples/PromptWaffle Dynamic
+  Water System/0.1.0/Basic Zone`): 37 components, none missing; it plays the same. The test copy
+  was then deleted.
+- Needs URP's Opaque Texture on (the water refracts through it); the README says so.

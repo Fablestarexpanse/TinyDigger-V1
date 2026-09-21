@@ -7,6 +7,6 @@
   "author": { "name": "PromptWaffle" },
   "dependencies": {},
   "samples": [
-    { "displayName": "Basic Zone", "description": "A procedural basin with a source, a drain and a force.", "path": "Samples~/BasicZone" }
+    { "displayName": "Basic Zone", "description": "A procedural basin with every kind of effector (source, drain, force, overflow), a light swell and floating buoys. Pour water with the mouse and dig craters to watch it flow.", "path": "Samples~/BasicZone" }
   ]
 }
