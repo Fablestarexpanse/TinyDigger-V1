@@ -2548,3 +2548,14 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
     with a 64² smooth radial falloff texture `crew_glow.png`.
 - **Open:** the glow reads whitish-yellow, not the concept's warm yellow, because the HDR colour
   saturates. It is a material tweak.
+
+### The crew robot's eye glows (2026-09-21)
+- **Ronan:** "he needs a glow in his eye".
+- **Eye.** `td_crew.eye_emission` writes `crew_unit_emission.png`, on the same UVs as the albedo.
+  - Only the 239 front-lens faces are lit, in cyan (0.35, 1.0, 0.95). The value falls from full
+    at the lens centre to zero at its rim: (1 − x²)^1.5, where x is the angle from the centre over
+    the 90th-percentile lens angle.
+  - A flat fill, tried first, showed the jagged outline of the lens faces.
+  - `crew_unit.mat` has emission on, with that map and an emission colour of white × 2.2.
+- **Hover glow.** Its colour changed from (1, 0.7, 0.28) × 4 to (1, 0.62, 0.18) × 1.6. At × 4
+  every channel saturated and the glow read white; at × 1.6 it stays warm yellow.

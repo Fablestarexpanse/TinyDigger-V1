@@ -14,6 +14,7 @@ Stages:
     rig       Root on the ground, Body at the ball's centre, Arm.L and Arm.R at the shoulders;
               every vertex rigid to one bone
     glow      a downward disc under the belly pad, riding Body, for the hover glow
+    eye       an emission map: the front lens bright cyan, the rest black
     animate   Idle, Move, Work and Carry: looping clips at 30 fps
     export    FBX with the armature and every clip, the albedo, and the .blend as the source
               (outside Assets, in Art/Blender~, or Unity imports it as a second model)
@@ -163,7 +164,8 @@ def find_parts(obj):
         arm_source = "distance"
     return {
         "centre": centre, "radius": float(radius), "front": front, "side": side,
-        "lens": lens, "arm_l": arm_l, "arm_r": arm_r, "d": d, "arm_source": arm_source,
+        "lens": lens, "lens_faces": np.flatnonzero(lens_faces), "arm_l": arm_l, "arm_r": arm_r,
+        "d": d, "arm_source": arm_source,
     }
 
 
@@ -184,15 +186,20 @@ def islands(mesh):
     return np.array([root(i) for i in range(len(parent))])
 
 
-def paint_faces(image, mesh, faces, colour):
-    """Fills the UV area of `faces` in `image` with `colour`, a little past the edges so no seam."""
+def paint_faces(image, mesh, faces, colour, shade=None):
+    """
+    Fills the UV area of `faces` in `image` with `colour`, a little past the edges so no seam.
+    `shade`, if given, is one value per vertex, blended across each face and multiplied in.
+    """
     w, h = image.size
     pixels = np.empty(w * h * 4, dtype=np.float32)
     image.pixels.foreach_get(pixels)
     pixels = pixels.reshape(h, w, 4)
     uv = mesh.uv_layers.active.data
     for index in faces:
-        corners = np.array([uv[i].uv for i in mesh.polygons[index].loop_indices]) * (w, h)
+        polygon = mesh.polygons[index]
+        corners = np.array([uv[i].uv for i in polygon.loop_indices]) * (w, h)
+        values = shade[list(polygon.vertices)] if shade is not None else None
         for k in range(1, len(corners) - 1):  # fan into triangles
             tri = corners[[0, k, k + 1]]
             lo = np.floor(tri.min(axis=0)).astype(int) - 1
@@ -206,7 +213,12 @@ def paint_faces(image, mesh, faces, colour):
                 continue
             s, t = np.linalg.solve(m, (p - a).T)
             inside = (s > -0.05) & (t > -0.05) & (s + t < 1.05)
-            pixels[ys.ravel()[inside], xs.ravel()[inside], :3] = colour
+            if values is None:
+                pixels[ys.ravel()[inside], xs.ravel()[inside], :3] = colour
+            else:
+                v = values[[0, k, k + 1]]
+                blend = np.clip((1 - s - t) * v[0] + s * v[1] + t * v[2], 0.0, 1.0)[inside]
+                pixels[ys.ravel()[inside], xs.ravel()[inside], :3] = blend[:, None] * np.asarray(colour)[None, :]
     image.pixels.foreach_set(pixels.ravel())
     image.update()
 
@@ -508,6 +520,42 @@ def add_glow(obj, rig, parts, segments=24):
     return glow
 
 
+def eye_emission(obj, parts, out, colour=(0.35, 1.0, 0.95)):
+    """
+    The emission map for the eye glow: black everywhere but the front lens, which is bright cyan.
+    The engine multiplies it by its emission colour, so only the lens lights up. Saved next to
+    the albedo, at the same size and on the same UVs.
+
+    The glow is full in the middle of the lens and fades to nothing at its rim, like light behind
+    glass. A flat fill showed the lens faces' jagged outline.
+    """
+    albedo = td.base_colour_image(obj)
+    if albedo is None or not obj.data.uv_layers:
+        return None
+    w, h = albedo.size
+    image = bpy.data.images.new("crew_emission", w, h, alpha=False)
+    image.pixels.foreach_set(np.tile(np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32), w * h))
+    mesh = obj.data
+    faces = parts["lens_faces"]
+    co = np.array([v.co for v in mesh.vertices])
+    ball = co[~(parts["arm_l"] | parts["arm_r"])]
+    centre = (ball.max(axis=0) + ball.min(axis=0)) / 2  # the ball's centre, after placing
+    lens_vertices = np.unique(np.concatenate([list(mesh.polygons[i].vertices) for i in faces]))
+    heading = co - centre
+    heading /= np.maximum(np.linalg.norm(heading, axis=1), 1e-9)[:, None]
+    middle = heading[lens_vertices].mean(axis=0)
+    middle /= np.linalg.norm(middle)
+    angle = np.arccos(np.clip(heading @ middle, -1.0, 1.0))
+    rim = np.percentile(angle[lens_vertices], 90)
+    x = np.clip(angle / rim, 0.0, 1.0)
+    shade = (1.0 - x * x) ** 1.5  # full in the middle, 0 at the rim
+    paint_faces(image, mesh, faces, np.array(colour), shade)
+    image.filepath_raw = out + "_emission.png"
+    image.file_format = "PNG"
+    image.save()
+    return image.filepath_raw
+
+
 def finish(obj, rig, out, blend, glow=None):
     name = os.path.basename(out)
     obj.name = name
@@ -611,6 +659,8 @@ def main():
     glow = add_glow(obj, rig, parts)
     report["clips"] = animate(rig)
     finish(obj, rig, a.out, a.blend, glow)
+    report["eye_emission"] = eye_emission(obj, parts, a.out)
+    report["lens_faces"] = int(len(parts["lens_faces"]))
     if a.shots:
         report["sheet"] = shots(rig, a.shots)
     print("TD_CREW " + json.dumps(report))
