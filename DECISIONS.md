@@ -1928,3 +1928,36 @@ Both carry their own wall section and the +x fin, like a bay.
 - **`dam_pad`** (24 m, 2 bays, ~960 triangles): an octagonal pad 22 m across, 3 m below the crest,
   on a faceted inverted cone with a raking brace back to the wall. It has a lit landing ring, a
   touchdown mark, four corner beacons and a ramp up to the crest.
+
+**Step 2 done: the ring in Unity** (`Presentation/Dam/`):
+- **Layout** (`DamLayout.Build`, plain C#): four terminals centred on the compass points. Each gap
+  holds pad, spillway, tower, spillway, pad, spread evenly, jittered by up to a bay by the seed,
+  never two features touching. Every piece in a gap is stretched by the same factor, within half
+  a bay over the gap, so the ring closes exactly. At radius 259 m: 88 pieces round 1627 m.
+- **Bending** (`DamBend`, in `DamLayout.cs`): the angle comes from the along-wall position over the
+  inner radius, and the radius is the inner radius plus the outward distance. Unity's FBX import
+  turns Blender (x, y, z) into (−x, z, −y), so in the imported mesh "along" is −x and "out" is −z.
+- **View** (`DamView`, `DamKit`, `DamSettings`): each piece is bent and merged into 16 sector meshes,
+  one submesh per surface (concrete, dark, steel, light) plus a transparent water mesh per sector:
+  24 meshes in all. Step 2 used plain URP Lit materials.
+- **Other changes:**
+  - `TableView._plinth` is off, because the dam replaces the plinth.
+  - `RtsCamera.FitBeyondDisc` is 110 m, so full zoom-out fits the docking arms.
+  - A **floor** disc at −24 m closes the world from underneath (the disc floats in space).
+- Tests: 9 new (layout and bend); 332/332 pass.
+
+Found along the way:
+1. **A renderer bug the plinth had been hiding.** `SmoothedTerrainRenderer.CachedCornerHeight`
+   counted void cells, whose surface sits at the datum, so every rim corner was dragged down into
+   a comb of blades under the disc edge. The uncached `TerrainSurface.CornerHeight` skipped them,
+   and the code claimed the two matched bit for bit. The cache now treats void as off the map; a
+   regression test covers it.
+2. **Probing renderers in play:** with the GPU Resident Drawer on, disabling a renderer or changing
+   its layer does not take effect within the same `RunCommand`. Change it in one call and render
+   in the next.
+3. **The URP Lit `_EMISSION` keyword did not persist** when set on a new material asset in the
+   same call that created it. Set it again and save the asset explicitly.
+4. **A script whose meta was written mid-import** (`DamBend.cs`) was left out of the compile. It
+   was merged into `DamLayout.cs`.
+5. **Since the 11:00 crash, Unity logs to `%LOCALAPPDATA%/Unity/Editor/Editor.log`**, not the
+   project's `Logs/Editor.log`. Read the `TESTS` line there.

@@ -163,7 +163,10 @@ namespace TinyDiggers.Presentation
                 {
                     var x = _originX + i;
                     var at = row + i + Halo;
-                    var inWorld = (uint)x < (uint)gridWidth && (uint)z < (uint)Grid.Height;
+                    // Void cells are off the map, as in TerrainSurface.CornerHeight: counting them
+                    // dragged every rim corner down toward the datum, a comb of blades under the
+                    // disc edge that only the plinth used to hide.
+                    var inWorld = (uint)x < (uint)gridWidth && (uint)z < (uint)Grid.Height && !Grid.IsVoid(x, z);
                     _cellInWorld[at] = inWorld;
                     if (inWorld)
                     {

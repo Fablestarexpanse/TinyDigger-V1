@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ddf06bc0ef8c6fc47840d7295782d023, type: 3}
+  m_Name: DamKit
+  m_EditorClassIdentifier: TinyDiggers.Presentation::TinyDiggers.Presentation.DamKit
+  Bay: {fileID: 919132149155446097, guid: 7b72545003e066e44885b8ed01bf73ae, type: 3}
+  Spillway: {fileID: 919132149155446097, guid: 69d0b7df3a473ec409801501e3033793, type: 3}
+  SpillwayWater: {fileID: 919132149155446097, guid: 355b8a7a6f5288a4f8292268b8196866, type: 3}
+  Tower: {fileID: 919132149155446097, guid: d0dc52462196b7746a0083aa4506c56f, type: 3}
+  Terminal: {fileID: 919132149155446097, guid: ee6b03d9ef9ebf04583aa677e684f22a, type: 3}
+  Pad: {fileID: 919132149155446097, guid: 037ecb812ca0d77469453c675e45fdc1, type: 3}
+  Concrete: {fileID: 2100000, guid: 069d6549f3df23442917800dce7ce524, type: 2}
+  ConcreteDark: {fileID: 2100000, guid: 7fa85301f10df8c4ab12ce5fbd998dda, type: 2}
+  Steel: {fileID: 2100000, guid: b5996ead814da804598a0f138ad74eb7, type: 2}
+  Light: {fileID: 2100000, guid: a5a2b78b9a5c2db4caa957f9cb91e37c, type: 2}
+  SpillWater: {fileID: 2100000, guid: 2ec53018d2a1532448f0bcedc568daa0, type: 2}

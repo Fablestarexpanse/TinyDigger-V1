@@ -288,6 +288,55 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &446856475
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 446856477}
+  - component: {fileID: 446856476}
+  m_Layer: 0
+  m_Name: Dam
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &446856476
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 446856475}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 62537a5612ca3a442b3265e5cfd9de4f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: TinyDiggers.Presentation::TinyDiggers.Presentation.DamView
+  _terrain: {fileID: 551060599}
+  _settings: {fileID: 11400000, guid: d81abe228ec592e468c8fccc78ac4e67, type: 2}
+  _kit: {fileID: 11400000, guid: 375907d3c3c218d40984fe2d12b68c03, type: 2}
+  _sectors: 16
+  _seed: 7
+--- !u!4 &446856477
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 446856475}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &551060598
 GameObject:
   m_ObjectHideFlags: 0
@@ -563,6 +612,7 @@ MonoBehaviour:
   _bandColor: {r: 0.11, g: 0.1, b: 0.105, a: 1}
   _skyTop: {r: 0.25, g: 0.29, b: 0.34, a: 1}
   _skyBottom: {r: 0.15, g: 0.18, b: 0.22, a: 1}
+  _plinth: 0
   TiltShift: 0
 --- !u!4 &882830153
 Transform:
@@ -694,6 +744,7 @@ MonoBehaviour:
   MinDistance: 4
   MaxDistance: 3000
   FitMargin: 1.2
+  FitBeyondDisc: 110
   ZoomStep: 0.15
   FovStep: 2
   TurnSpeed: 90
@@ -1107,3 +1158,4 @@ SceneRoots:
   - {fileID: 1212779772}
   - {fileID: 353738629}
   - {fileID: 283174203}
+  - {fileID: 446856477}

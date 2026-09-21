@@ -60,6 +60,20 @@ namespace TinyDiggers.Presentation.Tests
             Assert.That(_renderer.TriangleCount, Is.EqualTo(70L * 40L * 2L));
         }
 
+        [Test]
+        public void ACornerBesideTheVoidTakesTheHeightOfTheGroundNotTheVoid()
+        {
+            // The disc's rim: a void cell has no layers, so its surface sits at the datum. The
+            // mesh used to average it into the rim corners, which hung a comb of blades under the
+            // edge of the world once the plinth that hid them was gone.
+            _grid.SetVoid(5, 5, true);
+            _renderer.Rebuild();
+
+            var corner = _renderer.GetChunkMesh(0, 0).vertices[Quad(4, 5) + 3];
+            Assert.That(corner.y, Is.EqualTo(SmoothedTerrainRenderer.CornerHeight(_grid, 5, 5)).Within(Tolerance));
+            Assert.That(corner.y, Is.EqualTo(2f).Within(Tolerance), "the ground beside the void is 2 m of dirt");
+        }
+
         // --- dirty tracking --------------------------------------------------------------------
 
         [Test]

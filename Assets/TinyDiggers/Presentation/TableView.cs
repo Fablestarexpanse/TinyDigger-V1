@@ -29,6 +29,9 @@ namespace TinyDiggers.Presentation
         [SerializeField] Color _skyTop = new Color(0.93f, 0.91f, 0.87f);
         [SerializeField] Color _skyBottom = new Color(0.78f, 0.75f, 0.70f);
 
+        [Tooltip("Build the plinth ring under the land. Off when the dam (DamView) rings the world instead.")]
+        [SerializeField] bool _plinth = true;
+
         [Tooltip("Blur the far rim when fully zoomed out, for a tilt-shift look. Needs a volume in the scene.")]
         public bool TiltShift;
 
@@ -58,8 +61,11 @@ namespace TinyDiggers.Presentation
             // ragged edge of the land and the clean circle of the plinth, so however deep a pit
             // goes, what is under it is still terrain.
             var top = _terrain.PlinthTop;
-            AddRing("Plinth", centre, top, _depth, radius, _terrain.DiscRadius - 2f, capBottom: true, _plinthMaterial);
-            AddRing("Plinth Band", centre, top, _bandHeight, radius + 0.025f, radius - 0.025f, capBottom: false, _bandMaterial);
+            if (_plinth)
+            {
+                AddRing("Plinth", centre, top, _depth, radius, _terrain.DiscRadius - 2f, capBottom: true, _plinthMaterial);
+                AddRing("Plinth Band", centre, top, _bandHeight, radius + 0.025f, radius - 0.025f, capBottom: false, _bandMaterial);
+            }
 
             var shader = Shader.Find("TinyDiggers/Gradient Sky");
             if (shader != null)
