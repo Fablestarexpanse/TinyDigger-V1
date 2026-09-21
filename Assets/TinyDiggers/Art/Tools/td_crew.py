@@ -38,6 +38,13 @@ import td_pipeline as td  # noqa: E402
 
 FPS = 30
 
+# The clips' lifts and the contact-sheet camera were set for a ball 0.283 m in radius. A model
+# built at another size sets this to its radius / 0.283 so they scale with it.
+LENGTH = 1.0
+
+# What the contact sheet colours by: the baked texture, or "MATERIAL" for flat-colour models.
+SHEET_COLOUR = "TEXTURE"
+
 
 def parse():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -417,7 +424,7 @@ def pose_key(rig, frame, body_pitch=0.0, body_yaw=0.0, body_roll=0.0, body_lift=
             @ bone_rotation(rig, "Body", SIDE, math.radians(body_pitch))
             @ bone_rotation(rig, "Body", FORWARD, math.radians(body_roll)))
     pb["Body"].rotation_quaternion = body
-    pb["Body"].location = bone_offset(rig, "Body", (0, 0, body_lift))
+    pb["Body"].location = bone_offset(rig, "Body", (0, 0, body_lift * LENGTH))
     # The arms can point any way (Trellis2 gives them sticking out sideways), so the turns are
     # about axes square to the arm: swing sweeps the tip forward, out lifts it up. A turn about a
     # fixed side axis would only twist a sideways arm about its own length.
@@ -594,14 +601,14 @@ def shots(rig, folder):
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_WORKBENCH"
     scene.display.shading.light = "STUDIO"
-    scene.display.shading.color_type = "TEXTURE"
+    scene.display.shading.color_type = SHEET_COLOUR
     scene.render.resolution_x = scene.render.resolution_y = 384
     scene.render.film_transparent = False
     camera = bpy.data.objects.new("Camera", bpy.data.cameras.new("Camera"))
     scene.collection.objects.link(camera)
     scene.camera = camera
-    target = Vector((0, 0, 0.45))
-    camera.location = target + Vector((-1.1, 1.5, 0.75))
+    target = Vector((0, 0, 0.45)) * LENGTH
+    camera.location = target + Vector((-1.1, 1.5, 0.75)) * LENGTH
     camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
     camera.data.lens = 50
 

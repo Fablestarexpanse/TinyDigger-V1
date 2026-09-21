@@ -113,3 +113,13 @@ the raw `tree_a_trellis_raw.png`).
   - a prefab with an Animator.
 - **Open:** the band is orange rather than yellow; Trellis2 added a back lens; there is no glow
   underneath yet.
+
+## crew_unit, remade (2026-09-21)
+- **Built:** procedurally in Blender (`Art/Tools/td_crew_model.py`), at human scale: a ball
+  0.285 m across, hovering 0.125 m up.
+  `blender -b --factory-startup -P Art/Tools/td_crew_model.py -- --out Props/Crew/crew_unit --blend Blender~/crew_unit.blend --shots Screenshots/Art/Crew`
+- **Result:**
+  - 17,720 triangles, 7 flat materials, and a radial emission map on the lens;
+  - bones Root, Body, Arm.L and Arm.R; clips Idle, Move, Work and Carry;
+  - a hover-glow disc.
+- **Replaces:** the Trellis2 build. Its GLB is kept in `Blender~/crew_lens_q20k.glb`.

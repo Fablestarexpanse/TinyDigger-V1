@@ -73,7 +73,10 @@ namespace TinyDiggers.Interaction
         [Tooltip("Seconds to blend from one clip to the next.")]
         [SerializeField, Min(0f)] float _clipBlend = 0.15f;
 
-        /// <summary>Size of the robot body; 1 is as modelled, a ball 0.57 m across. Read every frame.</summary>
+        /// <summary>
+        /// Size of the robot body; 1 is as modelled, human scale: a ball 0.285 m across floating
+        /// 0.125 m up. Read every frame.
+        /// </summary>
         [Min(0.05f)] public float bodyScale = 1f;
 
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
@@ -84,6 +87,7 @@ namespace TinyDiggers.Interaction
         readonly List<Renderer[]> _robotRenderers = new List<Renderer[]>();
         readonly List<Animator> _animators = new List<Animator>();
         readonly List<string> _clips = new List<string>();
+        readonly List<bool> _tinted = new List<bool>();
         MaterialPropertyBlock _tint;
         readonly List<LineRenderer> _lines = new List<LineRenderer>();
         readonly Vector3[] _pathPoints = new Vector3[512];
@@ -159,6 +163,7 @@ namespace TinyDiggers.Interaction
             _robotRenderers.Add(null);
             _animators.Add(null);
             _clips.Add(null);
+            _tinted.Add(false);
         }
 
         void AddRobot(UnitRole role, int i)
@@ -181,6 +186,7 @@ namespace TinyDiggers.Interaction
             _robotRenderers.Add(renderers);
             _animators.Add(body.GetComponent<Animator>());
             _clips.Add(null);
+            _tinted.Add(false);
         }
 
         void Update()
@@ -246,7 +252,7 @@ namespace TinyDiggers.Interaction
                         terrainTransform.TransformPoint(new Vector3(position.x, unit.Height, position.y)), rotation);
                     _bodies[i].localScale = Vector3.one * bodyScale;
                     PlayClip(i, CrewAnimation.StateFor(unit.State, !unit.Inventory.IsEmpty));
-                    Tint(i, i == _selected ? _selectedTint : Color.white);
+                    Tint(i, i == _selected);
                 }
 
 
@@ -278,16 +284,34 @@ namespace TinyDiggers.Interaction
             animator.CrossFadeInFixedTime(clip, _clipBlend);
         }
 
-        void Tint(int i, Color colour)
+        /// <summary>
+        /// Tints the selected robot, each material by its own colour times the tint, and clears it
+        /// again when deselected. Only on a change, so unselected robots keep no property blocks
+        /// and stay batched.
+        /// </summary>
+        void Tint(int i, bool selected)
         {
+            if (_tinted[i] == selected)
+                return;
+            _tinted[i] = selected;
             _tint ??= new MaterialPropertyBlock();
             foreach (var r in _robotRenderers[i])
             {
                 if (r.name == "CrewGlow")
                     continue;
-                r.GetPropertyBlock(_tint);
-                _tint.SetColor(BaseColorId, colour);
-                r.SetPropertyBlock(_tint);
+                var materials = r.sharedMaterials;
+                for (var m = 0; m < materials.Length; m++)
+                {
+                    if (!selected || materials[m] == null || !materials[m].HasProperty(BaseColorId))
+                    {
+                        r.SetPropertyBlock(null, m);
+                        continue;
+                    }
+
+                    _tint.Clear();
+                    _tint.SetColor(BaseColorId, materials[m].GetColor(BaseColorId) * _selectedTint);
+                    r.SetPropertyBlock(_tint, m);
+                }
             }
         }
 

@@ -2590,3 +2590,37 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
 
 - **Tests:** 389/389 pass, 8 of them new in `CrewAnimationTests`.
 - **Waiting on:** Ronan to pick the scale.
+
+### The crew robot remade in Blender, at human scale (2026-09-21)
+- **Ronan:** "the smallest ball will be our smallest unit, these represent our human scale". He
+  asked for the model to be remade completely in Blender, "much better and more detailed".
+- **Scale.** The 0.5× robot from the lineup is now the model's true size: a ball 0.285 m across,
+  floating 0.125 m up, 0.43 m to the top. `CrewView.bodyScale` 1 is human scale.
+- **Model.** `Art/Tools/td_crew_model.py` builds it from primitives, exact booleans and bevels,
+  after the concept:
+  - a cream shell with recessed panel seams: two meridians, and latitude rings at +0.62 r and
+    −0.58 r;
+  - a raised sunny-yellow band with rounded rims. The Trellis2 one was orange; the concept's is
+    yellow.
+  - the eye: a socket cut through shell and band, a dark bezel, a domed glass lens with a darker
+    iris ring, and a highlight. The eye is tilted up 8°.
+  - dark shoulder sockets with four bolts each;
+  - egg-shaped arms with dark tips on a shoulder hub, hanging down and 15° forward;
+  - a dark pad ring round a glowing belly pad.
+- **Size and materials.** 17,720 triangles and 7 flat materials: CrewShell, CrewTrim, CrewBand,
+  CrewLens, CrewIris, CrewHighlight, CrewPad. There are no textures, except a 64² radial
+  emission map for the lens, whose UVs are planar across its face.
+- **Rig and clips.** td_crew's rig, clips, hover-glow disc, export and contact sheet, unchanged.
+  td_crew gained `LENGTH`, which scales the clips' lifts and the sheet camera with the model, and
+  `SHEET_COLOUR`. In Unity, Work swings the arm 54.7° and pitches the body 11.2°, as before.
+- **Unity import.** The importer maps the FBX materials by name onto `crew_*.mat`: URP Lit,
+  emissive for the lens, iris, highlight and pad. The old Trellis2 albedo, emission map and
+  `crew_unit.mat` are gone. The Trellis2 GLB stays in `Blender~` as history.
+- **Selection tint.** It now tints each material slot by its own colour, and only when the
+  selection changes. One `_BaseColor` for the whole renderer would have painted every part one
+  colour.
+- **Lessons.**
+  - Blender's primitives come with a UV layer. New UVs must go into that layer: a second layer
+    is not the one exported. The lens emission came out as a ring until this was fixed.
+  - The contact sheet uses Workbench with MATERIAL colour, since there are no textures.
+- **Tests:** 389/389 pass.

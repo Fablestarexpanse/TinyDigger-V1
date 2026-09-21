@@ -18,8 +18,10 @@ namespace TinyDiggers.EditorTools
     {
         const string Folder = "Screenshots/Crew";
         const string PrefabPath = "Assets/TinyDiggers/Art/Props/Crew/crew_unit.prefab";
+        const float Ball = 0.285f;  // metres across at scale 1
+        const float Tall = 0.43f;   // metres from the ground to the top of the ball at scale 1
 
-        /// <summary>The sizes tried: 1 is as modelled, a ball 0.57 m across.</summary>
+        /// <summary>The sizes tried: 1 is as modelled, human scale, a ball 0.285 m across.</summary>
         public static readonly float[] Scales = { 0.5f, 0.75f, 1f, 1.5f, 2f, 3f };
 
         [MenuItem("TinyDiggers/Crew Scale Capture")]
@@ -66,7 +68,7 @@ namespace TinyDiggers.EditorTools
                 for (var i = 0; i < Scales.Length; i++)
                 {
                     var scale = Scales[i];
-                    var width = 0.57f * scale;
+                    var width = Ball * scale;
                     along += i == 0 ? 0f : width * 0.5f + 0.8f;
                     var cellX = Mathf.Clamp(start.x + Mathf.RoundToInt(along / grid.CellSize), 0, grid.Width - 1);
                     var cellZ = Mathf.Clamp(start.y + Mathf.RoundToInt(4f / grid.CellSize), 0, grid.Height - 1);
@@ -77,7 +79,7 @@ namespace TinyDiggers.EditorTools
                         terrain.TransformPoint(TerrainSpace.CellCentre(grid, cellX, cellZ, ground)),
                         terrain.rotation * Quaternion.Euler(0f, 200f, 0f));
                     robot.transform.localScale = Vector3.one * scale;
-                    line.Append($"{scale:0.##}x = {0.57f * scale:0.00} m ball, {0.85f * scale:0.00} m tall; ");
+                    line.Append($"{scale:0.##}x = {Ball * scale:0.00} m ball, {Tall * scale:0.00} m tall; ");
                     along += width * 0.5f;
                 }
 

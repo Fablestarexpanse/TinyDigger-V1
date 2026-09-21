@@ -3,9 +3,44 @@ guid: 43f9d3cd56c8ac04f8c965a4adfee71e
 ModelImporter:
   serializedVersion: 24600
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: CrewBand
+    second: {fileID: 2100000, guid: 85046b6bf35e3084595fbea05009c78f, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: CrewHighlight
+    second: {fileID: 2100000, guid: fdb2f994ab74c23418b73f674c615a16, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: CrewIris
+    second: {fileID: 2100000, guid: 46ce7a49adf8aa4488f08e1814908343, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: CrewLens
+    second: {fileID: 2100000, guid: a07252784c6307249833cf9b68c055fd, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: CrewPad
+    second: {fileID: 2100000, guid: 3dd03f245cf01e2449a2d1edd00f654a, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: CrewShell
+    second: {fileID: 2100000, guid: 8c88b373101044b439a5d498aa95753d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: CrewTrim
+    second: {fileID: 2100000, guid: 79ca9615b3a398c488805ce4011dd8d9, type: 2}
   materials:
-    materialImportMode: 0
+    materialImportMode: 2
     materialName: 0
     materialSearch: 1
     materialLocation: 1
