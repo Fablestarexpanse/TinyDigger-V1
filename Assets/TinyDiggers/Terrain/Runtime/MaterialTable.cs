@@ -86,17 +86,19 @@ namespace TinyDiggers.Terrain
         public static MaterialTable CreateDefault()
         {
             return new MaterialTable(
-                new MaterialDefinition(Bedrock, "Bedrock", new Color32(52, 52, 58, 255), 1.00f, 90f, isDiggable: false),
-                // Rock colours are kept darker than they look in a swatch: lit by the full sun plus
-                // ambient, lighter greys rendered as near-white and a cut stopped reading as rock.
-                new MaterialDefinition(Granite, "Granite", new Color32(96, 92, 94, 255), 0.85f, 90f, disturbed: RockLoose, bulkingFactor: 1.5f),
-                new MaterialDefinition(Rock, "Rock", new Color32(112, 110, 106, 255), 0.60f, 80f, disturbed: RockLoose, bulkingFactor: 1.5f),
-                new MaterialDefinition(Clay, "Clay", new Color32(166, 106, 72, 255), 0.35f, 60f, bulkingFactor: 1.3f),
-                new MaterialDefinition(Dirt, "Dirt", new Color32(122, 88, 60, 255), 0.20f, 50f, disturbed: DirtLoose, bulkingFactor: 1.25f),
-                new MaterialDefinition(Sand, "Sand", new Color32(214, 195, 140, 255), 0.15f, 34f, bulkingFactor: 1.1f, isLoose: true),
-                new MaterialDefinition(Topsoil, "Topsoil", new Color32(86, 106, 58, 255), 0.10f, 50f, disturbed: Dirt, bulkingFactor: 1.25f),
-                new MaterialDefinition(RockLoose, "Loose rock", new Color32(130, 125, 118, 255), 0.30f, 38f, isLoose: true),
-                new MaterialDefinition(DirtLoose, "Loose dirt", new Color32(148, 110, 76, 255), 0.10f, 32f, isLoose: true));
+                // The palette is warm, fairly desaturated, and deliberately high in value: every
+                // material sits inside about two stops of the next, so nothing goes black in shade
+                // and a shadowed slope still reads as the stuff it is made of rather than as grey.
+                // Darker, more saturated colours looked right in a swatch and read as dirt in game.
+                new MaterialDefinition(Bedrock, "Bedrock", new Color32(96, 99, 108, 255), 1.00f, 90f, isDiggable: false),
+                new MaterialDefinition(Granite, "Granite", new Color32(168, 158, 156, 255), 0.85f, 90f, disturbed: RockLoose, bulkingFactor: 1.5f),
+                new MaterialDefinition(Rock, "Rock", new Color32(174, 168, 158, 255), 0.60f, 80f, disturbed: RockLoose, bulkingFactor: 1.5f),
+                new MaterialDefinition(Clay, "Clay", new Color32(196, 144, 108, 255), 0.35f, 60f, bulkingFactor: 1.3f),
+                new MaterialDefinition(Dirt, "Dirt", new Color32(176, 136, 94, 255), 0.20f, 50f, disturbed: DirtLoose, bulkingFactor: 1.25f),
+                new MaterialDefinition(Sand, "Sand", new Color32(228, 210, 170, 255), 0.15f, 34f, bulkingFactor: 1.1f, isLoose: true),
+                new MaterialDefinition(Topsoil, "Topsoil", new Color32(140, 154, 100, 255), 0.10f, 50f, disturbed: Dirt, bulkingFactor: 1.25f),
+                new MaterialDefinition(RockLoose, "Loose rock", new Color32(182, 175, 164, 255), 0.30f, 38f, isLoose: true),
+                new MaterialDefinition(DirtLoose, "Loose dirt", new Color32(190, 152, 110, 255), 0.10f, 32f, isLoose: true));
         }
     }
 }

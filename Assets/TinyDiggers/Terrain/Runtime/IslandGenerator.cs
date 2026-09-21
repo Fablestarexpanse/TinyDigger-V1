@@ -354,7 +354,7 @@ namespace TinyDiggers.Terrain
             // shoal, and it should not be counted as somewhere to stand.
             var land = new bool[heights.Length];
             for (var cell = 0; cell < heights.Length; cell++)
-                land[cell] = heights[cell] >= World.SeaLevel + step - 1e-3f;
+                land[cell] = heights[cell] >= World.SeaLevel + step;
 
             if (shape != LandShape.Archipelago)
             {

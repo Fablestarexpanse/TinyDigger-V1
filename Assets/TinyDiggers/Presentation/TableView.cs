@@ -24,10 +24,10 @@ namespace TinyDiggers.Presentation
         [Tooltip("Metres of darker band just under the rim.")]
         [SerializeField, Min(0f)] float _bandHeight = 2f;
 
-        [SerializeField] Color _plinthColor = new Color(0.72f, 0.69f, 0.64f);
-        [SerializeField] Color _bandColor = new Color(0.42f, 0.40f, 0.37f);
-        [SerializeField] Color _skyTop = new Color(0.88f, 0.87f, 0.85f);
-        [SerializeField] Color _skyBottom = new Color(0.55f, 0.54f, 0.52f);
+        [SerializeField] Color _plinthColor = new Color(0.68f, 0.64f, 0.58f);
+        [SerializeField] Color _bandColor = new Color(0.52f, 0.47f, 0.41f);
+        [SerializeField] Color _skyTop = new Color(0.93f, 0.91f, 0.87f);
+        [SerializeField] Color _skyBottom = new Color(0.78f, 0.75f, 0.70f);
 
         [Tooltip("Blur the far rim when fully zoomed out, for a tilt-shift look. Needs a volume in the scene.")]
         public bool TiltShift;

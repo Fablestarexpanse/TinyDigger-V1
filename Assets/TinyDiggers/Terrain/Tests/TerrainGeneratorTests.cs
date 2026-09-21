@@ -160,7 +160,9 @@ namespace TinyDiggers.Terrain.Tests
                     var sum = 0f;
                     for (var i = 0; i < grid.GetLayerCount(x, z); i++)
                         sum += grid.GetLayer(x, z, i).Thickness;
-                    Assert.That(grid.GetSurfaceHeight(x, z), Is.EqualTo(sum).Within(Tolerance));
+                    // Half a millimetre: the cached height is snapped to the millimetre, which is
+                    // what keeps float drift from deciding whether a cell is land or sea.
+                    Assert.That(grid.GetSurfaceHeight(x, z), Is.EqualTo(sum).Within(5e-4f));
                 }
             }
         }

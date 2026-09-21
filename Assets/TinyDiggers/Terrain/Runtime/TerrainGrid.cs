@@ -99,14 +99,11 @@ namespace TinyDiggers.Terrain
             return _surfaceHeights[z * Width + x] < LandAt;
         }
 
-        /// <summary>
-        /// The height a surface must reach to be land, with a hair of tolerance. A column's height
-        /// is the sum of its layers over the datum, and that sum drifts by a few millionths, so a
-        /// cell built to exactly one step above the sea can come out a hair under it. Without the
-        /// tolerance such a cell is water, and one of them in the middle of a field is a hole the
-        /// crew cannot cross.
-        /// </summary>
-        float LandAt => World.SeaLevel + LandStep - 1e-3f;
+        /// <summary>The height a surface must reach to count as land rather than seabed.</summary>
+        float LandAt => World.SeaLevel + LandStep;
+
+        /// <summary>Rounds a height to the nearest millimetre, which is what keeps float drift out.</summary>
+        static float Snap(float height) => (float)Math.Round(height * 1000.0) / 1000f;
 
         /// <summary>Metres of water over a cell, or 0 where the ground is dry.</summary>
         public float WaterDepth(int x, int z)
@@ -536,7 +533,15 @@ namespace TinyDiggers.Terrain
             var height = 0f;
             for (var i = 0; i < count; i++)
                 height += _layers[layerBase + i].Thickness;
-            var surface = Datum + height;
+            // Snapped to the millimetre. A column's height is a sum of floats over a datum tens of
+            // metres below it, so the sum drifts by a few millionths and a cell built to exactly one
+            // step above the sea can come out a hair under it — which made it water, and one of
+            // those in the middle of a field is a hole the crew cannot cross. The millimetre is
+            // fine enough that nothing real is moved: the slump's own moves are quarter-metres.
+            //
+            // Snapping to the height step itself would be wrong: a cell part way through a slump is
+            // legitimately between steps, and rounding it would make material appear or vanish.
+            var surface = Snap(Datum + height);
             _surfaceHeights[cell] = surface;
             _blocked[cell] = _void[cell] || surface < LandAt;
             _topMaterials[cell] = count == 0 ? MaterialId.None : _layers[layerBase + count - 1].Material;

@@ -5,12 +5,11 @@ this records why.
 
 ---
 
-**NEXT:** Slice 8b (landmasses and slope lighting) is done, green (272/272) and pushed on `main`.
-Nothing is in flight. Known and deliberately left: the island still reads darker and greyer than a
-cosy sandbox should — the sun, ambient and material colours want a pass together, not one at a
-time; the material boundaries still dither on freshly dug slopes; cliffs are still deferred; and
-the water has no dynamic effects yet (wakes, breaking shoreline waves, waterfalls). Still owed from
-before: a frame-time check on a mid-range machine, and the tilt-shift blur toggle.
+**NEXT:** Slice 8c (colour and light) is done, green (272/272) and pushed on `main`. Nothing is in
+flight. Known and deliberately left: the material boundaries still dither on freshly dug slopes,
+cliffs are still deferred, and the water has no dynamic effects yet (wakes, breaking shoreline
+waves, waterfalls). Still owed from before: a frame-time check on a mid-range machine, and the
+tilt-shift blur toggle.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1312,3 +1311,48 @@ New: every archetype generates for five seeds; the coastline has bays in it; no 
 smaller than the minimum unless it is an archipelago; every river ends below sea level and only
 descends; there are beaches on the gentle coasts and bare ground on the steep ones; and a 512²
 map generates in under half a second.
+
+
+---
+
+## Slice 8c — colour and light (2026-09-20)
+
+### The height fix that came first
+A column's height was a sum of floats over a datum tens of metres below it, so it drifted by a few
+millionths, and a cell built to exactly one step above the sea could come out a hair under — which
+made it water, and one of those in the middle of a field is a hole the crew cannot cross. Slice 8b
+papered over it with a millimetre of tolerance in the land test.
+
+**Ruling: snap the cached surface height instead.** It is now rounded to the millimetre on every
+write, and the tolerance is gone from the land test. Deviation from the brief, deliberately:
+snapping to the **height step** would be wrong, because a cell part way through a slump is
+legitimately between steps and rounding it would make material appear or vanish. The millimetre is
+fine enough that nothing real moves — the slump's own moves are quarter-metres — and coarse enough
+that float drift cannot decide land from sea. One test that compared the cached height with a raw
+sum of layers now allows half a millimetre, with a note saying why.
+
+### The colour and light pass
+Judged on the Continent seed from the saved camera, zoomed out and at RTS zoom.
+
+- **Ambient was the single biggest lever**, as the brief said: a pale warm blue sky, a warm
+  off-white equator and a warm sand ground at 1.5 intensity. A fully shadowed slope now reads as
+  green or brown rather than grey.
+- Sun warmed to 4800 K and dropped to 1.05 so nothing clips; shadow strength 0.65.
+- SSAO halved to 0.25 at the same radius: a soft crease rather than dirt.
+- **The material palette was re-tuned as a set**, in `MaterialTable` and in the texture recipes
+  that track it: sage-olive grass, warm ochre dirt, light warm grey rock, pale cream sand, all
+  within about two stops of each other and noticeably higher in value. The old palette was chosen
+  to look right in a swatch, which is why it read as dirt in game.
+- Slope tint down to 12% and toward a warm grey: a cool tint on a warm palette reads as wet slate.
+- Water: milky teal shallows over pale sand, deeper blue offshore, and a longer depth ramp so the
+  shelf reads as shallow.
+- A Volume with Neutral tonemapping, +0.1 EV, a little saturation and contrast; no bloom, no
+  vignette. SMAA on the camera.
+- Plinth to a warm mid-grey and the backdrop to a paler warm grey, so the table sits with the land
+  rather than against it.
+
+Slope still reads: the ridge-and-valley shot is legible at RTS zoom with the contours off, which
+was the condition for the whole pass.
+
+Before and after pairs of the same three shots (disc, ridge, coastline) are in
+`Screenshots/Slice8c/`. Tests 272/272 green.

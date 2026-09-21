@@ -15,10 +15,10 @@ Shader "TinyDiggers/Water"
 {
     Properties
     {
-        _Shallow ("Shallow", Color) = (0.42, 0.72, 0.72, 0.62)
-        _Deep ("Deep", Color) = (0.06, 0.24, 0.36, 0.92)
-        _DepthRange ("Metres to full depth colour", Range(0.5, 40)) = 9
-        _FoamColor ("Foam", Color) = (0.92, 0.96, 0.96, 1)
+        _Shallow ("Shallow", Color) = (0.62, 0.84, 0.82, 0.45)
+        _Deep ("Deep", Color) = (0.16, 0.42, 0.52, 0.88)
+        _DepthRange ("Metres to full depth colour", Range(0.5, 40)) = 11
+        _FoamColor ("Foam", Color) = (0.97, 0.98, 0.96, 1)
         _FoamDepth ("Foam up to this depth (m)", Range(0, 4)) = 0.7
         _FoamWidth ("Foam softness", Range(0.01, 2)) = 0.45
         _RippleScale ("Ripple size (m)", Range(0.5, 20)) = 5

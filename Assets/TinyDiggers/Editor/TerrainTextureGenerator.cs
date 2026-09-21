@@ -17,7 +17,9 @@ namespace TinyDiggers.EditorTools
     /// - One tile covers <see cref="TileMetres"/> of ground, so feature sizes are given in pixels
     ///   at that scale and mean something real: a pebble is 10–30 px, a soil clod 20–60 px, a
     ///   grass blade is below a pixel and only shows as grain.
-    /// - Matte, muted, slightly desaturated. Tiny Glade, not photoreal.
+    /// - Matte, warm and light. Tiny Glade, not photoreal: every material sits inside about two
+    ///   stops of the next, so nothing goes black in shade and a shadowed slope still reads as the
+    ///   stuff it is made of. The colours here track MaterialTable's.
     /// - No strong shadow baked into the albedo: the pattern moves the colour by a few percent and
     ///   the relief lives in the normal map, which is where the lighting should come from.
     /// - Even luminance across the tile, so a repeat grid does not show. Every pattern has its
@@ -313,8 +315,8 @@ namespace TinyDiggers.EditorTools
                     Main = new Pattern
                     {
                         File = "grass",
-                        Base = new Color(0.35f, 0.43f, 0.27f),
-                        Fleck = new Color(0.46f, 0.52f, 0.33f),
+                        Base = new Color(0.55f, 0.60f, 0.39f),
+                        Fleck = new Color(0.64f, 0.68f, 0.45f),
                         Height = (x, y) => 0.5f * Fbm(x, y, Feature(3f), 2)
                                          + 0.32f * Fbm(x, y, Feature(28f), 3)
                                          + 0.18f * Worley(x, y, Feature(90f)),
@@ -326,8 +328,8 @@ namespace TinyDiggers.EditorTools
                     Cut = new Pattern
                     {
                         File = "topsoil",
-                        Base = new Color(0.26f, 0.21f, 0.16f),
-                        Fleck = new Color(0.43f, 0.40f, 0.30f),
+                        Base = new Color(0.44f, 0.36f, 0.27f),
+                        Fleck = new Color(0.60f, 0.55f, 0.42f),
                         Height = (x, y) => 0.55f * (1f - Worley(x, y, Feature(38f)))
                                          + 0.3f * Fbm(x, y, Feature(9f), 3)
                                          + 0.15f * Fbm(x, y, Feature(120f), 2),
@@ -343,8 +345,8 @@ namespace TinyDiggers.EditorTools
                     Main = new Pattern
                     {
                         File = "dirt",
-                        Base = new Color(0.45f, 0.36f, 0.27f),
-                        Fleck = new Color(0.53f, 0.51f, 0.47f),
+                        Base = new Color(0.69f, 0.54f, 0.37f),
+                        Fleck = new Color(0.72f, 0.70f, 0.66f),
                         Height = (x, y) => 0.55f * Fbm(x, y, Feature(6f), 3)
                                          + 0.3f * Fbm(x, y, Feature(45f), 2)
                                          + 0.15f * (1f - Worley(x, y, Feature(26f))),
@@ -361,8 +363,8 @@ namespace TinyDiggers.EditorTools
                     Main = new Pattern
                     {
                         File = "dirt_loose",
-                        Base = new Color(0.46f, 0.37f, 0.28f),
-                        Fleck = new Color(0.52f, 0.50f, 0.46f),
+                        Base = new Color(0.71f, 0.56f, 0.39f),
+                        Fleck = new Color(0.72f, 0.70f, 0.65f),
                         Height = (x, y) => 0.62f * (1f - Worley(x, y, Feature(40f)))
                                          + 0.25f * Fbm(x, y, Feature(12f), 3)
                                          + 0.13f * Fbm(x, y, Feature(80f), 2),
@@ -378,7 +380,7 @@ namespace TinyDiggers.EditorTools
                     Main = new Pattern
                     {
                         File = "sand",
-                        Base = new Color(0.75f, 0.68f, 0.54f),
+                        Base = new Color(0.89f, 0.82f, 0.67f),
                         Height = (x, y) => 0.62f * Fbm(x, y, Feature(3f), 2)
                                          + 0.23f * Fbm(x, y, Feature(60f), 2)
                                          + 0.15f * Ripple(x, y, Feature(150f)),
@@ -392,8 +394,8 @@ namespace TinyDiggers.EditorTools
                     Main = new Pattern
                     {
                         File = "rock",
-                        Base = new Color(0.50f, 0.49f, 0.47f),
-                        Fleck = new Color(0.50f, 0.53f, 0.42f),
+                        Base = new Color(0.68f, 0.66f, 0.62f),
+                        Fleck = new Color(0.64f, 0.68f, 0.52f),
                         Height = (x, y) => 0.6f * Smooth(1f - Worley(x, y, Feature(110f)))
                                          + 0.25f * Fbm(x, y, Feature(20f), 3)
                                          + 0.15f * Fbm(x, y, Feature(4f), 2),
@@ -406,7 +408,7 @@ namespace TinyDiggers.EditorTools
                     Cut = new Pattern
                     {
                         File = "rock_cut",
-                        Base = new Color(0.42f, 0.41f, 0.40f),
+                        Base = new Color(0.60f, 0.58f, 0.55f),
                         Height = (x, y) => 0.7f * (1f - Angular(x, y, Feature(170f)))
                                          + 0.2f * Ridge(Angular(x, y, Feature(60f)))
                                          + 0.1f * Fbm(x, y, Feature(8f), 2),
@@ -420,8 +422,8 @@ namespace TinyDiggers.EditorTools
                     Main = new Pattern
                     {
                         File = "rock_loose",
-                        Base = new Color(0.48f, 0.47f, 0.45f),
-                        Fleck = new Color(0.40f, 0.39f, 0.38f),
+                        Base = new Color(0.66f, 0.64f, 0.60f),
+                        Fleck = new Color(0.55f, 0.53f, 0.50f),
                         Height = (x, y) => 0.75f * (1f - Angular(x, y, Feature(100f)))
                                          + 0.15f * (1f - Angular(x, y, Feature(30f)))
                                          + 0.1f * Fbm(x, y, Feature(6f), 2),
@@ -437,8 +439,8 @@ namespace TinyDiggers.EditorTools
                     Main = new Pattern
                     {
                         File = "granite",
-                        Base = new Color(0.61f, 0.55f, 0.54f),
-                        Fleck = new Color(0.34f, 0.33f, 0.35f),
+                        Base = new Color(0.74f, 0.68f, 0.66f),
+                        Fleck = new Color(0.50f, 0.48f, 0.49f),
                         Height = (x, y) => 0.55f * Worley(x, y, Feature(12f))
                                          + 0.28f * Fbm(x, y, Feature(4f), 2)
                                          + 0.17f * Fbm(x, y, Feature(70f), 2),
@@ -454,7 +456,7 @@ namespace TinyDiggers.EditorTools
                     Main = new Pattern
                     {
                         File = "bedrock",
-                        Base = new Color(0.27f, 0.29f, 0.33f),
+                        Base = new Color(0.40f, 0.41f, 0.45f),
                         Height = (x, y) => 0.45f * Band(x, y, 7f)
                                          + 0.35f * Fbm(x, y, Feature(5f), 2)
                                          + 0.2f * Fbm(x, y, Feature(55f), 2),
@@ -469,7 +471,7 @@ namespace TinyDiggers.EditorTools
                     Main = new Pattern
                     {
                         File = "clay",
-                        Base = new Color(0.54f, 0.40f, 0.32f),
+                        Base = new Color(0.74f, 0.57f, 0.45f),
                         Height = (x, y) => 0.6f * Fbm(x, y, Feature(35f), 3) + 0.4f * Fbm(x, y, Feature(8f), 2),
                         Relief = 0.3f, Shade = 0.08f, Evenness = 220f,
                     },
