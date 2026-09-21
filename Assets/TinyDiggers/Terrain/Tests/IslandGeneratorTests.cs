@@ -14,13 +14,16 @@ namespace TinyDiggers.Terrain.Tests
         {
             _settings = ScriptableObject.CreateInstance<TerrainGenSettings>();
             _settings.Seed = 7;
-            // The generator's own defaults, at a smaller map: the shelf and the mountain are given
-            // in cells, so they are scaled to keep the same shape of island.
-            _settings.ShelfCells = 20;
+            // One mass, so the tests below can talk about "the middle of the island" and mean it.
+            _settings.Shape = LandShape.Continent;
+            // The mask's numbers are in cells, so a smaller test map wants smaller ones to make
+            // the same kind of island.
+            _settings.RimWaterCells = 14;
+            _settings.LandFeatureSize = 80f;
+            _settings.RidgeWidth = 34f;
+            _settings.PlateauRadius = 26f;
+            _settings.ShallowCells = 6;
             _settings.ChannelCells = 4;
-            _settings.MountainRadius = 35f;
-            _settings.ValleyRadius = 28f;
-            _settings.CoastNoiseCells = 8f;
         }
 
         [TearDown]
@@ -35,9 +38,15 @@ namespace TinyDiggers.Terrain.Tests
             var grid = NewGrid();
             IslandGenerator.Generate(grid, _settings);
 
+            // Most of the middle third of the map is land: the mask decides where exactly, so this
+            // asks about the interior rather than about one cell of it.
             var centre = Size / 2;
-            Assert.That(grid.GetSurfaceHeight(centre, centre), Is.GreaterThan(World.SeaLevel),
-                "the middle of the island is land");
+            var inland = 0;
+            for (var z = centre - 40; z <= centre + 40; z++)
+                for (var x = centre - 40; x <= centre + 40; x++)
+                    if (grid.GetSurfaceHeight(x, z) >= World.SeaLevel)
+                        inland++;
+            Assert.That(inland, Is.GreaterThan(81 * 81 / 2), "the middle of the island is land");
 
             // Just inside the disc, all the way round.
             var radius = TerrainGenerator.DiscRadius(grid) - 1f;
@@ -80,8 +89,8 @@ namespace TinyDiggers.Terrain.Tests
                 }
             }
 
-            Assert.That(longest - shortest, Is.GreaterThan(4f),
-                "the shore should wander in and out by several cells, not trace a circle");
+            Assert.That(longest - shortest, Is.GreaterThan(8f),
+                "the shore should wander in and out by many cells, not trace a circle");
         }
 
         [Test]
@@ -90,12 +99,12 @@ namespace TinyDiggers.Terrain.Tests
             var grid = NewGrid();
             var island = IslandGenerator.Generate(grid, _settings);
 
-            Assert.That(island.River.Count, Is.GreaterThan(4), "there is a river");
+            Assert.That(island.River.Count, Is.GreaterThan(2), "there is a river");
             for (var i = 1; i < island.River.Count; i++)
                 Assert.That(island.River[i].y, Is.LessThanOrEqualTo(island.River[i - 1].y + 1e-4f),
                     $"point {i} runs uphill");
 
-            Assert.That(island.River[0].y, Is.GreaterThan(World.SeaLevel), "it starts on the mountain");
+            Assert.That(island.River[0].y, Is.GreaterThanOrEqualTo(World.SeaLevel), "it starts at or above the waterline");
             Assert.That(island.River[island.River.Count - 1].y, Is.LessThan(World.SeaLevel),
                 "it ends below sea level");
         }

@@ -5,41 +5,55 @@ using UnityEngine;
 namespace TinyDiggers.Terrain
 {
     /// <summary>
-    /// What a generated island came out as, besides the grid itself: where its peak is, and the
-    /// line its river runs along, so a river mesh can be built to match the channel that was cut.
+    /// What a generated island came out as, besides the grid itself: the shape it was asked for,
+    /// where its high point is, and the lines its rivers run along, so river meshes can be built to
+    /// match the channels that were cut.
     /// </summary>
     public sealed class IslandMap
     {
-        /// <summary>The cell the river starts from: the highest point of the mountain region.</summary>
+        static readonly List<Vector3> NoRiver = new List<Vector3>();
+
+        /// <summary>The shape this seed actually made, once <see cref="LandShape.Any"/> has chosen.</summary>
+        public LandShape Shape;
+
+        /// <summary>The highest cell of the land.</summary>
         public Vector2Int Peak;
 
-        /// <summary>
-        /// The river, in grid space: x and z are cell centres, y is the floor of the channel. It
-        /// descends the whole way and ends below sea level. <see cref="TerrainGrid"/> knows nothing
-        /// of transforms, so the view turns these into world points.
-        /// </summary>
-        public readonly List<Vector3> River = new List<Vector3>();
+        /// <summary>Every river, longest first, in grid space: x and z cell centres, y the channel floor.</summary>
+        public readonly List<List<Vector3>> Rivers = new List<List<Vector3>>();
 
-        /// <summary>Cells the river's channel covers, for the sim to treat as water.</summary>
+        /// <summary>The main river. Empty when the land made none.</summary>
+        public List<Vector3> River => Rivers.Count > 0 ? Rivers[0] : NoRiver;
+
+        /// <summary>Cells the rivers' channels cover, for the sim to treat as water.</summary>
         public readonly List<Vector2Int> RiverCells = new List<Vector2Int>();
+
+        /// <summary>Milliseconds the land took to generate.</summary>
+        public double Milliseconds;
     }
 
     /// <summary>
-    /// The island: a disc of land standing out of the sea, with a mountain, a valley or two, a
-    /// river running from the peak to the coast, and a shelf falling away to a channel at the rim.
+    /// The island: land where noise says land, shaped by an archetype, with a ridge along it,
+    /// valleys cut by where water would run, rivers in the biggest of those valleys, a beach or a
+    /// rocky shore depending on how steeply the land meets the sea, and a shelf falling away
+    /// offshore.
     ///
-    /// Stages, in order, because each one reads what the last wrote:
-    /// 1. Base — domain-warped fBm at <see cref="TerrainGenSettings.FeatureSize"/>, plus a medium
-    ///    octave for texture between terraces.
-    /// 2. Regions — one mountain and up to a few valleys, placed by seed.
-    /// 3. Island mask — a radial falloff, perturbed by noise so the coastline is irregular, taking
-    ///    the outer cells below sea level to a shelf and then to a deeper channel at the rim.
-    /// 4. Quantise to the height step, then relax until no two neighbouring land cells differ by
-    ///    more than one step. Cliffs are for later; this keeps every slope walkable.
-    /// 5. River — from the peak, downhill to the sea with a little wander, cutting a flat-floored
-    ///    channel whose banks step up one metre a cell, so the relaxed slope survives the cut.
-    /// 6. Strata — bedrock base, granite in the mountain core, rock, clay in the valleys, dirt,
-    ///    sand around sea level, topsoil above it except on sand and steep rock.
+    /// Stages, in order, because each reads what the last wrote:
+    /// 1. Land mask — twice-warped fBm above a threshold, shaped by the archetype, with the outer
+    ///    ring of the disc forced to sea. Small islands and small ponds are then cleaned up.
+    /// 2. Base height — fBm over the land, plus a medium octave for texture.
+    /// 3. Ridge — a curve of two to four control points placed by seed, with ridged multifractal
+    ///    noise standing along it.
+    /// 4. Benches — flat ground pulled into the lee of the ridge.
+    /// 5. Valleys — one D8 flow accumulation pass; the more water a cell would gather, the deeper
+    ///    it is cut, so valleys converge the way real ones do.
+    /// 6. Coast — a beach where the land meets the sea gently, bare ground where it does not, and
+    ///    a shallow shelf out from the shore before the sea drops away.
+    /// 7. Quantise to the height step and relax until no two neighbouring land cells differ by more
+    ///    than one step. Cliffs are for later.
+    /// 8. Rivers — from the outlet with the most land draining through it, carved as a channel.
+    /// 9. Strata — bedrock base, granite under the high ground, rock, clay in the valleys, dirt,
+    ///    sand on beaches and under water, topsoil above them.
     ///
     /// Deterministic: the same seed and settings give the same island, cell for cell.
     /// <see cref="TerrainGenerator"/> is still here and still used by its own tests; this one is
@@ -53,6 +67,12 @@ namespace TinyDiggers.Terrain
         /// <summary>Sweeps of the neighbour-step relaxation before it gives up and reports.</summary>
         const int MaxRelaxSweeps = 200;
 
+        /// <summary>Cells that must drain through one before it counts as a valley floor.</summary>
+        const float ValleyThreshold = 12f;
+
+        static readonly int[] StepX = { 1, -1, 0, 0, 1, 1, -1, -1 };
+        static readonly int[] StepZ = { 0, 0, 1, -1, 1, -1, 1, -1 };
+
         public static IslandMap Generate(TerrainGrid grid, TerrainGenSettings settings)
         {
             if (grid == null)
@@ -60,210 +80,636 @@ namespace TinyDiggers.Terrain
             if (settings == null)
                 throw new ArgumentNullException(nameof(settings));
 
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             var random = new System.Random(settings.Seed);
             var width = grid.Width;
             var depth = grid.Height;
             var cells = width * depth;
+            var step = grid.HeightStep > 0f ? grid.HeightStep : 1f;
 
             // Kept modest: Mathf.PerlinNoise loses precision far from the origin.
-            var baseOffset = new Vector2((float)random.NextDouble() * 1000f, (float)random.NextDouble() * 1000f);
-            var mediumOffset = new Vector2((float)random.NextDouble() * 1000f, (float)random.NextDouble() * 1000f);
-            var warpOffset = new Vector2((float)random.NextDouble() * 1000f, (float)random.NextDouble() * 1000f);
-            var coastOffset = new Vector2((float)random.NextDouble() * 1000f, (float)random.NextDouble() * 1000f);
+            var landOffset = Offset(random);
+            var landWarp = Offset(random);
+            var landWarpFine = Offset(random);
+            var baseOffset = Offset(random);
+            var mediumOffset = Offset(random);
+            var warpOffset = Offset(random);
+            var ridgeOffset = Offset(random);
 
             var radius = TerrainGenerator.DiscRadius(grid);
             var centre = new Vector2(width * 0.5f, depth * 0.5f);
+            var map = new IslandMap
+            {
+                Shape = settings.Shape == LandShape.Any ? PickShape(random) : settings.Shape,
+            };
 
-            var mountain = PlaceRegion(random, centre, radius * 0.45f);
-            var valleys = new Vector2[Mathf.Max(0, settings.Valleys)];
-            for (var i = 0; i < valleys.Length; i++)
-                valleys[i] = PlaceRegion(random, centre, radius * 0.6f);
-
-            var heights = new float[cells];
-            var isLand = new bool[cells];
-            var mountainStrength = new float[cells];
-            var valleyStrength = new float[cells];
-
-            // --- 1-3: the height field -------------------------------------------------------
+            // --- 1: where the land is --------------------------------------------------------
+            var land = new bool[cells];
+            var inDisc = new bool[cells];
             for (var z = 0; z < depth; z++)
             {
                 for (var x = 0; x < width; x++)
                 {
                     var cell = z * width + x;
-                    var toCentre = Vector2.Distance(new Vector2(x + 0.5f, z + 0.5f), centre);
+                    var here = new Vector2(x + 0.5f, z + 0.5f);
+                    var toCentre = Vector2.Distance(here, centre);
                     if (toCentre > radius)
                     {
                         grid.SetVoid(x, z, true);
+                        continue;
+                    }
+
+                    inDisc[cell] = true;
+                    land[cell] = IsLand(here, toCentre, radius, centre, landOffset, landWarp, landWarpFine, settings, map.Shape);
+                }
+            }
+
+            RemoveSmallBlobs(land, inDisc, width, depth, settings, map.Shape);
+
+            // --- 2-4: height over the land ---------------------------------------------------
+            var ridge = RidgeLine(random, centre, radius);
+            var benches = Benches(random, ridge, centre, radius, settings);
+            var heights = new float[cells];
+            var highGround = new float[cells];
+            for (var z = 0; z < depth; z++)
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var cell = z * width + x;
+                    if (!inDisc[cell])
+                    {
                         heights[cell] = settings.ChannelDepth;
                         continue;
                     }
 
-                    var warped = Warp(x, z, warpOffset, settings);
+                    if (!land[cell])
+                    {
+                        heights[cell] = World.SeaLevel - 1f; // Shaped properly in stage 6.
+                        continue;
+                    }
+
+                    var warped = Warp(x, z, warpOffset, settings.WarpSize, settings.WarpStrength);
                     var height = settings.BaseHeight + Fbm(warped, baseOffset, settings.FeatureSize, 4) * settings.BaseRelief;
                     height += (Noise(warped, mediumOffset, settings.MediumSize) - 0.5f) * settings.MediumRelief;
 
-                    var toMountain = Vector2.Distance(warped, mountain) / Mathf.Max(1f, settings.MountainRadius);
-                    var mountainAmount = Falloff(toMountain);
-                    height += mountainAmount * settings.MountainHeight;
-                    mountainStrength[cell] = mountainAmount;
+                    var alongRidge = 1f - DistanceToCurve(warped, ridge) / Mathf.Max(4f, settings.RidgeWidth);
+                    if (alongRidge > 0f)
+                    {
+                        // Ridged multifractal: the noise is folded about its middle so the field
+                        // has creases rather than lumps, which is what makes a ridge read as one.
+                        var crest = RidgedFbm(warped, ridgeOffset, settings.FeatureSize * 0.55f, 4);
+                        highGround[cell] = Smooth(alongRidge) * crest;
+                        height += highGround[cell] * settings.RidgeHeight;
+                    }
 
-                    var valleyAmount = 0f;
-                    foreach (var valley in valleys)
-                        valleyAmount = Mathf.Max(valleyAmount, Falloff(Vector2.Distance(warped, valley) / Mathf.Max(1f, settings.ValleyRadius)));
-                    height -= valleyAmount * settings.ValleyDepth;
-                    valleyStrength[cell] = valleyAmount;
+                    foreach (var bench in benches)
+                    {
+                        var t = 1f - Vector2.Distance(warped, new Vector2(bench.x, bench.y)) / Mathf.Max(4f, settings.PlateauRadius);
+                        if (t <= 0f)
+                            continue;
+                        // A bench is a floor the land is pulled onto, not a block dropped on it.
+                        height = Mathf.Lerp(height, bench.z, Smooth(t));
+                    }
 
-                    heights[cell] = MaskToSea(height, toCentre, radius, x, z, coastOffset, settings);
+                    heights[cell] = height;
                 }
             }
 
-            // --- 4: quantise and relax -------------------------------------------------------
-            var step = grid.HeightStep > 0f ? grid.HeightStep : 1f;
+            // --- 5: valleys where the water would run ---------------------------------------
+            var accumulation = FlowAccumulation(heights, land, width, depth);
+            CutValleys(heights, land, accumulation, settings);
+
+            // --- 6: the coast and the shelf --------------------------------------------------
+            ShapeCoast(heights, land, inDisc, width, depth, radius, centre, settings);
+
+            // --- 7: quantise and relax -------------------------------------------------------
+            var isLand = new bool[cells];
             for (var cell = 0; cell < cells; cell++)
             {
                 heights[cell] = Mathf.Round(heights[cell] / step) * step;
-                isLand[cell] = heights[cell] >= World.SeaLevel;
+                isLand[cell] = land[cell];
             }
 
             var sweeps = Relax(heights, isLand, width, depth, step);
 
-            // --- 5: the river ----------------------------------------------------------------
-            var map = new IslandMap();
-            var path = CarveRiver(map, heights, width, depth, grid, random, settings, step, centre);
+            // --- 8: rivers -------------------------------------------------------------------
+            CarveRivers(map, heights, land, accumulation, width, depth, grid, settings, step);
 
-            // Carving only ever lowers ground, so relaxing again can only lower it further: this
-            // takes out the steps the channel's own banks leave where the river bends and one cut
-            // reaches a cell its neighbour's did not.
+            for (var cell = 0; cell < cells; cell++)
+                isLand[cell] = land[cell] && heights[cell] >= World.SeaLevel;
+            sweeps = Mathf.Max(sweeps, Relax(heights, isLand, width, depth, step));
+
+            // The mask's cleanup was about where land was meant to be; this one is about where it
+            // ended up, because relaxing, beaching and carving all move cells across the waterline.
+            CleanUpShores(heights, inDisc, width, depth, settings, map.Shape, step, fillPockets: true);
             for (var cell = 0; cell < cells; cell++)
                 isLand[cell] = heights[cell] >= World.SeaLevel;
             sweeps = Mathf.Max(sweeps, Relax(heights, isLand, width, depth, step));
+            // Once more, dropping specks only: relaxing lowers cells, which can cut a corner of
+            // land off from the rest, and a one-cell island is not somewhere to play.
+            CleanUpShores(heights, inDisc, width, depth, settings, map.Shape, step, fillPockets: false);
+            ReadRiverFloors(map, heights, width);
 
-            // The polyline is read back from the ground as it finally stands, not from what the
-            // carve asked for, and is held monotonically descending so a river laid on it never
-            // runs uphill.
-            var floor = float.MaxValue;
-            foreach (var point in path)
-            {
-                var ground = heights[point.y * width + point.x];
-                floor = Mathf.Min(floor, ground);
-                if (ground <= World.SeaLevel)
-                {
-                    // The mouth: the last point goes under the surface, because that is where a
-                    // river ends - below the sea, not level with it.
-                    map.River.Add(new Vector3(point.x + 0.5f, Mathf.Min(floor, World.SeaLevel - 0.5f), point.y + 0.5f));
-                    break;
-                }
-
-                map.River.Add(new Vector3(point.x + 0.5f, floor, point.y + 0.5f));
-            }
-
-            // --- 6: strata -------------------------------------------------------------------
+            // --- 9: strata -------------------------------------------------------------------
+            var peak = -1;
             Span<Layer> column = stackalloc Layer[8];
             for (var z = 0; z < depth; z++)
             {
                 for (var x = 0; x < width; x++)
                 {
-                    if (grid.IsVoid(x, z))
-                        continue;
                     var cell = z * width + x;
-                    var count = BuildColumn(column, heights[cell], Steepness(heights, width, depth, x, z, step),
-                        mountainStrength[cell], valleyStrength[cell], grid.Datum, settings);
+                    if (!inDisc[cell])
+                        continue;
+                    if (peak < 0 || heights[cell] > heights[peak])
+                        peak = cell;
+                    var count = BuildColumn(column, heights[cell], Steepness(heights, width, depth, x, z),
+                        highGround[cell], ValleyStrength(accumulation[cell]), grid.Datum, settings);
                     grid.SetColumn(x, z, column.Slice(0, count));
                 }
             }
 
+            if (peak >= 0)
+                map.Peak = new Vector2Int(peak % width, peak / width);
             if (sweeps >= MaxRelaxSweeps)
                 Debug.LogWarning($"Island: the land was still stepping by more than {step} m after {sweeps} sweeps.");
+
+            map.Milliseconds = stopwatch.Elapsed.TotalMilliseconds;
             return map;
         }
 
-        // --- the height field ----------------------------------------------------------------
+        static Vector2 Offset(System.Random random) =>
+            new Vector2((float)random.NextDouble() * 1000f, (float)random.NextDouble() * 1000f);
 
-        static Vector2 PlaceRegion(System.Random random, Vector2 centre, float spread)
+        static LandShape PickShape(System.Random random)
         {
-            var angle = (float)random.NextDouble() * Mathf.PI * 2f;
-            var distance = Mathf.Sqrt((float)random.NextDouble()) * spread;
-            return centre + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * distance;
-        }
-
-        static Vector2 Warp(int x, int z, Vector2 offset, TerrainGenSettings settings)
-        {
-            var frequency = 1f / Mathf.Max(1f, settings.WarpSize);
-            var dx = (Mathf.PerlinNoise(offset.x + x * frequency, offset.y + z * frequency) - 0.5f) * 2f * settings.WarpStrength;
-            var dz = (Mathf.PerlinNoise(offset.y + x * frequency, offset.x + z * frequency) - 0.5f) * 2f * settings.WarpStrength;
-            return new Vector2(x + dx, z + dz);
-        }
-
-        /// <summary>1 at the middle of a region, easing to 0 at its edge.</summary>
-        static float Falloff(float normalisedDistance)
-        {
-            var t = Mathf.Clamp01(1f - normalisedDistance);
-            return t * t * (3f - 2f * t);
-        }
-
-        static float Noise(Vector2 at, Vector2 offset, float featureSize)
-        {
-            var frequency = 1f / Mathf.Max(1f, featureSize);
-            return Mathf.PerlinNoise(offset.x + at.x * frequency, offset.y + at.y * frequency);
-        }
-
-        /// <summary>Several octaves of Perlin, centred on zero, each twice as fine and half as strong.</summary>
-        static float Fbm(Vector2 at, Vector2 offset, float featureSize, int octaves)
-        {
-            var sum = 0f;
-            var weight = 0f;
-            var amplitude = 1f;
-            var size = featureSize;
-            for (var i = 0; i < octaves; i++)
+            // Continent twice, so the common case stays common.
+            var shapes = new[]
             {
-                sum += (Noise(at, offset + new Vector2(i * 37f, i * 91f), size) - 0.5f) * amplitude;
-                weight += amplitude;
-                amplitude *= 0.5f;
-                size *= 0.5f;
-            }
+                LandShape.Continent, LandShape.Continent, LandShape.Crescent,
+                LandShape.Twin, LandShape.Archipelago, LandShape.Lagoon,
+            };
+            return shapes[random.Next(shapes.Length)];
+        }
 
-            return sum / weight;
+        // --- 1: the land mask ------------------------------------------------------------------
+
+        /// <summary>
+        /// Whether this cell is land: twice-warped fBm above a threshold, pushed up or down by the
+        /// archetype, and forced under the sea in the outer ring of the disc so the map always ends
+        /// in water rather than in a cut edge.
+        /// </summary>
+        static bool IsLand(Vector2 here, float toCentre, float radius, Vector2 centre,
+            Vector2 landOffset, Vector2 warp, Vector2 warpFine, TerrainGenSettings settings, LandShape shape)
+        {
+            var size = Mathf.Max(20f, settings.LandFeatureSize);
+            // Two warps: the first bends the coast, the second frays it, which is where bays and
+            // headlands come from. One warp alone gives smooth ovals.
+            var first = here + Direction(here, warp, size * 0.8f) * settings.LandWarpStrength;
+            var sample = first + Direction(first, warpFine, size * 0.35f) * (settings.LandWarpStrength * 0.5f);
+
+            var field = Fbm(sample, landOffset, size, 4) * 2f;
+            field += ShapeBias(here, toCentre, radius, centre, shape);
+
+            // The rim: everything past it is sea, and the last stretch before it is pushed under.
+            var water = Mathf.Max(8, settings.RimWaterCells);
+            var fromRim = radius - toCentre;
+            if (fromRim < water)
+                field -= Mathf.Lerp(1.6f, 0f, Mathf.Clamp01(fromRim / water));
+
+            return field > settings.LandThreshold;
+        }
+
+        /// <summary>How much the archetype adds to or takes from the land field at a point.</summary>
+        static float ShapeBias(Vector2 here, float toCentre, float radius, Vector2 centre, LandShape shape)
+        {
+            var normalised = toCentre / Mathf.Max(1f, radius);
+            switch (shape)
+            {
+                case LandShape.Crescent:
+                {
+                    // A bay bitten out of one side: a soft disc of "not land" set off centre.
+                    var bay = centre + new Vector2(0.42f, 0.18f) * radius;
+                    var t = 1f - Vector2.Distance(here, bay) / (radius * 0.5f);
+                    return 0.55f - 1.9f * Smooth(t) - normalised * 0.5f;
+                }
+
+                case LandShape.Twin:
+                {
+                    // Two masses either side of a strait: a trough along one axis.
+                    var strait = 1f - Mathf.Abs(here.x - centre.x) / (radius * 0.2f);
+                    return 0.6f - 2f * Smooth(strait) - normalised * 0.55f;
+                }
+
+                case LandShape.Archipelago:
+                    // Lower and closer to the threshold: the same field breaks into pieces.
+                    return 0.24f - normalised * 0.7f;
+
+                case LandShape.Lagoon:
+                {
+                    // A ring of land: high where the distance from the middle is near the ring, low
+                    // inside it, with one gap cut through so the lagoon opens to the sea.
+                    var ring = 1f - Mathf.Abs(normalised - 0.62f) / 0.24f;
+                    var angle = Mathf.Atan2(here.y - centre.y, here.x - centre.x) * Mathf.Rad2Deg;
+                    var gap = 1f - Mathf.Abs(Mathf.DeltaAngle(angle, 35f)) / 20f;
+                    return 1.2f * Smooth(ring) - 0.55f - 2f * Smooth(gap);
+                }
+
+                default:
+                    // Continent: one mass, rugged coast, thinning toward the rim.
+                    return 0.6f - normalised * 0.95f;
+            }
+        }
+
+        static Vector2 Direction(Vector2 at, Vector2 offset, float size)
+        {
+            var frequency = 1f / Mathf.Max(1f, size);
+            return new Vector2(
+                Mathf.PerlinNoise(offset.x + at.x * frequency, offset.y + at.y * frequency) - 0.5f,
+                Mathf.PerlinNoise(offset.y + at.x * frequency, offset.x + at.y * frequency) - 0.5f) * 2f;
         }
 
         /// <summary>
-        /// Takes the outer ring of the disc down to a shelf and then to a channel at the rim. The
-        /// coastline is the radius at which this starts, pushed in and out by noise, so it is an
-        /// irregular shore rather than a circle.
+        /// Drops land too small to play on into the sea, and fills ponds too small to be worth
+        /// swimming. An archipelago keeps its islets: that is what it is for.
         /// </summary>
-        static float MaskToSea(float height, float toCentre, float radius, int x, int z, Vector2 coastOffset, TerrainGenSettings settings)
+        static void RemoveSmallBlobs(bool[] land, bool[] inDisc, int width, int depth, TerrainGenSettings settings, LandShape shape)
         {
-            var wander = (Mathf.PerlinNoise(
-                coastOffset.x + x / Mathf.Max(1f, settings.CoastNoiseSize),
-                coastOffset.y + z / Mathf.Max(1f, settings.CoastNoiseSize)) - 0.5f) * 2f * settings.CoastNoiseCells;
+            if (shape != LandShape.Archipelago)
+                Cull(land, inDisc, width, depth, wanted: true, minimum: settings.MinLandBlob);
+            // Ponds are filled whatever the shape: a puddle of sea in the middle of a field is not
+            // a lagoon, it is a hole the crew cannot cross.
+            Cull(land, inDisc, width, depth, wanted: false, minimum: settings.MinWaterPocket);
+        }
 
-            var shelfStart = radius - settings.ShelfCells + wander;
-            if (toCentre <= shelfStart)
-                return height;
+        /// <summary>
+        /// The same cleanup again, on the land as it finally stands: specks of land left standing
+        /// by the relaxation are pushed under, and puddles too small to matter are filled to a step
+        /// above the sea. Heights, not flags, because by now the heights are what decide.
+        /// </summary>
+        static void CleanUpShores(float[] heights, bool[] inDisc, int width, int depth,
+            TerrainGenSettings settings, LandShape shape, float step, bool fillPockets)
+        {
+            // The sim's own rule for land, not just "above the waterline": a cell level with the
+            // sea is water, so a speck that was beached to sea level is not an island, it is a
+            // shoal, and it should not be counted as somewhere to stand.
+            var land = new bool[heights.Length];
+            for (var cell = 0; cell < heights.Length; cell++)
+                land[cell] = heights[cell] >= World.SeaLevel + step - 1e-3f;
 
-            var channelStart = radius - settings.ChannelCells;
-            if (toCentre >= channelStart)
+            if (shape != LandShape.Archipelago)
             {
-                var deep = Mathf.InverseLerp(channelStart, radius, toCentre);
-                return Mathf.Lerp(settings.ShelfFarDepth, settings.ChannelDepth, deep);
+                foreach (var patch in Patches(land, inDisc, width, depth, wanted: true, minimum: settings.MinLandBlob))
+                    foreach (var cell in patch)
+                        heights[cell] = World.SeaLevel - Mathf.Max(step, 1f);
             }
 
-            // From the shore out to the channel: the land dives under, then the shelf falls away.
-            var t = Mathf.InverseLerp(shelfStart, channelStart, toCentre);
-            var smooth = t * t * (3f - 2f * t);
-            var shelf = Mathf.Lerp(settings.ShelfNearDepth, settings.ShelfFarDepth, smooth);
-            return Mathf.Lerp(height, shelf, smooth);
+            if (!fillPockets)
+                return;
+            foreach (var patch in Patches(land, inDisc, width, depth, wanted: false, minimum: settings.MinWaterPocket))
+                foreach (var cell in patch)
+                    heights[cell] = World.SeaLevel + step;
         }
+
+        /// <summary>Every connected patch of <paramref name="wanted"/> smaller than <paramref name="minimum"/>.</summary>
+        static List<List<int>> Patches(bool[] land, bool[] inDisc, int width, int depth, bool wanted, int minimum)
+        {
+            var small = new List<List<int>>();
+            var seen = new bool[land.Length];
+            var stack = new Stack<int>();
+            for (var start = 0; start < land.Length; start++)
+            {
+                if (seen[start] || !inDisc[start] || land[start] != wanted)
+                    continue;
+
+                var patch = new List<int>();
+                stack.Push(start);
+                seen[start] = true;
+                var touchesRim = false;
+                while (stack.Count > 0)
+                {
+                    var cell = stack.Pop();
+                    patch.Add(cell);
+                    var x = cell % width;
+                    var z = cell / width;
+                    for (var n = 0; n < 4; n++)
+                    {
+                        var nx = x + StepX[n];
+                        var nz = z + StepZ[n];
+                        if (nx < 0 || nz < 0 || nx >= width || nz >= depth)
+                            continue;
+                        var next = nz * width + nx;
+                        if (!inDisc[next])
+                        {
+                            touchesRim = true;
+                            continue;
+                        }
+
+                        if (seen[next] || land[next] != wanted)
+                            continue;
+                        seen[next] = true;
+                        stack.Push(next);
+                    }
+                }
+
+                if (!wanted && touchesRim)
+                    continue;
+                if (patch.Count < minimum)
+                    small.Add(patch);
+            }
+
+            return small;
+        }
+
+        /// <summary>Flips every connected patch of <paramref name="wanted"/> smaller than <paramref name="minimum"/>.</summary>
+        static void Cull(bool[] land, bool[] inDisc, int width, int depth, bool wanted, int minimum)
+        {
+            var seen = new bool[land.Length];
+            var stack = new Stack<int>();
+            var patch = new List<int>();
+            for (var start = 0; start < land.Length; start++)
+            {
+                if (seen[start] || !inDisc[start] || land[start] != wanted)
+                    continue;
+
+                patch.Clear();
+                stack.Push(start);
+                seen[start] = true;
+                var touchesRim = false;
+                while (stack.Count > 0)
+                {
+                    var cell = stack.Pop();
+                    patch.Add(cell);
+                    var x = cell % width;
+                    var z = cell / width;
+                    for (var n = 0; n < 4; n++)
+                    {
+                        var nx = x + StepX[n];
+                        var nz = z + StepZ[n];
+                        if (nx < 0 || nz < 0 || nx >= width || nz >= depth)
+                            continue;
+                        var next = nz * width + nx;
+                        if (!inDisc[next])
+                        {
+                            // Water that reaches the edge of the disc is the sea, never a pond.
+                            touchesRim = true;
+                            continue;
+                        }
+
+                        if (seen[next] || land[next] != wanted)
+                            continue;
+                        seen[next] = true;
+                        stack.Push(next);
+                    }
+                }
+
+                if (!wanted && touchesRim)
+                    continue;
+                if (patch.Count >= minimum)
+                    continue;
+                foreach (var cell in patch)
+                    land[cell] = !wanted;
+            }
+        }
+
+        // --- 3-4: ridge and benches -------------------------------------------------------------
+
+        /// <summary>Two to four control points across the interior, as a curve the ridge runs along.</summary>
+        static Vector2[] RidgeLine(System.Random random, Vector2 centre, float radius)
+        {
+            var count = 2 + random.Next(3);
+            var points = new Vector2[count];
+            var heading = (float)random.NextDouble() * Mathf.PI * 2f;
+            var along = new Vector2(Mathf.Cos(heading), Mathf.Sin(heading));
+            var side = new Vector2(-along.y, along.x);
+            var start = centre + along * radius * 0.5f;
+            var end = centre - along * radius * 0.4f;
+            for (var i = 0; i < count; i++)
+            {
+                var t = count == 1 ? 0.5f : i / (float)(count - 1);
+                // Each point is pushed off the straight line, so the ridge bends.
+                points[i] = Vector2.Lerp(start, end, t) + side * ((float)random.NextDouble() - 0.5f) * radius * 0.45f;
+            }
+
+            return points;
+        }
+
+        /// <summary>Benches as (x, z, height): flat ground off to one side of the ridge.</summary>
+        static Vector3[] Benches(System.Random random, Vector2[] ridge, Vector2 centre, float radius, TerrainGenSettings settings)
+        {
+            var count = Mathf.Clamp(settings.Plateaus, 0, 2);
+            var benches = new Vector3[count];
+            for (var i = 0; i < count; i++)
+            {
+                var anchor = ridge[random.Next(ridge.Length)];
+                var away = (anchor - centre).sqrMagnitude > 1f ? (anchor - centre).normalized : Vector2.right;
+                var side = new Vector2(-away.y, away.x) * (random.Next(2) == 0 ? 1f : -1f);
+                var at = anchor + side * radius * Mathf.Lerp(0.18f, 0.35f, (float)random.NextDouble());
+                var height = Mathf.Lerp(10f, 25f, (float)random.NextDouble());
+                benches[i] = new Vector3(at.x, at.y, height);
+            }
+
+            return benches;
+        }
+
+        /// <summary>Distance from a point to the polyline, in cells.</summary>
+        static float DistanceToCurve(Vector2 at, Vector2[] curve)
+        {
+            var best = float.MaxValue;
+            for (var i = 1; i < curve.Length; i++)
+            {
+                var a = curve[i - 1];
+                var ab = curve[i] - a;
+                var length = ab.sqrMagnitude;
+                var t = length < 1e-4f ? 0f : Mathf.Clamp01(Vector2.Dot(at - a, ab) / length);
+                best = Mathf.Min(best, Vector2.Distance(at, a + ab * t));
+            }
+
+            return best;
+        }
+
+        // --- 5: flow and valleys ---------------------------------------------------------------
+
+        /// <summary>
+        /// One D8 pass: every land cell starts holding one cell's worth of water and hands it to
+        /// its steepest downhill neighbour, worked from the highest cell down so a cell always has
+        /// everything above it before it passes anything on. What comes out is how much water would
+        /// run through each cell, which is where a valley belongs.
+        /// </summary>
+        static float[] FlowAccumulation(float[] heights, bool[] land, int width, int depth)
+        {
+            var cells = heights.Length;
+            var accumulation = new float[cells];
+            var order = new List<int>(cells);
+            for (var cell = 0; cell < cells; cell++)
+            {
+                if (!land[cell])
+                    continue;
+                accumulation[cell] = 1f;
+                order.Add(cell);
+            }
+
+            order.Sort((a, b) => heights[b].CompareTo(heights[a]));
+            foreach (var cell in order)
+            {
+                var x = cell % width;
+                var z = cell / width;
+                var height = heights[cell];
+                var lowest = -1;
+                var drop = 0f;
+                for (var n = 0; n < 8; n++)
+                {
+                    var nx = x + StepX[n];
+                    var nz = z + StepZ[n];
+                    if (nx < 0 || nz < 0 || nx >= width || nz >= depth)
+                        continue;
+                    var next = nz * width + nx;
+                    // Diagonals are longer, so their fall counts for less.
+                    var run = n < 4 ? 1f : 1.414f;
+                    var slope = (height - heights[next]) / run;
+                    if (slope <= drop)
+                        continue;
+                    drop = slope;
+                    lowest = next;
+                }
+
+                if (lowest >= 0)
+                    accumulation[lowest] += accumulation[cell];
+            }
+
+            return accumulation;
+        }
+
+        /// <summary>0 where nothing drains through, rising on a log scale where a lot does.</summary>
+        static float ValleyStrength(float accumulation) =>
+            accumulation <= ValleyThreshold ? 0f : Mathf.Clamp01(Mathf.Log(accumulation / ValleyThreshold) / 6f);
+
+        /// <summary>Cuts each cell down by how much water runs through it.</summary>
+        static void CutValleys(float[] heights, bool[] land, float[] accumulation, TerrainGenSettings settings)
+        {
+            if (settings.ValleyCut <= 0f)
+                return;
+            for (var cell = 0; cell < heights.Length; cell++)
+            {
+                if (!land[cell])
+                    continue;
+                var strength = ValleyStrength(accumulation[cell]);
+                if (strength > 0f)
+                    heights[cell] -= settings.ValleyCut * strength;
+            }
+        }
+
+        // --- 6: the coast ----------------------------------------------------------------------
+
+        /// <summary>
+        /// Gives the shore its profile: a beach where the land comes down to the sea gently, bare
+        /// ground where it does not, and out at sea a shallow shelf that falls away to the deep.
+        ///
+        /// Both are driven by how far a cell is from the waterline, which is one flood each way.
+        /// </summary>
+        static void ShapeCoast(float[] heights, bool[] land, bool[] inDisc, int width, int depth,
+            float radius, Vector2 centre, TerrainGenSettings settings)
+        {
+            var toWater = Distance(land, inDisc, width, depth, from: false);
+            var toLand = Distance(land, inDisc, width, depth, from: true);
+
+            for (var z = 0; z < depth; z++)
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var cell = z * width + x;
+                    if (!inDisc[cell])
+                        continue;
+
+                    if (land[cell])
+                    {
+                        var beach = Mathf.Max(1, settings.BeachCells);
+                        var from = toWater[cell];
+                        if (from > beach)
+                            continue;
+
+                        // Steep ground keeps its height and meets the water as rock; gentle ground
+                        // is pulled down onto a beach that rises from the waterline.
+                        if (Steepness(heights, width, depth, x, z) > settings.BeachMaxSlope)
+                            continue;
+                        var t = Mathf.Clamp01((from - 1f) / beach);
+                        heights[cell] = Mathf.Min(heights[cell], Mathf.Lerp(0.2f, settings.BeachHeight, t));
+                        continue;
+                    }
+
+                    var offshore = toLand[cell];
+                    var shallow = Mathf.Max(1, settings.ShallowCells);
+                    var toCentre = Vector2.Distance(new Vector2(x + 0.5f, z + 0.5f), centre);
+                    var rim = Mathf.Clamp01((toCentre - (radius - settings.ChannelCells)) / Mathf.Max(1f, settings.ChannelCells));
+                    float sea;
+                    if (offshore <= shallow)
+                    {
+                        // The shelf: a gentle slope from the waterline out.
+                        sea = Mathf.Lerp(settings.ShelfNearDepth * 0.7f, settings.ShelfFarDepth * 0.75f, Mathf.Clamp01(offshore / shallow));
+                    }
+                    else
+                    {
+                        var beyond = Mathf.Clamp01((offshore - shallow) / (shallow * 2f));
+                        sea = Mathf.Lerp(settings.ShelfFarDepth * 0.75f, settings.ChannelDepth, beyond);
+                    }
+
+                    heights[cell] = Mathf.Lerp(sea, settings.ChannelDepth, rim);
+                }
+            }
+        }
+
+        /// <summary>Cells to the nearest cell whose land flag is <paramref name="from"/>, by flood.</summary>
+        static float[] Distance(bool[] land, bool[] inDisc, int width, int depth, bool from)
+        {
+            var distance = new float[land.Length];
+            var queue = new Queue<int>();
+            for (var cell = 0; cell < land.Length; cell++)
+            {
+                if (inDisc[cell] && land[cell] == from)
+                {
+                    distance[cell] = 0f;
+                    queue.Enqueue(cell);
+                }
+                else
+                {
+                    distance[cell] = float.MaxValue;
+                }
+            }
+
+            while (queue.Count > 0)
+            {
+                var cell = queue.Dequeue();
+                var x = cell % width;
+                var z = cell / width;
+                for (var n = 0; n < 4; n++)
+                {
+                    var nx = x + StepX[n];
+                    var nz = z + StepZ[n];
+                    if (nx < 0 || nz < 0 || nx >= width || nz >= depth)
+                        continue;
+                    var next = nz * width + nx;
+                    if (distance[next] <= distance[cell] + 1f)
+                        continue;
+                    distance[next] = distance[cell] + 1f;
+                    queue.Enqueue(next);
+                }
+            }
+
+            return distance;
+        }
+
+        // --- 7: relaxation ---------------------------------------------------------------------
 
         /// <summary>
         /// Pulls down any land cell standing more than one step above a neighbour, sweeping until
-        /// nothing moves. Water is left alone: a shelf may fall away as steeply as it likes, it is
-        /// only what the crew walks on that has to stay climbable.
+        /// nothing moves. Four directional passes a sweep, the way a chamfer distance transform
+        /// works: a low cell's influence travels the whole width of the map in one pass rather than
+        /// one cell a sweep.
+        ///
+        /// Water is left alone: a shelf may fall away as steeply as it likes, it is only what the
+        /// crew walks on that has to stay climbable.
         /// </summary>
         static int Relax(float[] heights, bool[] isLand, int width, int depth, float step)
         {
-            // Four directional passes a sweep, the way a chamfer distance transform works: a low
-            // cell's influence travels the whole width of the map in one pass rather than one cell
-            // a sweep, so a 46 m mountain settles in a handful of sweeps instead of hundreds.
             for (var sweep = 0; sweep < MaxRelaxSweeps; sweep++)
             {
                 var moved = false;
@@ -310,7 +756,7 @@ namespace TinyDiggers.Terrain
         /// is a row of one-metre steps with flats between them, so the worst step alternates cell
         /// by cell and anything keyed to it comes out as a checkerboard of materials.
         /// </summary>
-        static float Steepness(float[] heights, int width, int depth, int x, int z, float step)
+        static float Steepness(float[] heights, int width, int depth, int x, int z)
         {
             var sum = 0f;
             var count = 0;
@@ -320,108 +766,148 @@ namespace TinyDiggers.Terrain
                 {
                     var ax = x + dx;
                     var az = z + dz;
-                    var bx = ax + 1;
-                    if (ax < 0 || az < 0 || bx >= width || az >= depth)
+                    if (ax < 0 || az < 0 || ax >= width || az >= depth)
                         continue;
-                    sum += Mathf.Abs(heights[az * width + ax] - heights[az * width + bx]);
-                    count++;
-                    var bz = az + 1;
-                    if (bz >= depth)
-                        continue;
-                    sum += Mathf.Abs(heights[az * width + ax] - heights[bz * width + ax]);
-                    count++;
+                    if (ax + 1 < width)
+                    {
+                        sum += Mathf.Abs(heights[az * width + ax] - heights[az * width + ax + 1]);
+                        count++;
+                    }
+
+                    if (az + 1 < depth)
+                    {
+                        sum += Mathf.Abs(heights[az * width + ax] - heights[(az + 1) * width + ax]);
+                        count++;
+                    }
                 }
             }
 
             return count == 0 ? 0f : sum / count;
         }
 
-        // --- the river -----------------------------------------------------------------------
+        // --- 8: rivers -------------------------------------------------------------------------
 
         /// <summary>
-        /// Walks from the highest cell of the mountain down to the sea, taking the lowest neighbour
-        /// each step with a little sideways wander, then cuts the channel it ran through. The floor
-        /// only ever descends, so a river mesh laid on the polyline never runs uphill.
+        /// Rivers run where the water already does: the outlet with the most land draining through
+        /// it becomes the main river, and the best outlet well away from it, if there is one,
+        /// becomes a second. Each is walked back upstream along the wettest cells and cut.
         /// </summary>
-        static List<Vector2Int> CarveRiver(IslandMap map, float[] heights, int width, int depth, TerrainGrid grid,
-            System.Random random, TerrainGenSettings settings, float step, Vector2 centre)
+        static void CarveRivers(IslandMap map, float[] heights, bool[] land, float[] accumulation,
+            int width, int depth, TerrainGrid grid, TerrainGenSettings settings, float step)
         {
-            var peak = -1;
-            for (var cell = 0; cell < heights.Length; cell++)
+            var outlets = new List<int>();
+            for (var z = 1; z < depth - 1; z++)
             {
-                var x = cell % width;
-                var z = cell / width;
-                if (!grid.IsGround(x, z))
-                    continue;
-                if (peak < 0 || heights[cell] > heights[peak])
-                    peak = cell;
+                for (var x = 1; x < width - 1; x++)
+                {
+                    var cell = z * width + x;
+                    if (!land[cell] || accumulation[cell] < ValleyThreshold * 4f)
+                        continue;
+                    var meetsSea = false;
+                    for (var n = 0; n < 4 && !meetsSea; n++)
+                        meetsSea = !land[(z + StepZ[n]) * width + x + StepX[n]];
+                    if (meetsSea)
+                        outlets.Add(cell);
+                }
             }
 
-            if (peak < 0)
-                return new List<Vector2Int>();
+            if (outlets.Count == 0)
+                return;
+            outlets.Sort((a, b) => accumulation[b].CompareTo(accumulation[a]));
 
-            map.Peak = new Vector2Int(peak % width, peak / width);
-            var path = new List<Vector2Int>();
-            var visited = new HashSet<int>();
-            var at = map.Peak;
-            var guard = width * depth;
-
-            while (guard-- > 0)
+            var chosen = new List<int> { outlets[0] };
+            foreach (var outlet in outlets)
             {
-                var cell = at.y * width + at.x;
-                if (!visited.Add(cell))
+                if (chosen.Count >= 2)
                     break;
-                path.Add(at);
-                if (heights[cell] < World.SeaLevel - 1f)
-                    break;
-
-                var best = at;
-                var bestScore = float.MaxValue;
-                for (var dz = -1; dz <= 1; dz++)
+                var far = true;
+                foreach (var taken in chosen)
                 {
-                    for (var dx = -1; dx <= 1; dx++)
-                    {
-                        if (dx == 0 && dz == 0)
-                            continue;
-                        var nx = at.x + dx;
-                        var nz = at.y + dz;
-                        if (!grid.InBounds(nx, nz) || visited.Contains(nz * width + nx))
-                            continue;
-                        // The score is the height it would run to, plus a little wander so the
-                        // river leans off the steepest line, minus a pull toward the coast so a
-                        // hollow in the middle of the island does not swallow it: a river that
-                        // stops in a bowl is a lake, and we want it to reach the sea.
-                        var outward = Vector2.Distance(new Vector2(nx, nz), centre);
-                        var score = heights[nz * width + nx]
-                            + (float)random.NextDouble() * settings.RiverWander
-                            - outward * 0.25f;
-                        if (score >= bestScore)
-                            continue;
-                        bestScore = score;
-                        best = new Vector2Int(nx, nz);
-                    }
+                    var dx = outlet % width - taken % width;
+                    var dz = outlet / width - taken / width;
+                    if (dx * dx + dz * dz < 60 * 60)
+                        far = false;
                 }
 
-                if (best == at)
+                // A second river only if it drains a decent share of the island: two trickles side
+                // by side read as a mistake rather than as a second river.
+                if (far && accumulation[outlet] > accumulation[outlets[0]] * 0.35f)
+                    chosen.Add(outlet);
+            }
+
+            foreach (var outlet in chosen)
+            {
+                var path = Upstream(outlet, accumulation, land, width, depth);
+                if (path.Count < 6)
+                    continue;
+                Carve(map, path, heights, width, grid, settings, step);
+            }
+        }
+
+        /// <summary>Walks from an outlet back up the wettest neighbours to the head of the valley.</summary>
+        static List<Vector2Int> Upstream(int outlet, float[] accumulation, bool[] land, int width, int depth)
+        {
+            var path = new List<int> { outlet };
+            var seen = new HashSet<int> { outlet };
+            var at = outlet;
+            while (true)
+            {
+                var x = at % width;
+                var z = at / width;
+                var best = -1;
+                // Low enough to follow a river up to its headwaters: a stream carrying four cells
+                // is still a stream, and stopping at a dozen leaves rivers that are stubs.
+                var bestFlow = 4f;
+                for (var n = 0; n < 8; n++)
+                {
+                    var nx = x + StepX[n];
+                    var nz = z + StepZ[n];
+                    if (nx < 1 || nz < 1 || nx >= width - 1 || nz >= depth - 1)
+                        continue;
+                    var next = nz * width + nx;
+                    if (!land[next] || seen.Contains(next) || accumulation[next] <= bestFlow)
+                        continue;
+                    // Upstream means less water than here: this is the biggest feeder, not the sea.
+                    if (accumulation[next] >= accumulation[at])
+                        continue;
+                    bestFlow = accumulation[next];
+                    best = next;
+                }
+
+                if (best < 0)
                     break;
+                seen.Add(best);
+                path.Add(best);
                 at = best;
             }
 
-            if (path.Count < 2)
-                return path;
+            path.Reverse();
+            var points = new List<Vector2Int>(path.Count);
+            foreach (var cell in path)
+                points.Add(new Vector2Int(cell % width, cell / width));
+            return points;
+        }
 
-            // Cut the channel, then read the floor back out, so the polyline is what is actually
-            // there rather than what was asked for.
+        /// <summary>
+        /// Cuts a flat-floored channel along the path, its banks stepping up a metre a cell so the
+        /// cut keeps the neighbour-step guarantee, with the floor held monotonically descending and
+        /// stopped at the waterline while there is still land around it.
+        /// </summary>
+        static void Carve(IslandMap map, List<Vector2Int> path, float[] heights, int width,
+            TerrainGrid grid, TerrainGenSettings settings, float step)
+        {
             var halfWidth = Mathf.Max(1, settings.RiverWidth) * 0.5f;
             var reach = Mathf.CeilToInt(halfWidth + settings.RiverDepth / step) + 1;
             var floor = float.MaxValue;
+            var river = new List<Vector3>();
+
             foreach (var point in path)
             {
                 var here = heights[point.y * width + point.x];
                 var target = Mathf.Min(floor, here - settings.RiverDepth);
                 // While there is still land around it, the channel floor stops at the waterline:
-                // otherwise a river coming down a mountainside cuts itself a trench below sea
-                // level halfway across the island, and what should be a river becomes an inlet.
+                // otherwise a river coming down a hillside cuts itself a trench below sea level
+                // halfway across the island, and what should be a river becomes an inlet.
                 if (here > World.SeaLevel)
                     target = Mathf.Max(target, World.SeaLevel - 0.5f);
                 target = Mathf.Round(target / step) * step;
@@ -436,8 +922,6 @@ namespace TinyDiggers.Terrain
                         if (!grid.InBounds(nx, nz) || grid.IsVoid(nx, nz))
                             continue;
                         var distance = Mathf.Sqrt(dx * dx + dz * dz);
-                        // Flat floor across the channel, then one step up a cell on the banks, so
-                        // the cut keeps the neighbour-step guarantee it was relaxed to.
                         var bank = Mathf.Max(0f, distance - halfWidth) * step;
                         var cut = target + bank;
                         var cell = nz * width + nx;
@@ -448,23 +932,48 @@ namespace TinyDiggers.Terrain
                     }
                 }
 
+                river.Add(new Vector3(point.x + 0.5f, target, point.y + 0.5f));
                 // The river ends where the land does.
                 if (here <= World.SeaLevel)
                     break;
             }
 
-            return path;
+            if (river.Count >= 2)
+                map.Rivers.Add(river);
         }
 
-        // --- strata --------------------------------------------------------------------------
+        /// <summary>
+        /// Reads every river's floor back out of the land as it finally stands, held monotonically
+        /// descending, so a river mesh laid on the line sits in the channel that is really there and
+        /// never runs uphill. The last point goes under the surface, because that is where a river
+        /// ends.
+        /// </summary>
+        static void ReadRiverFloors(IslandMap map, float[] heights, int width)
+        {
+            foreach (var river in map.Rivers)
+            {
+                var floor = float.MaxValue;
+                for (var i = 0; i < river.Count; i++)
+                {
+                    var point = river[i];
+                    floor = Mathf.Min(floor, heights[Mathf.FloorToInt(point.z) * width + Mathf.FloorToInt(point.x)]);
+                    var last = i == river.Count - 1;
+                    river[i] = new Vector3(point.x, last ? Mathf.Min(floor, World.SeaLevel - 0.5f) : floor, point.z);
+                }
+            }
+
+            map.Rivers.Sort((a, b) => b.Count.CompareTo(a.Count));
+        }
+
+        // --- 9: strata -------------------------------------------------------------------------
 
         /// <summary>
         /// Builds one column bottom-up for a surface at <paramref name="surface"/>: bedrock from
-        /// the datum, granite where a mountain stands over it, rock, clay in the valleys, then the
-        /// cap — sand near sea level and under water, bare rock where it is too steep to hold soil,
-        /// dirt and topsoil everywhere else.
+        /// the datum, granite under the high ground, rock, clay in the valleys, then the cap —
+        /// sand on beaches and under water, bare rock where it is too steep to hold soil, dirt and
+        /// topsoil everywhere else.
         /// </summary>
-        static int BuildColumn(Span<Layer> column, float surface, float steepness, float mountain, float valley,
+        static int BuildColumn(Span<Layer> column, float surface, float steepness, float high, float valley,
             float datum, TerrainGenSettings settings)
         {
             var total = surface - datum;
@@ -475,20 +984,22 @@ namespace TinyDiggers.Terrain
             }
 
             var underwater = surface < World.SeaLevel;
-            var coastal = Mathf.Abs(surface - World.SeaLevel) <= settings.SandBand;
-            // Ground that averages better than two thirds of a metre a cell is too steep to
-            // hold soil: that is a slope of roughly thirty-five degrees.
+            // Ground that averages better than two thirds of a metre a cell is too steep to hold
+            // soil: that is a slope of roughly thirty-five degrees.
             var steep = steepness > 0.67f;
+            // A beach is low ground that is not steep; a steep shore is rock to the waterline.
+            var coastal = !steep && Mathf.Abs(surface - World.SeaLevel) <= settings.SandBand;
 
             var topsoil = underwater || coastal || steep ? 0f : settings.TopsoilThickness;
             var sand = underwater || coastal ? settings.SandThickness : 0f;
+            if (underwater && steep)
+                sand *= 0.3f;
             var dirt = underwater ? 0.4f : steep ? settings.DirtOnSlopes : settings.DirtOnPlains;
             if (coastal && !underwater)
                 dirt *= 0.5f;
             var clay = valley > 0.35f && !underwater ? settings.ClayInValleys * valley : 0f;
-            var granite = mountain > 0.05f ? mountain * settings.MountainHeight * settings.GraniteShare : 0f;
+            var granite = high > 0.05f ? high * settings.RidgeHeight * settings.GraniteShare : 0f;
 
-            // Everything above the bedrock, trimmed to what the column can actually hold.
             var cap = topsoil + sand + dirt + clay;
             var maxCap = Mathf.Max(0f, total - MinLayerThickness);
             if (cap > maxCap)
@@ -509,7 +1020,6 @@ namespace TinyDiggers.Terrain
             var bedrock = total - cap - granite - rock;
             if (bedrock < MinLayerThickness)
             {
-                // No room for a bedrock base: give it what is left and thin the cap instead.
                 bedrock = Mathf.Max(MinLayerThickness, total * 0.25f);
                 var remainder = total - bedrock;
                 var wanted = granite + rock + cap;
@@ -532,7 +1042,7 @@ namespace TinyDiggers.Terrain
             count = Add(column, count, MaterialTable.Topsoil, topsoil);
 
             // The surface must land exactly where the height field says: whatever rounding the
-            // layers picked up goes into the thickest band below the cap.
+            // layers picked up goes into the bedrock below them.
             var built = 0f;
             for (var i = 0; i < count; i++)
                 built += column[i].Thickness;
@@ -548,6 +1058,72 @@ namespace TinyDiggers.Terrain
                 return count;
             column[count] = new Layer(material, thickness);
             return count + 1;
+        }
+
+        // --- noise -----------------------------------------------------------------------------
+
+        static Vector2 Warp(int x, int z, Vector2 offset, float size, float strength)
+        {
+            var frequency = 1f / Mathf.Max(1f, size);
+            var dx = (Mathf.PerlinNoise(offset.x + x * frequency, offset.y + z * frequency) - 0.5f) * 2f * strength;
+            var dz = (Mathf.PerlinNoise(offset.y + x * frequency, offset.x + z * frequency) - 0.5f) * 2f * strength;
+            return new Vector2(x + dx, z + dz);
+        }
+
+        static float Noise(Vector2 at, Vector2 offset, float featureSize)
+        {
+            var frequency = 1f / Mathf.Max(1f, featureSize);
+            return Mathf.PerlinNoise(offset.x + at.x * frequency, offset.y + at.y * frequency);
+        }
+
+        /// <summary>Several octaves of Perlin, centred on zero, each twice as fine and half as strong.</summary>
+        static float Fbm(Vector2 at, Vector2 offset, float featureSize, int octaves)
+        {
+            var sum = 0f;
+            var weight = 0f;
+            var amplitude = 1f;
+            var size = featureSize;
+            for (var i = 0; i < octaves; i++)
+            {
+                sum += (Noise(at, offset + new Vector2(i * 37f, i * 91f), size) - 0.5f) * amplitude;
+                weight += amplitude;
+                amplitude *= 0.5f;
+                size *= 0.5f;
+            }
+
+            return sum / weight;
+        }
+
+        /// <summary>
+        /// Ridged multifractal: each octave is folded about its middle, so the field has creases
+        /// instead of lumps, and finer octaves are weighted by how high the coarser ones already
+        /// are, which keeps the detail on the crests and off the flats.
+        /// </summary>
+        static float RidgedFbm(Vector2 at, Vector2 offset, float featureSize, int octaves)
+        {
+            var sum = 0f;
+            var total = 0f;
+            var weight = 1f;
+            var amplitude = 1f;
+            var size = featureSize;
+            for (var i = 0; i < octaves; i++)
+            {
+                var signal = 1f - Mathf.Abs(Noise(at, offset + new Vector2(i * 53f, i * 17f), size) * 2f - 1f);
+                signal *= signal * weight;
+                weight = Mathf.Clamp01(signal * 2f);
+                sum += signal * amplitude;
+                total += amplitude;
+                amplitude *= 0.5f;
+                size *= 0.5f;
+            }
+
+            return total < 1e-4f ? 0f : sum / total;
+        }
+
+        static float Smooth(float t)
+        {
+            t = Mathf.Clamp01(t);
+            return t * t * (3f - 2f * t);
         }
     }
 }

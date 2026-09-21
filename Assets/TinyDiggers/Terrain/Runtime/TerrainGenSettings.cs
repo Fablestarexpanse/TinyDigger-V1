@@ -2,6 +2,28 @@ using UnityEngine;
 
 namespace TinyDiggers.Terrain
 {
+    /// <summary>The shape of land a seed is asked for.</summary>
+    public enum LandShape
+    {
+        /// <summary>Whatever the seed feels like. The default.</summary>
+        Any,
+
+        /// <summary>One mass with a rugged coast.</summary>
+        Continent,
+
+        /// <summary>One mass with a bay bitten out of one side.</summary>
+        Crescent,
+
+        /// <summary>Two masses with a strait between them.</summary>
+        Twin,
+
+        /// <summary>One main island with a scatter of islets.</summary>
+        Archipelago,
+
+        /// <summary>A ring of land around a shallow lake that opens to the sea.</summary>
+        Lagoon,
+    }
+
     /// <summary>
     /// Every number the island generator uses, in one asset so the land can be tuned without
     /// touching code. A seed and these settings fully determine the map.
@@ -41,7 +63,58 @@ namespace TinyDiggers.Terrain
         [Tooltip("Metres the warp pushes each sample around by.")]
         [Min(0f)] public float WarpStrength = 14f;
 
-        [Header("Island mask")]
+        [Header("Land mask")]
+        [Tooltip("The shape of land to make. Any lets the seed choose.")]
+        public LandShape Shape = LandShape.Any;
+
+        [Tooltip("Metres across the features of the noise that decides where land is.")]
+        [Min(20f)] public float LandFeatureSize = 150f;
+
+        [Tooltip("How much of the noise counts as land. Higher is less land and a more broken coast.")]
+        [Range(-0.3f, 0.3f)] public float LandThreshold = -0.02f;
+
+        [Tooltip("Metres the land mask's second warp pushes samples around by.")]
+        [Min(0f)] public float LandWarpStrength = 34f;
+
+        [Tooltip("Cells at the rim that are always sea, whatever the noise says.")]
+        [Min(4)] public int RimWaterCells = 25;
+
+        [Tooltip("Cells a patch of land must cover to be kept. Archipelagos keep their islets.")]
+        [Min(1)] public int MinLandBlob = 40;
+
+        [Tooltip("Cells a pocket of water inside the land must cover to be kept as a lake.")]
+        [Min(1)] public int MinWaterPocket = 12;
+
+        [Header("Coast")]
+        [Tooltip("Cells of beach shelf on a coast gentle enough to hold one.")]
+        [Min(0)] public int BeachCells = 5;
+
+        [Tooltip("Metres the beach rises to at its back.")]
+        [Min(0f)] public float BeachHeight = 2f;
+
+        [Tooltip("Metres a cell may step to its neighbours and still be a beach rather than a rocky shore.")]
+        [Min(0f)] public float BeachMaxSlope = 0.55f;
+
+        [Tooltip("Cells of shallow shelf out from the shore before the sea drops away.")]
+        [Min(1)] public int ShallowCells = 10;
+
+        [Header("Ridge and valleys")]
+        [Tooltip("Metres the ridge stands at its highest.")]
+        [Min(0f)] public float RidgeHeight = 52f;
+
+        [Tooltip("Cells from the ridge line to where it has faded out.")]
+        [Min(4f)] public float RidgeWidth = 55f;
+
+        [Tooltip("How deep the rivers cut their valleys. 0 leaves the land as the noise made it.")]
+        [Min(0f)] public float ValleyCut = 9f;
+
+        [Tooltip("Benches of flat ground cut into the lee of the ridge.")]
+        [Range(0, 2)] public int Plateaus = 1;
+
+        [Tooltip("Cells across a bench.")]
+        [Min(4f)] public float PlateauRadius = 45f;
+
+        [Header("Island mask (old radial shelf)")]
         [Tooltip("Cells in from the rim where the land starts falling toward the sea.")]
         [Min(4)] public int ShelfCells = 40;
 

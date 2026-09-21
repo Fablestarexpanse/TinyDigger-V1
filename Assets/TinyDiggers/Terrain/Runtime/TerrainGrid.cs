@@ -96,8 +96,17 @@ namespace TinyDiggers.Terrain
         {
             if (!IsGround(x, z))
                 return false;
-            return _surfaceHeights[z * Width + x] < World.SeaLevel + LandStep;
+            return _surfaceHeights[z * Width + x] < LandAt;
         }
+
+        /// <summary>
+        /// The height a surface must reach to be land, with a hair of tolerance. A column's height
+        /// is the sum of its layers over the datum, and that sum drifts by a few millionths, so a
+        /// cell built to exactly one step above the sea can come out a hair under it. Without the
+        /// tolerance such a cell is water, and one of them in the middle of a field is a hole the
+        /// crew cannot cross.
+        /// </summary>
+        float LandAt => World.SeaLevel + LandStep - 1e-3f;
 
         /// <summary>Metres of water over a cell, or 0 where the ground is dry.</summary>
         public float WaterDepth(int x, int z)
@@ -529,7 +538,7 @@ namespace TinyDiggers.Terrain
                 height += _layers[layerBase + i].Thickness;
             var surface = Datum + height;
             _surfaceHeights[cell] = surface;
-            _blocked[cell] = _void[cell] || surface < World.SeaLevel + LandStep;
+            _blocked[cell] = _void[cell] || surface < LandAt;
             _topMaterials[cell] = count == 0 ? MaterialId.None : _layers[layerBase + count - 1].Material;
 
             CellChanged?.Invoke(x, z);
