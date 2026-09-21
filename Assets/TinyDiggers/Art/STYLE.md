@@ -1,6 +1,6 @@
 # TinyDiggers — style bible
 
-Status: **draft, waiting for Ronan's approval** (Phase 0). Nothing in Phase 1 starts until this
+Status: **approved by Ronan on 2026-09-21** ("Ok try it"), including the de-lit 3D-input variant in §8.3. Vehicle scale (§5) is still open until Phase 2 reaches the vehicles. Nothing in Phase 1 starts until this
 is approved. Any change to the prompt block below is a bible edit that Ronan approves; it is never
 a per-asset tweak.
 

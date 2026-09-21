@@ -1,0 +1,28 @@
+{
+  "source": "F:/Stability Matrix/Packages/ComfyUI/output/3d/TinyDiggers/tree_a_00001.glb",
+  "category": "plant",
+  "raw_tris": 674481,
+  "wood_split": true,
+  "hull_islands": 12,
+  "hull_islands_dropped": 11,
+  "hull_tris": 12164,
+  "wood_tris": 134,
+  "tris": 1455,
+  "non_manifold_edges": 11,
+  "albedo_value": 0.72,
+  "foliage_cool": 0.3,
+  "uv_coverage": 1.0,
+  "swatch_share": {
+    "Leaf Mid": 0.648,
+    "Meadow Sun": 0.037,
+    "Canopy Teal": 0.0,
+    "Bark": 0.315
+  },
+  "mean_distance_before": 0.4468,
+  "mean_colour": "#35490E",
+  "dimensions_m": [
+    6.573,
+    4.864,
+    8.848
+  ]
+}

@@ -5,10 +5,10 @@ this records why.
 
 ---
 
-**NEXT:** Art pipeline Phase 0 (style bible) is drafted: `Assets/TinyDiggers/Art/STYLE.md` plus
-`STYLE_TEST_SHEET.png`. Waiting on Ronan to approve it, and to answer vehicle scale and the
-de-lighting variant for Trellis2 inputs (STYLE.md §8). Phase 1 (tree_a, end to end) does not start
-until then. Still owed from Slice 9: a mid-range frame-time check.
+**NEXT:** Phase 1 (tree_a) stopped after the 5-loop cap. Best result is loop 5, and it is waiting
+on Ronan's look. Scores and open misses are in `Assets/TinyDiggers/Art/ASSET_LOG.md`; shots are in
+`Screenshots/Art/tree_a_loops.png`. Phase 2 does not start without approval. Open decisions: vehicle
+scale (STYLE §5); adding glTFast (Unity has no GLB importer, so the FBX is used).
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1557,3 +1557,18 @@ got here" section records the prompt iterations. Facts worth keeping outside it:
   foliage lives only in the PLANT clause.
 - With Unity open, ComfyUI ran out of VRAM once (1.6 GB free) and a render stalled. Unloading the
   models fixed it; queue with wait=false and watch the output folder.
+
+## Art pipeline, Phase 1 — tree_a (2026-09-21)
+
+The pipeline now runs end to end: Krea2 (de-lit variant) → ComfyUI `TinyDiggers_Trellis2` →
+`Art/Tools/clean_export.py` → FBX + GLB + 512² albedo → URP Lit prefab → `TinyDiggers/Art Capture`.
+The loop-by-loop record is in `Art/ASSET_LOG.md`. Facts a fresh session needs:
+- **Trellis2 canopies are a thousand loose leaf shells.** Decimate them directly and you get
+  confetti; a voxel remesh (0.02 × height) plus a volume-preserving Laplacian smooth turns them into
+  the clumps STYLE wants.
+- **Trunks don't survive decimation.** They are rebuilt as a tapered tube through the wood's
+  slice centres (wood is split from foliage by base-colour red > green).
+- **The STYLE swatches are lit colours** sampled from rendered references. As albedo under our
+  1.7 sun they go neon, so the albedo is swatch × 0.72.
+- **Importing an asset while in play mode unbinds the terrain's textures** (grey land). Evaluation
+  shots must come from a fresh play session: reimport in edit mode, then enter play.
