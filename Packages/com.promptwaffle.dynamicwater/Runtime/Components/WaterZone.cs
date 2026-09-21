@@ -32,10 +32,40 @@ namespace PromptWaffle.DynamicWater
 
         [SerializeField] WaterSimulationDesc _tuning = WaterSimulationDesc.Default(2, 2, 1f, Vector2.zero);
 
+        [Tooltip("Optional swell drawn and sampled on top of the simulated water.")]
+        [SerializeField] WaterWaveSettings _waves;
+
+        GerstnerWave[] _waveSet = new GerstnerWave[0];
+        WaterWaveSettings _waveSetFrom;
+        int _waveSetVersion = -1;
+
         readonly List<WaterEffector> _effectors = new List<WaterEffector>();
         WaterEffector[] _effectorArray = new WaterEffector[0];
 
         public WaterSimulation Simulation { get; private set; }
+
+        public WaterWaveSettings WaveSettings
+        {
+            get => _waves;
+            set => _waves = value;
+        }
+
+        /// <summary>The swell as generated from <see cref="WaveSettings"/>; empty without settings. Regenerated when they change.</summary>
+        public IReadOnlyList<GerstnerWave> Waves
+        {
+            get
+            {
+                var version = _waves != null ? _waves.Version : 0;
+                if (_waves != _waveSetFrom || version != _waveSetVersion)
+                {
+                    _waveSet = _waves != null ? WaterWaves.Generate(_waves) : new GerstnerWave[0];
+                    _waveSetFrom = _waves;
+                    _waveSetVersion = version;
+                }
+
+                return _waveSet;
+            }
+        }
 
         /// <summary>World rectangle (x, z) the zone covers.</summary>
         public Rect Bounds
@@ -47,10 +77,22 @@ namespace PromptWaffle.DynamicWater
             }
         }
 
+        /// <summary>
+        /// The water at a world point: the simulated surface plus the swell, as drawn. The swell's
+        /// sideways drift is ignored (it moves the sample point by at most a few centimetres).
+        /// </summary>
         public bool TrySample(Vector3 world, out WaterSample sample)
         {
             sample = default;
-            return Simulation != null && Simulation.Query.TrySample(world, out sample);
+            if (Simulation == null || !Simulation.Query.TrySample(world, out sample))
+                return false;
+            if (_waves != null && sample.IsWet)
+            {
+                var damping = WaterWaves.Damping(_waves, sample.Depth, world.x, world.z);
+                sample.Surface += WaterWaves.Displacement(Waves, world.x, world.z, Time.timeSinceLevelLoad, damping).y;
+            }
+
+            return true;
         }
 
         /// <summary>Samples whichever active zone covers the point.</summary>

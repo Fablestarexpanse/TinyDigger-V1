@@ -7,7 +7,10 @@
 // - colour absorbed with depth, over the refracted scene (URP opaque texture);
 // - foam carried by the flow: two scrolling noise phases along the velocity, cross-faded, so the
 //   foam moves with the water without stretching; more where the water is fast or shallow;
-// - Fresnel reflection of the environment and a sun highlight.
+// - Fresnel reflection of the environment and a sun highlight;
+// - the swell (WaterWaves, set per zone): a Gerstner sum on top of the simulated surface, dying
+//   away in shallow water and varying in wind patches, with whitecaps at the crests. The same sum
+//   as WaterWaves.Displacement, so floating objects ride what is drawn.
 Shader "PromptWaffle/Dynamic Water Surface"
 {
     Properties
@@ -25,6 +28,9 @@ Shader "PromptWaffle/Dynamic Water Surface"
         _FlowPeriod ("Flow cycle (s)", Float) = 1.6
         _NormalStrength ("Normal strength", Range(0, 4)) = 1.4
         _RippleStrength ("Small ripples on moving water", Range(0, 1)) = 0.25
+        _WindRipples ("Wind ripples everywhere", Range(0, 1)) = 0.35
+        _WindRippleSize ("Wind ripple size (m)", Float) = 2.2
+        _SunGlint ("Sun glint strength", Range(0, 8)) = 2.5
         _Smoothness ("Smoothness", Range(0, 1)) = 0.92
         _DryDepth ("Depth below which a cell counts as dry (m)", Float) = 0.002
     }
@@ -76,6 +82,9 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 float _FlowPeriod;
                 half _NormalStrength;
                 half _RippleStrength;
+                half _WindRipples;
+                float _WindRippleSize;
+                half _SunGlint;
                 half _Smoothness;
                 float _DryDepth;
             CBUFFER_END
@@ -84,6 +93,13 @@ Shader "PromptWaffle/Dynamic Water Surface"
             TEXTURE2D(_WaterState); SAMPLER(sampler_WaterState);
             float4 _WaterZone;   // origin x, origin z, size x, size z (m)
             float4 _WaterTexel;  // 1/width, 1/height, cell size
+
+            // The swell, set per zone by WaterZoneRenderer from WaterWaves.Pack.
+            #define PW_MAX_WAVES 8
+            float4 _PWWaveA[PW_MAX_WAVES];   // direction x, direction z, amplitude, wave number
+            float4 _PWWaveB[PW_MAX_WAVES];   // steepness, speed, phase, 0
+            int _PWWaveCount;
+            float4 _PWWaveParams;            // gust size, gust calm, damp depth, whitecap threshold
 
             struct Attributes
             {
@@ -97,31 +113,13 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 float2 uv : TEXCOORD1;
                 float wet : TEXCOORD2;
                 half fogFactor : TEXCOORD3;
+                float2 baseXZ : TEXCOORD4;   // where the vertex was before the swell moved it
+                float2 swell : TEXCOORD5;    // x: crest height as a share of the local swell, y: damping
             };
 
             float2 ZoneUV(float2 xz) { return (xz - _WaterZone.xy) / _WaterZone.zw; }
 
             float4 State(float2 uv) { return SAMPLE_TEXTURE2D_LOD(_WaterState, sampler_WaterState, uv, 0); }
-
-            Varyings Vert(Attributes input)
-            {
-                Varyings output;
-                // The grid's vertices are world positions already (WaterZoneRenderer): the object
-                // matrix is ignored, so the zone's transform can never skew the water.
-                float3 positionWS = input.positionOS.xyz;
-                float2 uv = ZoneUV(positionWS.xz);
-                float4 state = State(uv);
-                bool wall = state.x < -1e5;
-                float wet = (!wall && state.y > _DryDepth) ? 1.0 : 0.0;
-                // Dry: sink just under the ground so the triangle folds out of sight; walls far down.
-                positionWS.y = wall ? -1e4 : state.x - (1.0 - wet) * 0.15;
-                output.positionWS = positionWS;
-                output.positionCS = TransformWorldToHClip(positionWS);
-                output.uv = uv;
-                output.wet = wet;
-                output.fogFactor = ComputeFogFactor(output.positionCS.z);
-                return output;
-            }
 
             float Hash21(float2 p)
             {
@@ -139,9 +137,92 @@ Shader "PromptWaffle/Dynamic Water Surface"
                             lerp(Hash21(i + float2(0, 1)), Hash21(i + float2(1, 1)), f.x), f.y);
             }
 
+            // Matches WaterWaves.Damping: none in the shallows, full in deep water in a rough patch.
+            float SwellDamping(float depth, float2 xz)
+            {
+                float shallow = saturate(depth / _PWWaveParams.z);
+                float gust = lerp(_PWWaveParams.y, 1.0, ValueNoise(xz / _PWWaveParams.x));
+                return shallow * gust;
+            }
+
+            // Matches WaterWaves.Displacement. Also returns the slope (dh/dx, dh/dz) for the normal
+            // and the total amplitude, for whitecaps.
+            float3 Swell(float2 xz, float damping, out float2 slope, out float total)
+            {
+                float3 displacement = 0;
+                slope = 0;
+                total = 0;
+                for (int i = 0; i < _PWWaveCount; i++)
+                {
+                    float4 a = _PWWaveA[i];
+                    float4 b = _PWWaveB[i];
+                    float amplitude = a.z * damping;
+                    float f = a.w * (dot(a.xy, xz) - b.y * _Time.y) + b.z;
+                    float s, c;
+                    sincos(f, s, c);
+                    displacement.xz += b.x * amplitude * a.xy * c;
+                    displacement.y += amplitude * s;
+                    slope += a.xy * a.w * amplitude * c;
+                    total += amplitude;
+                }
+                return displacement;
+            }
+
+            Varyings Vert(Attributes input)
+            {
+                Varyings output;
+                // The grid's vertices are world positions already (WaterZoneRenderer): the object
+                // matrix is ignored, so the zone's transform can never skew the water.
+                float3 positionWS = input.positionOS.xyz;
+                float2 uv = ZoneUV(positionWS.xz);
+                float4 state = State(uv);
+                bool wall = state.x < -1e5;
+                float wet = (!wall && state.y > _DryDepth) ? 1.0 : 0.0;
+                // Dry: sink just under the ground so the triangle folds out of sight; walls far down.
+                positionWS.y = wall ? -1e4 : state.x - (1.0 - wet) * 0.15;
+                output.baseXZ = positionWS.xz;
+                output.swell = 0;
+                if (wet > 0.5 && _PWWaveCount > 0)
+                {
+                    float damping = SwellDamping(state.y, positionWS.xz);
+                    float2 slope;
+                    float total;
+                    float3 swell = Swell(positionWS.xz, damping, slope, total);
+                    positionWS += swell;
+                    output.swell = float2(swell.y / max(0.02, total), damping);
+                }
+                output.positionWS = positionWS;
+                output.positionCS = TransformWorldToHClip(positionWS);
+                output.uv = uv;
+                output.wet = wet;
+                output.fogFactor = ComputeFogFactor(output.positionCS.z);
+                return output;
+            }
+
             float FoamPattern(float2 p)
             {
                 return ValueNoise(p) * 0.6 + ValueNoise(p * 2.7 + 13.0) * 0.4;
+            }
+
+            // Slope of a small ripple field at p (metres), drifting with the wind: finite
+            // differences of two octaves of noise. It is what breaks the sun into glitter; without
+            // it a smooth swell reflects the sun as a few soft blobs.
+            float2 WindRippleSlope(float2 p, float2 wind)
+            {
+                float2 slope = 0;
+                float scale = 1.0 / max(0.2, _WindRippleSize);
+                float amplitude = 1.0;
+                [unroll]
+                for (int o = 0; o < 2; o++)
+                {
+                    float2 q = p * scale + wind * _Time.y * scale * (0.6 + o * 0.5) + o * 17.3;
+                    float e = 0.15;
+                    float n = ValueNoise(q);
+                    slope += float2(ValueNoise(q + float2(e, 0)) - n, ValueNoise(q + float2(0, e)) - n) / e * amplitude;
+                    scale *= 2.6;
+                    amplitude *= 0.55;
+                }
+                return slope;
             }
 
             // Surface height at a neighbouring texel, standing in for walls and dry ground with
@@ -166,7 +247,13 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 float cell = _WaterTexel.z;
                 float dx = Neighbour(input.uv + float2(t.x, 0), here) - Neighbour(input.uv - float2(t.x, 0), here);
                 float dz = Neighbour(input.uv + float2(0, t.y), here) - Neighbour(input.uv - float2(0, t.y), here);
-                float3 normal = normalize(float3(-dx * _NormalStrength / (2.0 * cell), 1.0, -dz * _NormalStrength / (2.0 * cell)));
+                float2 simSlope = float2(dx, dz) * _NormalStrength / (2.0 * cell);
+                // The swell's slope, evaluated per pixel so the crests stay crisp between vertices.
+                float2 waveSlope = 0;
+                float waveTotal = 0;
+                if (_PWWaveCount > 0)
+                    Swell(input.baseXZ, input.swell.y, waveSlope, waveTotal);
+                float3 normal = normalize(float3(-simSlope.x - waveSlope.x, 1.0, -simSlope.y - waveSlope.y));
 
                 // Flow: two phases half a cycle apart, each advecting the pattern for one cycle,
                 // cross-faded so neither is seen stretching.
@@ -187,9 +274,16 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 float ripple = lerp(rippleA, rippleB, weightB) - 0.5;
                 float moving = saturate(speed * 0.8);
                 normal = normalize(normal + float3(ripple, 0, -ripple) * _RippleStrength * moving);
+                // Wind ripples on all water deep enough to take them, blowing with the first wave.
+                float2 wind = _PWWaveCount > 0 ? _PWWaveA[0].xy * 0.8 : float2(0.6, 0.4);
+                float2 windSlope = WindRippleSlope(input.positionWS.xz, wind) * _WindRipples * saturate(depth / 0.5) * 0.25;
+                normal = normalize(normal - float3(windSlope.x, 0, windSlope.y));
 
                 float shore = 1.0 - saturate(depth / 0.35);
                 float foamAmount = saturate(speed * _FoamFromSpeed + shore * _ShoreFoam);
+                // Whitecaps: crests above the threshold share of the local swell, in deep rough water.
+                float crest = saturate((input.swell.x - _PWWaveParams.w) / max(0.05, 1.0 - _PWWaveParams.w));
+                foamAmount = saturate(foamAmount + crest * input.swell.y * 0.9);
                 float foam = smoothstep(1.0 - foamAmount, 1.0 - foamAmount + 0.25, pattern) * foamAmount;
 
                 // Refraction: the scene under the water, bent by the normal, tinted by depth.
@@ -215,7 +309,8 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 half3 sky = GlossyEnvironmentReflection(reflect(-view, normal), 1.0 - _Smoothness, 1.0);
                 colour = lerp(colour, sky, fresnel);
                 float3 halfway = normalize(sun.direction + view);
-                float specular = pow(saturate(dot(normal, halfway)), 256.0 * _Smoothness) * 4.0 * shadow;
+                // A tight glint, strongest at grazing angles as on real water.
+                float specular = pow(saturate(dot(normal, halfway)), 900.0 * _Smoothness) * _SunGlint * shadow * (0.25 + fresnel * 3.0);
                 colour += sun.color * specular * (1.0 - foam);
 
                 colour = lerp(colour, _Foam.rgb * lerp(0.6, 1.0, shadow), foam);

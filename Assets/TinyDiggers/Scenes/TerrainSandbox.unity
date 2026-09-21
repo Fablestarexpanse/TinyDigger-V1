@@ -938,6 +938,7 @@ MonoBehaviour:
     FlowRetention: 0.995
     DryDepth: 0.001
     MaxSpeed: 20
+  _waves: {fileID: 11400000, guid: 07769a59f57d79641b1b0b021fb43577, type: 2}
 --- !u!114 &1181658048
 MonoBehaviour:
   m_ObjectHideFlags: 0

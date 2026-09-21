@@ -20,6 +20,13 @@ namespace PromptWaffle.DynamicWater.URP
         static readonly int StateId = Shader.PropertyToID("_WaterState");
         static readonly int ZoneId = Shader.PropertyToID("_WaterZone");
         static readonly int TexelId = Shader.PropertyToID("_WaterTexel");
+        static readonly int WaveAId = Shader.PropertyToID("_PWWaveA");
+        static readonly int WaveBId = Shader.PropertyToID("_PWWaveB");
+        static readonly int WaveCountId = Shader.PropertyToID("_PWWaveCount");
+        static readonly int WaveParamsId = Shader.PropertyToID("_PWWaveParams");
+
+        readonly Vector4[] _waveA = new Vector4[WaterWaves.MaxWaves];
+        readonly Vector4[] _waveB = new Vector4[WaterWaves.MaxWaves];
 
         const int ChunkQuads = 64;
 
@@ -62,6 +69,15 @@ namespace PromptWaffle.DynamicWater.URP
             _block.SetTexture(StateId, simulation.State);
             _block.SetVector(ZoneId, new Vector4(desc.Origin.x, desc.Origin.y, desc.Width * desc.CellSize, desc.Height * desc.CellSize));
             _block.SetVector(TexelId, new Vector4(1f / desc.Width, 1f / desc.Height, desc.CellSize, 0f));
+            var waves = _zone.Waves;
+            var settings = _zone.WaveSettings;
+            WaterWaves.Pack(waves, _waveA, _waveB);
+            _block.SetVectorArray(WaveAId, _waveA);
+            _block.SetVectorArray(WaveBId, _waveB);
+            _block.SetInt(WaveCountId, settings != null ? waves.Count : 0);
+            _block.SetVector(WaveParamsId, settings != null
+                ? new Vector4(Mathf.Max(1f, settings.GustSize), settings.GustCalm, Mathf.Max(0.01f, settings.DampDepth), settings.Whitecaps)
+                : new Vector4(1f, 1f, 1f, 2f));
             foreach (var chunk in _chunks)
                 chunk.SetPropertyBlock(_block);
         }

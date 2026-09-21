@@ -5,9 +5,8 @@ this records why.
 
 ---
 
-**NEXT:** PromptWaffle Dynamic Water milestone 1 is done (simulation core, URP surface, TinyDiggers
-bridge); waiting on Ronan's look. Open:
-- the dynamic surface has no swell yet (the old static sea's Gerstner waves are not ported);
+**NEXT:** PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
+swell (Gerstner waves on the simulated water); waiting on Ronan's look. Open:
 - the game logic still reads `TerrainGrid.IsWater`, not the simulation;
 - the spillways are not drains yet;
 - a package sample scene.
@@ -2096,3 +2095,26 @@ Status: package layout and API proposed; waiting for approval before code.
 - **Also found:** a trench cut between tall banks fills with slumped loose dirt before the sea
   arrives, which is the game's own slump rule working. The capture now picks low ground.
 
+
+## PromptWaffle Dynamic Water: swell (2026-09-21)
+The old static sea's Gerstner waves are now in the package, drawn on top of the simulated water.
+- **`WaterWaveSettings`** (ScriptableObject): seed, wave count (up to 8), height range, wavelength
+  range, wind direction and spread, steepness, speed scale, gust patches, damping depth and the
+  whitecap threshold. TinyDiggers uses `Presentation/Settings/DynamicWaterWaves.asset`, copied from
+  the old `Water.asset` (seed 7, 6 waves, 0.05–0.45 m, 7–45 m), so the sea keeps its character.
+- **`WaterWaves`** turns the settings into a wave set and evaluates it on the CPU exactly as the
+  shader does, so `WaterZone.TrySample` returns the height the player sees. Rules it keeps (and
+  `SwellTests` refuses to break):
+  - the set always holds one big wave and one small one, and the rest lean small;
+  - no crest stands more than a fourteenth of its wavelength above still water;
+  - the per-wave sharpness sums to at most 1 across the set, so a Gerstner crest never folds.
+- **The swell is visual.** It moves no water in the simulation. It dies away under `DampDepth`
+  (4 m) of water, so the shallows lie flat and no wave climbs a beach, and it is scaled by
+  rough/calm wind patches.
+- **Glare.** The first render facing the sun showed broad, blown-out white blotches. Those were
+  not foam (sim velocity was 0 there). They were the sun's highlight on a long, smooth swell.
+  - The fix adds wind ripples: two octaves of small noise slope on the normal, faded out in
+    water under 0.5 m deep.
+  - The highlight is now a tight lobe (`900 × smoothness`) weighted by Fresnel, so it breaks into
+    a glitter path.
+  - New material knobs: `_WindRipples`, `_WindRippleSize` and `_SunGlint`.
