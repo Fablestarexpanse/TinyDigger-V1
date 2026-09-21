@@ -10,6 +10,8 @@
 // - On the chute: fast water, torn white by the steps, with streaks running with the flow.
 // - Off the lip: the curtain speeds up as it falls, wobbles, whitens, and tears into strands and
 //   spray the further it drops, until it is gone.
+// - Flow: uv1.x is the spillway's index into _DamSpillFlow (0 dry, 1 full, set by DamView). A
+//   low flow narrows the sheet to a rope down its middle and tears it sooner; none hides it.
 Shader "TinyDiggers/Spillwater"
 {
     Properties
@@ -71,6 +73,8 @@ Shader "TinyDiggers/Spillwater"
 
             // Set by DamView: the middle of the disc, in world space.
             float4 _DamCentre;
+            // Set by DamView: how full each spillway runs, 0..1.
+            float _DamSpillFlow[32];
 
             struct Attributes
             {
@@ -78,6 +82,7 @@ Shader "TinyDiggers/Spillwater"
                 float3 normalOS : NORMAL;
                 float4 colour : COLOR;
                 float4 wall : TEXCOORD0;
+                float2 spillway : TEXCOORD1;
             };
 
             struct Varyings
@@ -88,6 +93,7 @@ Shader "TinyDiggers/Spillwater"
                 float4 wall : TEXCOORD2;
                 float4 colour : TEXCOORD3;
                 half fogFactor : TEXCOORD4;
+                nointerpolation float flow : TEXCOORD5;
             };
 
             float Hash21(float2 p)
@@ -126,6 +132,10 @@ Shader "TinyDiggers/Spillwater"
                 output.wall = input.wall;
                 output.colour = input.colour;
                 output.fogFactor = ComputeFogFactor(output.positionCS.z);
+                output.flow = _DamSpillFlow[clamp((int)round(input.spillway.x), 0, 31)];
+                // A dry spillway: collapse the sheet to a point so it is never rasterised.
+                if (output.flow <= 0.001)
+                    output.positionCS = float4(0.0, 0.0, 0.0, 1.0);
                 return output;
             }
 
@@ -159,10 +169,12 @@ Shader "TinyDiggers/Spillwater"
                 // Edges: the sheet thins toward its sides, raggedly.
                 float edge = input.colour.r;
                 float ragged = ValueNoise(float2(flow * 0.3, along * 0.2)) * 0.25;
-                half alpha = smoothstep(0.0, 0.3 + ragged, edge);
+                // Less flow, narrower sheet: only the middle, furthest from the edges, stays.
+                float narrow = 1.0 - input.flow;
+                half alpha = smoothstep(narrow, narrow + 0.3 + ragged, edge) * saturate(input.flow * 4.0);
 
                 // Tearing: past the lip the curtain breaks into strands, then spray, then nothing.
-                float tear = saturate(fall / 30.0) * _Break;
+                float tear = saturate(fall / 30.0) * _Break * lerp(2.5, 1.0, input.flow);
                 float strands = ValueNoise(float2(along * 1.3, flow * 0.25 + 11.0)) * 0.7
                               + ValueNoise(float2(along * 5.0, flow * 1.1)) * 0.3;
                 alpha *= lerp(1.0, smoothstep(tear * 0.9 - 0.1, tear * 0.9 + 0.12, strands), curtain);

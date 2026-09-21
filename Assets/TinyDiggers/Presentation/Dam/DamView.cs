@@ -25,6 +25,12 @@ namespace TinyDiggers.Presentation
         [SerializeField] int _seed = 7;
 
         static readonly int DamCentreId = Shader.PropertyToID("_DamCentre");
+        static readonly int SpillFlowId = Shader.PropertyToID("_DamSpillFlow");
+
+        /// <summary>Spillways the water shader can tell apart; must match _DamSpillFlow in Spillwater.shader.</summary>
+        public const int MaxSpillways = 32;
+
+        readonly float[] _spillFlow = new float[MaxSpillways];
 
         readonly List<GameObject> _built = new List<GameObject>();
 
@@ -58,6 +64,7 @@ namespace TinyDiggers.Presentation
             var circumference = 2f * Mathf.PI * InnerRadius;
 
             var tones = new System.Random(_seed);
+            var spillway = 0;
             foreach (var slot in slots)
             {
                 var angle = slot.Centre / InnerRadius;
@@ -66,7 +73,7 @@ namespace TinyDiggers.Presentation
                 var tone = (float)tones.NextDouble();
                 sector.Add(Piece(slot.Kind), angle, InnerRadius, slot.Stretch, tone);
                 if (slot.Kind == DamPieceKind.Spillway)
-                    sector.Add(_kit.SpillwayWater, angle, InnerRadius, slot.Stretch, tone);
+                    sector.Add(_kit.SpillwayWater, angle, InnerRadius, slot.Stretch, tone, Mathf.Min(spillway++, MaxSpillways - 1));
                 if (slot.Kind == DamPieceKind.Tower)
                     sector.Add(_kit.Tower, angle, InnerRadius, slot.Stretch, (float)tones.NextDouble());
             }
@@ -74,6 +81,10 @@ namespace TinyDiggers.Presentation
             var centre = _terrain.DiscCentre;
             var origin = _terrain.transform.TransformPoint(new Vector3(centre.x, 0f, centre.y));
             Shader.SetGlobalVector(DamCentreId, origin);
+            // Every spillway pours at full flow until something reports the real flow.
+            for (var i = 0; i < _spillFlow.Length; i++)
+                _spillFlow[i] = 1f;
+            Shader.SetGlobalFloatArray(SpillFlowId, _spillFlow);
             for (var i = 0; i < sectors.Length; i++)
             {
                 var solid = sectors[i].Solid(_kit, $"Dam Sector {i}");
@@ -91,6 +102,17 @@ namespace TinyDiggers.Presentation
             Debug.Log($"DamView: {slots.Count} pieces round {circumference:0} m at radius {InnerRadius:0} m " +
                 $"({Count(slots, DamPieceKind.Terminal)} terminals, {Count(slots, DamPieceKind.Spillway)} spillways, " +
                 $"{Count(slots, DamPieceKind.Pad)} pads, {Count(slots, DamPieceKind.Tower)} towers), {_built.Count} meshes.");
+        }
+
+        /// <summary>
+        /// How full each spillway's falling water is drawn, 0 (dry) to 1 (full sheet), in the
+        /// order the spillways appear in <see cref="Slots"/>. Spillways past the end keep theirs.
+        /// </summary>
+        public void SetSpillwayFlow(IReadOnlyList<float> fullness)
+        {
+            for (var i = 0; i < fullness.Count && i < MaxSpillways; i++)
+                _spillFlow[i] = Mathf.Clamp01(fullness[i]);
+            Shader.SetGlobalFloatArray(SpillFlowId, _spillFlow);
         }
 
         /// <summary>A disc facing down at <paramref name="depth"/>, closing the world from below.</summary>
@@ -170,6 +192,7 @@ namespace TinyDiggers.Presentation
             readonly List<Color> _colours = new List<Color>();
             readonly List<Vector4> _wall = new List<Vector4>();
             readonly List<Vector4> _waterWall = new List<Vector4>();
+            readonly List<Vector2> _waterSpillway = new List<Vector2>();
             readonly List<int>[] _triangles = new List<int>[DamKit.SurfaceCount];
             readonly List<Vector3> _waterVertices = new List<Vector3>();
             readonly List<Color> _waterColours = new List<Color>();
@@ -184,9 +207,10 @@ namespace TinyDiggers.Presentation
             /// <summary>
             /// Bends a piece into the sector. uv0 carries where each vertex sits on the wall, for
             /// the concrete shader's formwork: x metres along the ring (measured at the inner face),
-            /// y height, z metres out from the inner face, w the piece's tone.
+            /// y height, z metres out from the inner face, w the piece's tone. Spillway water also
+            /// carries its spillway's index in uv1.x, so each sheet follows its own flow.
             /// </summary>
-            public void Add(GameObject piece, float angle, float radius, float stretch, float tone)
+            public void Add(GameObject piece, float angle, float radius, float stretch, float tone, int spillway = 0)
             {
                 if (piece == null)
                     return;
@@ -223,6 +247,8 @@ namespace TinyDiggers.Presentation
                             vertexColours.Add(index < colours.Length ? colours[index] : Color.white);
                             var kit = source[index];
                             wall.Add(new Vector4(angle * radius - kit.x * stretch, kit.y, -kit.z, tone));
+                            if (water)
+                                _waterSpillway.Add(new Vector2(spillway, 0f));
                         }
 
                         triangles.Add(mapped);
@@ -264,6 +290,7 @@ namespace TinyDiggers.Presentation
                 mesh.SetVertices(_waterVertices);
                 mesh.SetColors(_waterColours);
                 mesh.SetUVs(0, _waterWall);
+                mesh.SetUVs(1, _waterSpillway);
                 mesh.SetTriangles(_waterTriangles, 0);
                 mesh.RecalculateNormals();
                 mesh.RecalculateBounds();

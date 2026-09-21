@@ -8,7 +8,6 @@ this records why.
 **NEXT:** PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
 swell and spillway overflows (a safety valve at sea level); waiting on Ronan's look. Open:
 - the game logic still reads `TerrainGrid.IsWater`, not the simulation;
-- the spillway water visuals do not yet follow whether the outlet runs;
 - a package sample scene.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
@@ -2145,3 +2144,25 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   stretched into a curtain hanging under the disc, and half of each still counted as wet. A wall
   vertex now takes the highest open neighbour's surface, one vertex step away (`_WaterTexel.w` =
   cells per vertex), and folds out of sight like dry ground.
+
+## Spillway water follows the real flow (2026-09-21)
+- **How:** each spillway's falling sheet carries its spillway index in uv1.x. `Spillwater.shader`
+  reads the global `_DamSpillFlow[32]` (0 = dry, 1 = full sheet). `DamView.SetSpillwayFlow` sets
+  it; `DamView.Build` fills it with 1s, so without the dynamic water the spillways pour as they
+  did before.
+- **`DamSpillways.Follow`:**
+  - It samples the raw simulated surface (no swell) at each outlet each frame and takes the head
+    over the crest.
+  - Fullness is `(head / 0.4 m)^0.75`, the square root of the weir flow, so a trickle still
+    shows. Under 5 mm of head counts as dry, which ignores simulation noise.
+  - It eases toward the target over about 1 s.
+- **Look:**
+  - dry: the sheet collapses to a point in the vertex shader and is never drawn;
+  - low flow: only the middle of the sheet stays (the kit's edge-distance colour is thresholded
+    by 1 − fullness), so it reads as a rope, and it tears sooner in the fall;
+  - full: the old full sheet.
+- **Measured in play:**
+  - calm sea: all 8 at 0.00, chutes dry;
+  - after a 0.5 m surge: all 8 at 0.79 (the head at the outlet is drawn down below 0.5 m);
+  - after a 6 cm rise: thin ropes.
+  - Tests: `SpillwaySheetTests` (3).

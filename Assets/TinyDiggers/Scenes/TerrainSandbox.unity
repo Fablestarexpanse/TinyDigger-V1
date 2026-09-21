@@ -982,8 +982,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: TinyDiggers.Presentation::TinyDiggers.Presentation.DamSpillways
   _dam: {fileID: 446856476}
   _terrain: {fileID: 551060599}
+  _zone: {fileID: 1181658047}
   _reach: 8
   _crestAboveSea: 0
+  _fullHead: 0.4
+  _response: 1
 --- !u!1 &1212779770
 GameObject:
   m_ObjectHideFlags: 0
