@@ -2624,3 +2624,54 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
     is not the one exported. The lens emission came out as a ring until this was fixed.
   - The contact sheet uses Workbench with MATERIAL colour, since there are no textures.
 - **Tests:** 389/389 pass.
+
+## RTS controls and the worker robot (2026-09-21) — agreed design
+- **Ronan:** "these guys are not our diggers and haulers, they are the first unit you would get,
+  they can dig and haul but very very small amounts like a human with a wheelbarrow". They need
+  RTS controls: drag over them to select, and click to order them to move.
+- **Rulings** (AskUserQuestion; the recommended option each time):
+  - After a move order, a robot **holds** where it was sent and ignores designated work.
+    Right-clicking a dig, fill or dump area orders it back to work there.
+  - It carries **0.1 m³** (one barrow) and moves at **1.5 m/s**.
+  - The game starts with **4** of them.
+- **Design:**
+  - A new `UnitRole.Worker`: it digs and carries its own load, as a digger does when the crew
+    has no haulers. Digger and Hauler stay, for the machines later.
+  - Select tool: left-drag for a box (shift adds), left-click selects one, right-click on ground
+    sends the selection there, spread over nearby free cells, and Escape clears.
+  - Markers: a ring under each selected robot, and a short-lived ring at the ordered target.
+  - Plain tested logic: the move order and hold, the spreading, and the box maths. CrewView and
+    PlayerTools stay thin.
+- **Barrow size changed to 0.19 m³** (Ronan, AskUserQuestion). The crew digs a whole step of one
+  cell per scoop, 0.5 × 0.5 × 0.5 m = 0.125 m³ of ground, which swells by ×1.1 to ×1.5 once dug
+  loose. A 0.1 m³ barrow could never take a scoop. At 0.19 m³ every trip is one scoop of
+  anything, and nothing in how digging works changes. The other option, thinner 0.1 m scoops,
+  would leave ground between the 0.5 m levels mid-dig, which the benching, slope and pathing
+  rules assume never happens.
+- **Built:**
+  - `UnitRole.Worker` and `CrewUnit.Digs`. A worker never waits for or hands to a hauler.
+  - `CrewUnit.OrderMoveTo(x, z, workOnArrival)`, `Holding`, `OrderTarget` and `ReleaseHold`, with
+    a new `CrewJobKind.Go`. A holding unit takes no work. It picks an unreached order back up
+    after standing aside, escaping water or a closed path, and refuses a cell off the map or
+    one it has no way to.
+  - `CrewFormation.Targets` and `.Assign`: the nearest distinct cells, then the nearest unit to
+    the goal picks first.
+  - `SelectionBox`, the drag threshold, box and GUI maths.
+  - `CrewView`:
+    - 4 workers (0.19 m³, 1.5 m/s) and no diggers or haulers in TerrainSandbox;
+    - a multi-selection with `SelectInScreenRect`, `TrySelectAt(ray, add)` and
+      `OrderSelectedTo`. An order onto a dig, fill or dump designation works on arrival;
+      anywhere else holds.
+    - rings under the selected units and a shrinking ring where they were sent, in
+      `crew_select.mat`, URP Unlit;
+    - paths drawn only for selected units, 0.06 m wide.
+  - `PlayerTools`, Select tool: a left-drag box drawn with IMGUI, click to select, shift to add
+    or drop, and right-click on ground to send.
+- **Tipping leaves a part-step in the barrow.** Tipping goes a whole step of one cell (0.125 m³),
+  so a load of 0.156 m³ tips 0.125 m³ and carries 0.031 m³ on to the next trip, as any digger
+  does. The worker test first expected an empty barrow and failed on that.
+- **Checked in play:** selected all 4 through `SelectInScreenRect` with the game camera, sent them
+  about 5 m away and back, and got 4 of 4 each time. Each went to its own cell next to the one
+  clicked and held there (`Screenshots/Crew/rts_move_1.png`). The live mouse (drag and
+  right-click) is wired, but only the code under it was driven in this check.
+- **Tests:** 401/401.

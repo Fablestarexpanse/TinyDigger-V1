@@ -133,7 +133,7 @@ namespace TinyDiggers.Interaction
                 return;
             CancelDrawing();
             Mode = mode;
-            LastAction = mode == ToolMode.Select ? "Select: click a unit" : mode + " tool";
+            LastAction = mode == ToolMode.Select ? "Select: click or drag over units, right-click to send them" : mode + " tool";
         }
 
         public void UnlockHeight()
@@ -251,6 +251,91 @@ namespace TinyDiggers.Interaction
             HoverZ = z;
         }
 
+        /// <summary>Whether a selection box is being dragged, and where (Input System pixels).</summary>
+        public bool BoxActive { get; private set; }
+
+        public Rect Box => SelectionBox.FromCorners(_boxStart, _boxNow);
+
+        bool _boxPressed;
+        Vector2 _boxStart;
+        Vector2 _boxNow;
+
+        /// <summary>
+        /// The RTS controls: left-click selects a unit (shift adds or drops it; empty ground
+        /// clears the selection), left-drag selects every unit in the box (shift adds), and
+        /// right-click on the ground sends the selection there.
+        /// </summary>
+        void HandleSelect(Mouse mouse, bool leftDown, bool leftHeld, bool leftUp, bool rightDown)
+        {
+            if (_crew == null)
+                return;
+            var at = mouse.position.ReadValue();
+            var keyboard = Keyboard.current;
+            var add = keyboard != null && keyboard.shiftKey.isPressed;
+
+            if (leftDown)
+            {
+                _boxPressed = true;
+                _boxStart = _boxNow = at;
+            }
+
+            if (_boxPressed && leftHeld)
+            {
+                _boxNow = at;
+                BoxActive = SelectionBox.IsDrag(_boxStart, _boxNow);
+            }
+
+            if (_boxPressed && leftUp)
+            {
+                _boxNow = at;
+                if (SelectionBox.IsDrag(_boxStart, _boxNow))
+                {
+                    var count = _crew.SelectInScreenRect(Box, _camera, add);
+                    LastAction = $"Selected {count} unit{(count == 1 ? "" : "s")}";
+                }
+                else if (!_crew.TrySelectAt(_camera.ScreenPointToRay(at), add) && !add)
+                {
+                    _crew.Deselect();
+                }
+
+                _boxPressed = false;
+                BoxActive = false;
+            }
+
+            if (rightDown && HasHover && _crew.SelectedCount > 0)
+            {
+                var sent = _crew.OrderSelectedTo(HoverX, HoverZ);
+                LastAction = sent > 0
+                    ? $"Sent {sent} unit{(sent == 1 ? "" : "s")} to ({HoverX}, {HoverZ})"
+                    : $"No way to ({HoverX}, {HoverZ})";
+            }
+        }
+
+        static Texture2D _boxTexture;
+
+        void OnGUI()
+        {
+            if (!BoxActive || Event.current.type != EventType.Repaint)
+                return;
+            if (_boxTexture == null)
+            {
+                _boxTexture = new Texture2D(1, 1) { hideFlags = HideFlags.DontSave };
+                _boxTexture.SetPixel(0, 0, Color.white);
+                _boxTexture.Apply();
+            }
+
+            var rect = SelectionBox.ToGui(Box, Screen.height);
+            var old = GUI.color;
+            GUI.color = new Color(0.45f, 1f, 0.9f, 0.15f);
+            GUI.DrawTexture(rect, _boxTexture);
+            GUI.color = new Color(0.45f, 1f, 0.9f, 0.9f);
+            GUI.DrawTexture(new Rect(rect.xMin, rect.yMin, rect.width, 1f), _boxTexture);
+            GUI.DrawTexture(new Rect(rect.xMin, rect.yMax - 1f, rect.width, 1f), _boxTexture);
+            GUI.DrawTexture(new Rect(rect.xMin, rect.yMin, 1f, rect.height), _boxTexture);
+            GUI.DrawTexture(new Rect(rect.xMax - 1f, rect.yMin, 1f, rect.height), _boxTexture);
+            GUI.color = old;
+        }
+
         void HandleMouse(Mouse mouse, TerrainGrid grid)
         {
             var leftDown = mouse.leftButton.wasPressedThisFrame;
@@ -260,8 +345,7 @@ namespace TinyDiggers.Interaction
 
             if (Mode == ToolMode.Select)
             {
-                if (leftDown && _crew != null && !_crew.TrySelectAt(_camera.ScreenPointToRay(mouse.position.ReadValue())))
-                    _crew.Deselect();
+                HandleSelect(mouse, leftDown, leftHeld, leftUp, rightDown);
                 return;
             }
 

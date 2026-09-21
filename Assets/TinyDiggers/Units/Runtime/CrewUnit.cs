@@ -13,6 +13,12 @@ namespace TinyDiggers.Units
 
         /// <summary>Carries spoil: it never touches the ground itself, only takes loads and tips them.</summary>
         Hauler,
+
+        /// <summary>
+        /// The first unit: a robot with a barrow. It digs and carries its own small load to tip,
+        /// and never waits for a hauler.
+        /// </summary>
+        Worker,
     }
 
     public enum CrewUnitState
@@ -61,6 +67,9 @@ namespace TinyDiggers.Units
 
         /// <summary>Climbing out of water that has come up round it, having given its job up.</summary>
         Escape,
+
+        /// <summary>Going where the player ordered it.</summary>
+        Go,
     }
 
     /// <summary>
@@ -182,6 +191,9 @@ namespace TinyDiggers.Units
         float _parkTimer;
         int _parkLoadVersion;
         bool _loadFull;
+        bool _ordered;
+        bool _workOnArrival;
+        Vector2Int _orderTarget;
         bool _tipHighRimsOnly;
         bool _disposed;
 
@@ -297,7 +309,19 @@ namespace TinyDiggers.Units
             && State != CrewUnitState.NeedsSomewhereToTip;
 
         /// <summary>The hauler serving this digger, or the digger this hauler serves; -1 for neither.</summary>
-        public int Partner => Role == UnitRole.Digger ? _dispatcher.HaulerFor(Id) : _dispatcher.DiggerFor(Id);
+        public int Partner => Role == UnitRole.Hauler ? _dispatcher.DiggerFor(Id) : _dispatcher.HaulerFor(Id);
+
+        /// <summary>Whether it digs: diggers and workers do, haulers never touch the ground.</summary>
+        public bool Digs => Role != UnitRole.Hauler;
+
+        /// <summary>
+        /// Holding where the player sent it (or on its way there): it takes no work until
+        /// <see cref="ReleaseHold"/>, or an order to go and work.
+        /// </summary>
+        public bool Holding { get; private set; }
+
+        /// <summary>Where the player last sent it, while it has not got there yet.</summary>
+        public Vector2Int? OrderTarget => _ordered ? _orderTarget : (Vector2Int?)null;
 
         // Crew-wide settings and state live on the dispatcher; these reach them for convenience.
 
@@ -445,6 +469,81 @@ namespace TinyDiggers.Units
                 _dispatcher.Dispose();
         }
 
+        // --- orders -------------------------------------------------------------------------------
+
+        /// <summary>
+        /// The player sends it to a cell. It drops whatever it was doing (keeping any load), goes
+        /// there and holds, taking no work, until <see cref="ReleaseHold"/>. With
+        /// <paramref name="workOnArrival"/> it goes back to work once there instead, which is how
+        /// an order onto designated ground reads. False, and nothing changes, when the cell is off
+        /// the map or it has no way there.
+        /// </summary>
+        public bool OrderMoveTo(int x, int z, bool workOnArrival = false)
+        {
+            if (!_grid.InBounds(x, z))
+                return false;
+            var me = Cell;
+            if (me.x != x || me.y != z)
+            {
+                var path = new List<Vector2Int>();
+                if (!_pathfinder.TryFindPath(me.x, me.y, x, z, path))
+                    return false;
+            }
+
+            _ordered = true;
+            _orderTarget = new Vector2Int(x, z);
+            _workOnArrival = workOnArrival;
+            Holding = true;
+            if (!TryPlanOrder())
+                Hold();
+            return true;
+        }
+
+        /// <summary>Lets it go back to picking its own work.</summary>
+        public void ReleaseHold()
+        {
+            Holding = false;
+            _ordered = false;
+            _workOnArrival = false;
+            _rethink = true;
+        }
+
+        bool TryPlanOrder()
+        {
+            _dispatcher.Release(Id);
+            ClearPath();
+            var me = Cell;
+            if (me == _orderTarget)
+            {
+                Job = CrewJobKind.Go;
+                JobTarget = JobStand = _orderTarget;
+                Arrive();
+                return true;
+            }
+
+            if (!_pathfinder.TryFindPath(me.x, me.y, _orderTarget.x, _orderTarget.y, _path))
+                return false;
+            Job = CrewJobKind.Go;
+            JobTarget = _orderTarget;
+            JobStand = _orderTarget;
+            _pathIndex = 0;
+            _rethink = false;
+            _repath = false;
+            MarkPath();
+            SetState(CrewUnitState.Moving, "Ordered to " + DescribeJob());
+            return true;
+        }
+
+        void Hold()
+        {
+            Job = CrewJobKind.None;
+            _dispatcher.Release(Id);
+            var me = Cell;
+            SetState(CrewUnitState.Idle, _ordered && me != _orderTarget
+                ? $"Holding at ({me.x}, {me.y}): no way to ({_orderTarget.x}, {_orderTarget.y})"
+                : $"Holding at ({me.x}, {me.y})");
+        }
+
         // --- choosing work ------------------------------------------------------------------------
 
         void ChooseJob()
@@ -453,6 +552,16 @@ namespace TinyDiggers.Units
             _rethinkTimer = IdleRethinkInterval;
             ClearPath();
             var start = Cell;
+            if (Holding)
+            {
+                // An order it has not reached yet is picked up again (after standing aside, say,
+                // or a path that closed); otherwise it stays put.
+                if (_ordered && start != _orderTarget && TryPlanOrder())
+                    return;
+                Hold();
+                return;
+            }
+
             UpdateUnreachable();
             if (Role == UnitRole.Hauler)
                 ChooseHaulerJob(start);
@@ -474,30 +583,35 @@ namespace TinyDiggers.Units
             var loaded = Inventory.Total + Epsilon >= step;
             if (loaded)
             {
-                // A hauler already beside it takes the load without either of them moving.
-                if (TryTransferToAdjacentHauler())
-                    return;
-
-                // Waiting for a hauler beats driving the spoil anywhere itself, which is the point
-                // of having haulers; a crew with no haulers falls through and tips it itself.
-                var mine = _dispatcher.UnitOf(_dispatcher.HaulerFor(Id));
-                if (mine != null && mine.CanTakeALoad)
+                // A worker carries its own barrow to tip; only a digger deals with haulers.
+                if (Role == UnitRole.Digger)
                 {
-                    // Benching takes diggers onto the designated ground, where a hauler has
-                    // nowhere clear to park beside them, so the digger walks the last few cells
-                    // out to it.
-                    if (mine.State == CrewUnitState.Parked && TryPlanTransferTo(mine, start))
+                    // A hauler already beside it takes the load without either of them moving.
+                    if (TryTransferToAdjacentHauler())
                         return;
-                    WaitForHauler($"hauler {mine.Id}");
-                    return;
-                }
 
-                // With haulers in the crew, a digger waits for one instead of carrying spoil
-                // itself; only a crew with no haulers left does its own hauling.
-                if (_dispatcher.RequestHauler(this))
-                {
-                    WaitForHauler("a hauler");
-                    return;
+                    // Waiting for a hauler beats driving the spoil anywhere itself, which is the
+                    // point of having haulers; a crew with no haulers falls through and tips it
+                    // itself.
+                    var mine = _dispatcher.UnitOf(_dispatcher.HaulerFor(Id));
+                    if (mine != null && mine.CanTakeALoad)
+                    {
+                        // Benching takes diggers onto the designated ground, where a hauler has
+                        // nowhere clear to park beside them, so the digger walks the last few
+                        // cells out to it.
+                        if (mine.State == CrewUnitState.Parked && TryPlanTransferTo(mine, start))
+                            return;
+                        WaitForHauler($"hauler {mine.Id}");
+                        return;
+                    }
+
+                    // With haulers in the crew, a digger waits for one instead of carrying spoil
+                    // itself; only a crew with no haulers left does its own hauling.
+                    if (_dispatcher.RequestHauler(this))
+                    {
+                        WaitForHauler("a hauler");
+                        return;
+                    }
                 }
 
                 if (TryPlanTip(start))
@@ -770,7 +884,7 @@ namespace TinyDiggers.Units
             switch (kind)
             {
                 case CrewJobKind.Dig:
-                    return Role == UnitRole.Digger
+                    return Digs
                         && WithinDigReach(standHeight, x, z)
                         && !_dispatcher.IsClaimedByOther(x, z, Id)
                         && CanDigStep(standHeight, x, z);
@@ -918,7 +1032,7 @@ namespace TinyDiggers.Units
                 var kind = _designations.GetKind(x, z);
                 if (kind == DesignationKind.Dig)
                 {
-                    if (Role != UnitRole.Digger)
+                    if (!Digs)
                         continue;
                     if (_grid.GetSurfaceHeight(x, z) - Step < _dispatcher.DigFloor(x, z) - Epsilon)
                         continue;
@@ -966,7 +1080,7 @@ namespace TinyDiggers.Units
                         continue;
                     var standHeight = _grid.GetSurfaceHeight(standX, standZ);
                     if (kind == DesignationKind.Dig
-                        ? Role == UnitRole.Digger && WithinDigReach(standHeight, x, z) && CanDigStep(standHeight, x, z)
+                        ? Digs && WithinDigReach(standHeight, x, z) && CanDigStep(standHeight, x, z)
                         : CanTipOnto(standX, standZ, standHeight, x, z, FillCap(x, z)))
                         return true;
                 }
@@ -1178,6 +1292,19 @@ namespace TinyDiggers.Units
                 case CrewJobKind.Escape:
                     _rethink = true;
                     SetState(CrewUnitState.Idle, "Out of the water; looking for work");
+                    break;
+                case CrewJobKind.Go:
+                    _ordered = false;
+                    if (_workOnArrival)
+                    {
+                        ReleaseHold();
+                        SetState(CrewUnitState.Idle, "Arrived; looking for work");
+                    }
+                    else
+                    {
+                        Hold();
+                    }
+
                     break;
                 case CrewJobKind.Dig:
                     SetState(CrewUnitState.Digging, "Digging " + DescribeJob());
@@ -1449,6 +1576,7 @@ namespace TinyDiggers.Units
                     return $"digger at ({JobTarget.x}, {JobTarget.y})";
                 case CrewJobKind.Yield:
                 case CrewJobKind.Escape:
+                case CrewJobKind.Go:
                     return $"({JobTarget.x}, {JobTarget.y})";
                 default:
                     return "nothing";

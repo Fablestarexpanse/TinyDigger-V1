@@ -162,7 +162,10 @@ namespace TinyDiggers.Interaction
                     _unitText.Append(shown.Job).Append(" (").Append(shown.JobTarget.x).Append(", ").Append(shown.JobTarget.y).Append(')')
                         .Append(" from (").Append(shown.JobStand.x).Append(", ").Append(shown.JobStand.y).Append(')');
                 _unitText.AppendLine(shown.OnAutoRamp ? "   ON AUTO RAMP" : "");
-                if (shown.Role == UnitRole.Digger)
+                if (shown.Role == UnitRole.Worker)
+                    _unitText.Append("Worker: carries its own barrow")
+                        .AppendLine(shown.Holding ? "   HOLDING" + (shown.OrderTarget is Vector2Int to ? $" (ordered to ({to.x}, {to.y}))" : "") : "");
+                else if (shown.Role == UnitRole.Digger)
                     _unitText.Append("Hauler: ").Append(shown.Partner >= 0 ? shown.Partner.ToString() : "none")
                         .Append("   waited for one ").Append(shown.WaitedForHauler.ToString("0.0")).Append(" s over ")
                         .Append(shown.HaulerWaits).AppendLine(" waits");

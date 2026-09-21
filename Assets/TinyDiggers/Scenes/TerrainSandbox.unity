@@ -167,8 +167,11 @@ MonoBehaviour:
   _designations: {fileID: 1108996318}
   _pathMaterial: {fileID: 2100000, guid: 189053e189be60c4eb80f5df95575af8, type: 2}
   _spawnOffset: {x: 0, y: 0}
-  _diggerCount: 2
-  _haulerCount: 2
+  _workerCount: 4
+  _workerCapacity: 0.19
+  _workerSpeed: 1.5
+  _diggerCount: 0
+  _haulerCount: 0
   _speed: 3
   _capacity: 5
   _haulerCapacity: 20
@@ -185,6 +188,8 @@ MonoBehaviour:
   _selectedColor: {r: 1, g: 1, b: 1, a: 1}
   _bodyPrefab: {fileID: 6320944819107742594, guid: 2175938bc0fb2224caecfff4bfa817de, type: 3}
   _selectedTint: {r: 1, g: 0.95, b: 0.55, a: 1}
+  _markerMaterial: {fileID: 2100000, guid: 191a81549ec2a044dbfc6e04ee5255dd, type: 2}
+  _orderMarkerSeconds: 0.8
   _clipBlend: 0.15
   bodyScale: 1
 --- !u!1 &283174201
