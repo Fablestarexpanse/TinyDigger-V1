@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 31aea76b10b307e4685bf7e6571423ad, type: 3}
+  m_Name: Wind
+  m_EditorClassIdentifier: TinyDiggers.Presentation::TinyDiggers.Presentation.WindSettings
+  Degrees: 35
+  Strength: 0.35
+  Speed: 1.6
+  GustSize: 30
+  GustStrength: 0.7
+  GustSpeed: 6

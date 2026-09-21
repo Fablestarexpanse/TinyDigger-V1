@@ -28,6 +28,9 @@ namespace TinyDiggers.EditorTools
         /// <summary>Name for this run's shots; set from a RunCommand before the menu item.</summary>
         public static string Tag = "run";
 
+        /// <summary>Frames of wind to capture after the stills; 0 for none.</summary>
+        public static int WindFrames = 0;
+
         [MenuItem("TinyDiggers/Art Capture")]
         static void Run()
         {
@@ -88,6 +91,20 @@ namespace TinyDiggers.EditorTools
 
                 yield return Pose(camera, pivot, 32f, 35f, 22f);
                 Capture(camera, Tag + "_close", "close on the grove");
+
+                // A burst of frames a tenth of a second apart, from the close pose, so the wind
+                // can be checked as motion (stitched into a GIF outside Unity).
+                if (WindFrames > 0)
+                {
+                    Directory.CreateDirectory(Path.Combine(Folder, Tag + "_wind"));
+                    for (var i = 0; i < WindFrames; i++)
+                    {
+                        var until = Time.time + 0.1f;
+                        while (Time.time < until)
+                            yield return null;
+                        Capture(camera, Path.Combine(Tag + "_wind", i.ToString("00")), "wind frame", 1280, 720);
+                    }
+                }
 
                 Debug.Log($"Art capture [{Tag}]: done. Shots in {Path.GetFullPath(Folder)}");
                 Destroy(gameObject);
@@ -189,12 +206,12 @@ namespace TinyDiggers.EditorTools
                     yield return null;
             }
 
-            static void Capture(RtsCamera rig, string name, string what)
+            static void Capture(RtsCamera rig, string name, string what, int width = Width, int height = Height)
             {
                 var camera = rig.GetComponent<Camera>();
                 if (camera == null)
                     return;
-                var target = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32);
+                var target = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
                 var previous = camera.targetTexture;
                 camera.targetTexture = target;
                 camera.Render();
@@ -202,8 +219,8 @@ namespace TinyDiggers.EditorTools
 
                 var active = RenderTexture.active;
                 RenderTexture.active = target;
-                var image = new Texture2D(Width, Height, TextureFormat.RGB24, false);
-                image.ReadPixels(new Rect(0, 0, Width, Height), 0, 0);
+                var image = new Texture2D(width, height, TextureFormat.RGB24, false);
+                image.ReadPixels(new Rect(0, 0, width, height), 0, 0);
                 image.Apply();
                 RenderTexture.active = active;
 

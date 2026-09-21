@@ -252,3 +252,68 @@ def finish_tree(cards, tubes, atlas_path, out, name, bark_rgb=(0.35, 0.20, 0.13)
         apply_scale_options="FBX_SCALE_UNITS", axis_forward="-Z", axis_up="Y",
         bake_space_transform=True, path_mode="STRIP", mesh_smooth_type="OFF", colors_type="LINEAR")
     return prop, {"tris": tris(prop), "dimensions_m": [round(d, 2) for d in prop.dimensions]}
+
+
+def grass_tuft(atlas_path, out, name="grass_a", width=1.0, height=0.8, cards=3, segments=2, cells=2):
+    """
+    A grass tuft: `cards` vertical cards crossed round the pivot, each showing a different cell of
+    the grass atlas, split into `segments` rows so the wind bends it along its height.
+
+    Normals point straight up, so a tuft is lit exactly like the ground it stands on and a meadow
+    reads as ground grown tall rather than as a field of lit and shaded cards. Vertex colour R is
+    the wind weight: 0 at the root, 1 at the tip. Pivot at the base, 1 unit = 1 m.
+    """
+    import os
+    from td_pipeline import run, select_only
+
+    verts, faces, uvs, wind = [], [], [], []
+    cell = 1.0 / cells
+    for c in range(cards):
+        angle = math.pi * c / cards
+        dx, dy = math.cos(angle) * width * 0.5, math.sin(angle) * width * 0.5
+        pick = c % (cells * cells)
+        x0, y0 = (pick % cells) * cell, 1.0 - (pick // cells + 1) * cell
+        base = len(verts)
+        for row in range(segments + 1):
+            t = row / segments
+            for side in (-1, 1):
+                verts.append((dx * side, dy * side, height * t))
+                uvs.append((x0 + (side + 1) * 0.5 * cell, y0 + t * cell))
+                wind.append(t)
+        for row in range(segments):
+            a = base + row * 2
+            faces.append((a, a + 1, a + 3, a + 2))
+
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    uv = mesh.uv_layers.new(name="UVMap")
+    for loop in mesh.loops:
+        uv.data[loop.index].uv = uvs[loop.vertex_index]
+    colours = mesh.color_attributes.new("wind", "BYTE_COLOR", "POINT")
+    for i, w in enumerate(wind):
+        colours.data[i].color = (w, 0.0, 0.0, 1.0)
+    for polygon in mesh.polygons:
+        polygon.use_smooth = True
+    mesh.normals_split_custom_set_from_vertices([(0.0, 0.0, 1.0)] * len(verts))
+
+    atlas = bpy.data.images.load(atlas_path, check_existing=True)
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    bsdf = material.node_tree.nodes.get("Principled BSDF")
+    texture = material.node_tree.nodes.new("ShaderNodeTexImage")
+    texture.image = atlas
+    material.node_tree.links.new(texture.outputs["Color"], bsdf.inputs["Base Color"])
+    material.node_tree.links.new(texture.outputs["Alpha"], bsdf.inputs["Alpha"])
+    mesh.materials.append(material)
+
+    tuft = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(tuft)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    select_only(tuft)
+    run(bpy.ops.export_scene.fbx, filepath=out + ".fbx", use_selection=True,
+        apply_scale_options="FBX_SCALE_UNITS", axis_forward="-Z", axis_up="Y",
+        bake_space_transform=True, path_mode="STRIP", mesh_smooth_type="OFF", colors_type="LINEAR")
+    run(bpy.ops.export_scene.gltf, filepath=out + ".glb", export_format="GLB", use_selection=True,
+        export_yup=True, export_apply=True)
+    return tuft, {"tris": tris(tuft), "dimensions_m": [round(d, 2) for d in tuft.dimensions]}

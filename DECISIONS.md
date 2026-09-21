@@ -5,11 +5,9 @@ this records why.
 
 ---
 
-**NEXT:** tree_a v2 (leaf cards) passes the evaluation (all sections 4/5) and is pushed. It is
-waiting on Ronan's look and on approval of STYLE.md §9 (trees as cards, SPRITE core). Next asks:
-- a foliage wind shader (the weights are already in vertex colour R);
-- Phase 2 (tree_b and tree_c as variations, then rocks, shrubs, a dead tree, grass, vehicles);
-- vehicle scale.
+**NEXT:** Grass and wind are in and pushed; 296/296 tests pass. Waiting on Ronan's look at
+`Screenshots/Art/grass2_wind.gif`. Open: wind strength and density tuning, grass on steep topsoil,
+no grass LOD beyond 220 m, and the STYLE.md §9 approval. Then Phase 2 (tree variations, rocks...).
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1603,3 +1601,33 @@ the Blender MCP. `clean_export.py` is the Phase 1 record, not the current path.
 - **A Unity editor dialog appeared** when one RunCommand did a texture import, material creation,
   FBX reimport and asset deletes together ("User interactions are not supported"). Split into
   steps without `DeleteAsset`, it ran; leftovers are removed through git.
+
+## Grass and wind (2026-09-21)
+
+Ronan asked for grass next "so we can really see wind".
+
+**Asset.** `grass_a` is 3 crossed cards, 12 triangles, 1 × 0.8 m.
+- Atlas: 4 Krea2 tuft sprites (seeds 7300–7303, SPRITE core), pulled to a grass green between
+  Meadow Sun and Leaf Mid.
+- Normals point straight up, so a tuft lights like the ground under it.
+- Wind weight is vertex colour R: 0 at the root, 1 at the tip.
+
+**Shader.** `TinyDiggers/Foliage` does alpha clip, is double-sided, wraps diffuse with a little
+translucency, and takes SSAO.
+- Sway: a gusting lean down the wind with a phase per plant, plus a flutter across the wind.
+- The sway runs identically in the ForwardLit, ShadowCaster, DepthOnly and DepthNormals passes.
+- Globals `_TDWind` / `_TDGust` come from `WindSettings` (`Presentation/Settings/Wind.asset`)
+  through `WindView`.
+- tree_a's leaves now use it too (WindScale 1.4), so grass and trees move as one wind.
+
+**Placement.** `GrassField` is plain C# with 5 tests.
+- Grass grows on dry topsoil only, 1.5 tufts per cell, seeded per cell, in 32-cell chunks.
+- A chunk is rebuilt when a cell in it changes, so digging takes the grass.
+- 42,998 tufts on Continent seed 11. About 6k are drawn from the close pose (220 m draw
+  distance, frustum-culled per chunk).
+
+**Gotcha.** `Graphics.RenderMeshInstanced` called in LateUpdate never reached a camera rendered by
+hand (the capture tools' `camera.Render()`), so the first capture showed no grass at all.
+`GrassView` now draws in `RenderPipelineManager.beginCameraRendering`, per camera.
+
+**Motion check.** 24 frames 0.1 s apart. On average 8.2% of pixels change between frames.
