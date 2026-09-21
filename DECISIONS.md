@@ -5,11 +5,12 @@ this records why.
 
 ---
 
-**NEXT:** Dam rim steps 1–4 are done (kit, ring, concrete, spillway water); waiting on Ronan's
-look. Open:
-- a proper sci-fi underside for the floating disc (for now a flat concrete floor at −24 m);
-- ship models and arrivals, then the supply gameplay;
-- the Slice 11 items: crew size, stripes on slopes, the regenerate hitch.
+**NEXT:** PromptWaffle Dynamic Water milestone 1 is done (simulation core, URP surface, TinyDiggers
+bridge); waiting on Ronan's look. Open:
+- the dynamic surface has no swell yet (the old static sea's Gerstner waves are not ported);
+- the game logic still reads `TerrainGrid.IsWater`, not the simulation;
+- the spillways are not drains yet;
+- a package sample scene.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -2061,3 +2062,37 @@ Status: package layout and API proposed; waiting for approval before code.
   1. equal basins level out above the sill, so the test was changed to use a deep receiving basin;
   2. a drain on a thin sheet can't take its full rate, so it is now tested in a full pool;
   3. a force surge travels about 2.2 m/s, so the test samples nearer the force.
+
+**M1b: URP surface and the TinyDiggers bridge.**
+- **`WaterZoneRenderer`** (package, URP): a flat grid in 64 × 64-quad chunks, one vertex per 2
+  cells.
+  - Chunks are persistent child renderers. Their vertices are world positions (the shader
+    ignores the object matrix) and their world bounds are set explicitly, so the zone's transform
+    can't skew or mis-cull the water.
+  - The first version drew with `Graphics.RenderMesh` from `LateUpdate`. That reaches only the
+    cameras rendering that frame, so the capture tool's manual `camera.Render()` never saw the
+    water; the "olive sea" in those shots was the seabed.
+- **`DynamicWaterSurface.shader`:**
+  - vertices lifted to the simulated surface, and sunk under dry ground;
+  - normal from the state texture's slope, with shore neighbours standing in for dry ones;
+  - refraction through URP's opaque texture with per-channel absorption (red first). The first
+    version multiplied the seabed by the shallow colour, which turned sand olive;
+  - foam from speed and shallowness, carried along the flow with a two-phase flow map;
+  - Fresnel sky reflection and a sun highlight.
+- **TinyDiggers bridge:**
+  - `TerrainGridWaterGround` reads the column grid (void cells become walls) and gathers each
+    frame's `CellChanged` into one rectangle.
+  - `DynamicWaterBridge` sizes the zone to the grid (1024², 0.5 m), fills it to sea level,
+    rebuilds it on regenerate, and hides the old sea through the new `WaterView.Visible`. The old
+    sea's sheets are parented to the Terrain object, so hiding the Water object's renderers
+    missed them.
+  - `WaterZone` now builds its simulation lazily, once `WaterGroundProvider.IsReady`: its
+    `OnEnable` ran before `TerrainView.Awake` built the grid.
+- **Measured in play** (`TinyDiggers/Dynamic Water Capture`, a 5-cell trench 25 m from the sea to a
+  basin at −1.6 m):
+  - the basin reached 0.57 m after 2 s, 1.32 m after 5 s and 1.40 m after 12 s;
+  - 3.1 ms a frame with the 1024² zone running;
+  - 1.59 M m³ of sea.
+- **Also found:** a trench cut between tall banks fills with slumped loose dirt before the sea
+  arrives, which is the game's own slump rule working. The capture now picks low ground.
+

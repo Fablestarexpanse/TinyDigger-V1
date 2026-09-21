@@ -63,6 +63,24 @@ namespace PromptWaffle.DynamicWater
             return false;
         }
 
+        /// <summary>
+        /// Sets the zone's size, cell size and starting level from code; takes effect on the next
+        /// <see cref="Rebuild"/> (or when the simulation is first created).
+        /// </summary>
+        public void Configure(Vector2 size, float cellSize, float startLevel)
+        {
+            _size = size;
+            _cellSize = cellSize;
+            _startLevel = startLevel;
+        }
+
+        /// <summary>Throws the simulation away; a new one is built from the ground next frame.</summary>
+        public void Rebuild()
+        {
+            Simulation?.Dispose();
+            Simulation = null;
+        }
+
         void OnEnable()
         {
             Active.Add(this);
@@ -72,9 +90,15 @@ namespace PromptWaffle.DynamicWater
             {
                 Debug.LogError($"{name}: a WaterZone needs a WaterGroundProvider.", this);
                 enabled = false;
-                return;
             }
+        }
 
+        /// <summary>
+        /// Built lazily, once the ground is ready: OnEnable can run before the objects that build
+        /// the ground have woken up.
+        /// </summary>
+        void CreateSimulation()
+        {
             var bounds = Bounds;
             var desc = _tuning;
             desc.CellSize = _cellSize;
@@ -99,7 +123,12 @@ namespace PromptWaffle.DynamicWater
         void Update()
         {
             if (Simulation == null)
-                return;
+            {
+                if (_ground == null || !_ground.IsReady)
+                    return;
+                CreateSimulation();
+            }
+
             GatherEffectors();
             Simulation.Step(Time.deltaTime);
             Simulation.Query.Update();

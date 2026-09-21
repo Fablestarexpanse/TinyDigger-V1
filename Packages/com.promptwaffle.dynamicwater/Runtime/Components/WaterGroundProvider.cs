@@ -12,6 +12,9 @@ namespace PromptWaffle.DynamicWater
     {
         public event Action<Rect> Changed;
 
+        /// <summary>False until the ground exists (e.g. a game that builds its terrain in Awake); the zone waits.</summary>
+        public virtual bool IsReady => true;
+
         public abstract void WriteHeights(in WaterSimulationDesc desc, RectInt region, float[] into);
 
         protected void RaiseChanged(Rect world) => Changed?.Invoke(world);

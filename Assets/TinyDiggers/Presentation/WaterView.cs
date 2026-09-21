@@ -46,6 +46,29 @@ namespace TinyDiggers.Presentation
         readonly Vector4[] _waveB = new Vector4[8];
         GameObject _sea;
         GameObject _river;
+        bool _visible = true;
+
+        /// <summary>
+        /// Whether the static sea and river draw. Off while PromptWaffle Dynamic Water draws the
+        /// water instead (DynamicWaterBridge), so the two surfaces never fight.
+        /// </summary>
+        public bool Visible
+        {
+            get => _visible;
+            set
+            {
+                _visible = value;
+                ApplyVisible();
+            }
+        }
+
+        void ApplyVisible()
+        {
+            if (_sea != null)
+                _sea.GetComponent<MeshRenderer>().enabled = _visible;
+            if (_river != null)
+                _river.GetComponent<MeshRenderer>().enabled = _visible;
+        }
         Mesh _seaMesh;
         Mesh _riverMesh;
         float _dirtyAt = -1f;
@@ -87,6 +110,7 @@ namespace TinyDiggers.Presentation
             Apply();
             _sea = NewSheet("Sea");
             _river = NewSheet("River");
+            ApplyVisible();
             Rebuild();
 
             _terrain.Grid.CellChanged += OnCellChanged;
