@@ -1821,3 +1821,23 @@ the camera had drifted to a pivot at (407, −15, 404), near the rim and down on
 Checked in play: zooming 12 notches toward the rim, then all the way out, returns the pivot to
 (256, 256) at 841 m; the straight-down shot (`Screenshots/Camera/zoomed_out_top.png`) shows the
 whole disc with margin. 323/323 tests pass.
+
+## Dam rim — choices (2026-09-21, design awaiting approval)
+
+Ronan wants a concrete shell round the world that looks like a huge dam holding the world in:
+circular (the real ones are concave), with spillways dotted round it, a good concrete texture
+at scale, and reading as what holds the world together. References: an arch-buttress dam, a
+gated spillway, a stylised hydro plant, and a gravity dam with chutes.
+
+His answers:
+- **Build:** a Blender kit of modular pieces, arrayed round the circle procedurally in Unity.
+- **Outside:** the dam is the edge of the world. Its downstream face drops into the dark, and
+  the spillways pour water off into the void. There is no ground outside.
+- **Scale:** a modest face, about 20 m.
+
+**2026-09-21 11:00:46: GPU driver timeout (TDR) during a play session.** Windows logged
+`nvlddmkm` event 153 and Unity shut down ("Failed to present D3D11 swapchain"). Unity's log stops
+with no error before it. The cause is not identified. Nothing in the game is heavy on the GPU (about
+4 ms frames, 1.6 M triangles on an RTX 4090), and nothing else was holding GPU memory just after
+the restart. If it recurs, note what else was running (ComfyUI, Blender, a capture) and the time,
+and profile a play session.
