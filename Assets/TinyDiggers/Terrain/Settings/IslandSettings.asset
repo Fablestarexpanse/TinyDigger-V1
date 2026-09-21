@@ -24,6 +24,7 @@ MonoBehaviour:
   WarpSize: 45
   WarpStrength: 14
   Shape: 1
+  LandRadius: 447
   LandFeatureSize: 150
   LandThreshold: -0.02
   LandWarpStrength: 34

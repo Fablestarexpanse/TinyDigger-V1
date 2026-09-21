@@ -166,7 +166,7 @@ MonoBehaviour:
   _terrain: {fileID: 551060599}
   _designations: {fileID: 1108996318}
   _pathMaterial: {fileID: 2100000, guid: 189053e189be60c4eb80f5df95575af8, type: 2}
-  _spawnCell: {x: 512, y: 512}
+  _spawnOffset: {x: 0, y: 0}
   _diggerCount: 2
   _haulerCount: 2
   _speed: 3
@@ -366,8 +366,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0a5c2b29950659f43b84bed8a40cf78c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: TinyDiggers.Presentation::TinyDiggers.Presentation.TerrainView
-  _width: 1792
-  _height: 1792
+  _width: 3104
+  _height: 3104
   _cellSize: 0.5
   _chunkSize: 32
   _seed: 1

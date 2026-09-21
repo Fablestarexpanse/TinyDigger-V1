@@ -307,6 +307,40 @@ namespace PromptWaffle.DynamicWater.Tests
         }
 
         [Test]
+        public void TheQueryReadsABigZoneInBandsAndGetsItAll()
+        {
+            // 64 x 200 cells, read 16 rows a band: 13 bands a sweep.
+            const int width = 64, height = 200;
+            var ground = new ArrayGround(width, height);
+            for (var z = 0; z < height; z++)
+                for (var x = 0; x < width; x++)
+                    ground[x, z] = -1f + 0.01f * z;
+            var desc = WaterSimulationDesc.Default(width, height, Cell, Vector2.zero);
+            using var gpu = new WaterSimulation(desc, ground);
+            gpu.FillTo(0f);
+            var query = gpu.Query;
+            query.BandBytes = width * 16 * 16;
+            query.Interval = 0f;
+            Assert.That(query.RowsPerBand, Is.EqualTo(16));
+
+            for (var i = 0; i < 100 && query.Sweeps == 0; i++)
+            {
+                query.Update();
+                UnityEngine.Rendering.AsyncGPUReadback.WaitAllRequests();
+            }
+
+            Assert.That(query.HasData, Is.True, "a whole sweep landed");
+            var depths = gpu.ReadDepthsImmediate();
+            var snapshot = query.Snapshot;
+            var worst = 0f;
+            for (var i = 0; i < depths.Length; i++)
+                worst = Mathf.Max(worst, Mathf.Abs(snapshot[i].y - depths[i]));
+            Assert.That(worst, Is.LessThan(1e-5f), "every row of every band matches the simulation");
+            Assert.That(depths[depths.Length - 1], Is.EqualTo(0f), "the high end is dry, so a row mix-up would show");
+            Assert.That(depths[0], Is.GreaterThan(0.9f));
+        }
+
+        [Test]
         public void TheGpuKeepsEveryDropAtFullSize()
         {
             const int size = 1024;

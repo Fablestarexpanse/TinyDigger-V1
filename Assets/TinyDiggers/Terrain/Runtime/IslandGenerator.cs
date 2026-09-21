@@ -138,6 +138,18 @@ namespace TinyDiggers.Terrain
 
             var radius = TerrainGenerator.DiscRadius(grid);
             var centre = new Vector2(width * 0.5f, depth * 0.5f);
+
+            // The island's own frame. Everything that places the island (the land noise, the
+            // ridge, the benches, the height and material noise, the ore) works in coordinates
+            // of the frame, not of the grid: a square LandRadius + 2 cells either side of the
+            // island's middle, set in the middle of the disc. Only distances are taken in grid
+            // coordinates, and they do not care where the frame sits. So the same seed gives the
+            // same island on any size of disc, and past LandRadius it is open sea. With
+            // LandRadius 0 the frame is the whole disc, and nothing moves.
+            var landRadius = settings.LandRadius > 0f ? Mathf.Min(settings.LandRadius, radius) : radius;
+            var islandHalf = Mathf.RoundToInt(landRadius) + 2;
+            var shift = new Vector2Int(width / 2 - islandHalf, depth / 2 - islandHalf);
+            var islandCentre = centre - (Vector2)shift;
             var map = new IslandMap
             {
                 Shape = settings.Shape == LandShape.Any ? PickShape(random) : settings.Shape,
@@ -155,13 +167,14 @@ namespace TinyDiggers.Terrain
                 for (var x = 0; x < width; x++)
                 {
                     var cell = z * width + x;
-                    var here = new Vector2(x + 0.5f, z + 0.5f);
-                    var toCentre = Vector2.Distance(here, centre);
-                    if (toCentre > radius)
+                    if (Vector2.Distance(new Vector2(x + 0.5f, z + 0.5f), centre) > radius)
                         continue;
 
                     inDisc[cell] = true;
-                    land[cell] = IsLand(here, toCentre, radius, centre, landOffset, landWarp, landWarpFine, settings, shape);
+                    var here = new Vector2(x + 0.5f - shift.x, z + 0.5f - shift.y);
+                    var toCentre = Vector2.Distance(here, islandCentre);
+                    land[cell] = toCentre <= landRadius
+                        && IsLand(here, toCentre, landRadius, islandCentre, landOffset, landWarp, landWarpFine, settings, shape);
                 }
             });
             for (var cell = 0; cell < cells; cell++)
@@ -172,8 +185,8 @@ namespace TinyDiggers.Terrain
             map.Mark("mask", stopwatch, ref lastMark);
 
             // --- 2-4: height over the land ---------------------------------------------------
-            var ridge = RidgeLine(random, centre, radius);
-            var benches = Benches(random, ridge, centre, radius, settings);
+            var ridge = RidgeLine(random, islandCentre, landRadius);
+            var benches = Benches(random, ridge, islandCentre, landRadius, settings);
             var heights = new float[cells];
             var highGround = new float[cells];
             Parallel.For(0, depth, z =>
@@ -193,7 +206,7 @@ namespace TinyDiggers.Terrain
                         continue;
                     }
 
-                    var warped = Warp(x, z, warpOffset, settings.WarpSize, settings.WarpStrength);
+                    var warped = Warp(x - shift.x, z - shift.y, warpOffset, settings.WarpSize, settings.WarpStrength);
                     var height = settings.BaseHeight + Fbm(warped, baseOffset, settings.FeatureSize, 4) * settings.BaseRelief;
                     height += (Noise(warped, mediumOffset, settings.MediumSize) - 0.5f) * settings.MediumRelief;
                     // A fine octave over everything: at five to twelve metres it is too small to
@@ -287,7 +300,7 @@ namespace TinyDiggers.Terrain
             for (var cell = 0; cell < cells; cell++)
                 wet[cell] = inDisc[cell] && heights[cell] < World.SeaLevel + step;
             var toWater = Distance(wet, inDisc, width, depth, from: true);
-            var surfaceMaterials = SurfaceMaterials.Assign(heights, inDisc, toWater, width, depth, settings, materialOffset);
+            var surfaceMaterials = SurfaceMaterials.Assign(heights, inDisc, toWater, width, depth, settings, materialOffset, shift);
 
             // Both sides of a cliff are rock by definition — the relaxation only lets a step stand
             // where the land was already steep — so the faces are promoted to rock rather than the
@@ -330,7 +343,7 @@ namespace TinyDiggers.Terrain
 
                         var count = BuildColumn(column, heights[cell], surfaceMaterials[cell],
                             highGround[cell], ValleyStrength(accumulation[cell]), datum, settings);
-                        OreDeposits.Apply(column, ref count, x, z, heights[cell], datum, highGround[cell], oreFields, settings);
+                        OreDeposits.Apply(column, ref count, x - shift.x, z - shift.y, heights[cell], datum, highGround[cell], oreFields, settings);
                         column.Slice(0, count).CopyTo(new Span<Layer>(bandLayers, slot * perCell, perCell));
                         bandCounts[slot] = (byte)count;
                     }

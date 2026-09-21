@@ -74,6 +74,9 @@ namespace TinyDiggers.Terrain
         [Tooltip("The shape of land to make. Any lets the seed choose.")]
         public LandShape Shape = LandShape.Any;
 
+        [Tooltip("Metres from the middle of the disc the island may reach. The island is laid out in a frame of its own this size, centred on the disc, so the same seed gives the same island on any size of disc and the rest is open sea. 0: the whole disc.")]
+        [Min(0f)] public float LandRadius;
+
         [Tooltip("Metres across the features of the noise that decides where land is.")]
         [Min(20f)] public float LandFeatureSize = 150f;
 
@@ -272,7 +275,7 @@ namespace TinyDiggers.Terrain
             int Area(int cells) => Mathf.Max(1, Mathf.RoundToInt(cells * k * k));
 
             s.FeatureSize *= k; s.MediumSize *= k; s.DetailSize *= k; s.WarpSize *= k; s.WarpStrength *= k;
-            s.LandFeatureSize *= k; s.LandWarpStrength *= k;
+            s.LandFeatureSize *= k; s.LandWarpStrength *= k; s.LandRadius *= k;
             s.RidgeWidth *= k; s.RidgeWarpSize *= k; s.RidgeWarpStrength *= k; s.PlateauRadius *= k;
             s.CoastNoiseSize *= k; s.CoastNoiseCells *= k; s.MountainRadius *= k; s.ValleyRadius *= k;
             s.MaterialNoiseSize *= k; s.SandMaxDistance *= k; s.RiverWander *= k;

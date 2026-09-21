@@ -33,8 +33,9 @@ namespace TinyDiggers.Terrain
         /// <param name="heights">Finished surface heights, metres above sea level.</param>
         /// <param name="inDisc">Which cells are on the map at all.</param>
         /// <param name="toWater">Cells to the nearest water, as a flood distance.</param>
+        /// <param name="islandShift">Where the island's frame starts in the grid; the material noise is sampled in the frame, so it stays with the island.</param>
         public static MaterialId[] Assign(float[] heights, bool[] inDisc, float[] toWater,
-            int width, int depth, TerrainGenSettings settings, Vector2 noiseOffset)
+            int width, int depth, TerrainGenSettings settings, Vector2 noiseOffset, Vector2Int islandShift = default)
         {
             var smoothed = Smooth(heights, inDisc, width, depth, Mathf.Max(1, settings.SlopeSmoothing));
             var materials = new MaterialId[heights.Length];
@@ -59,7 +60,7 @@ namespace TinyDiggers.Terrain
                     var slope = SlopeDegrees(smoothed, inDisc, width, depth, x, z, settings.GenerationCellSize);
                     // The boundaries wander: a few degrees of give either way, from a noise field
                     // a couple of dozen metres across, so no material edge traces a threshold.
-                    var wander = (Noise(x, z, noiseOffset, settings.MaterialNoiseSize) - 0.5f) * 2f * settings.MaterialNoiseDegrees;
+                    var wander = (Noise(x - islandShift.x, z - islandShift.y, noiseOffset, settings.MaterialNoiseSize) - 0.5f) * 2f * settings.MaterialNoiseDegrees;
                     materials[cell] = Pick(height, slope + wander, toWater[cell], settings);
                 }
             });

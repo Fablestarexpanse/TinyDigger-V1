@@ -5,9 +5,11 @@ this records why.
 
 ---
 
-**NEXT:** Slice 12 made the disc 1792² cells (896 m, 3x the area); waiting on Ronan's look. PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
+**NEXT:** Slice 13 made the disc 3104² cells (1552 m) with the same island in open sea; waiting on Ronan's look. PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
 swell, spillway overflows (a safety valve at sea level), game logic reading it and a Basic Zone sample; waiting on Ronan's look. Open:
-- start-up on the 1792² disc is about 4.6 s (generate 3.6 s, mesh 0.95 s).
+- start-up is about 10 s at 3104² (generate 7.0 s, mesh 2.7 s);
+- the frame is 10.5 ms median, with 15 M terrain triangles, mostly flat seabed (a seabed LOD is the lever);
+- the open seabed is a flat 15 m floor (shoals and banks would give it shape).
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -2300,3 +2302,45 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
 - **Not changed:** the 1.2 s generation budget in `LandShapeTests` still measures 1024². Start-up
   on the real map is now about 4.6 s (generate plus mesh), so this is the next thing to speed
   up if it bothers.
+
+## Slice 13: open sea round the island (2026-09-21)
+- **Ronan:** "the land mass seems good for now but i think the disk can go another x3 but then we
+  can have more open water between the land mass and the dam face will give more options for
+  game".
+  - The disc grows another 3x in area (about 1.55 km across, 3104² cells at 0.5 m).
+  - The island stays its present size; the new ring is open sea.
+- **Ruling: a fully workable seabed.** Every metre out to the dam can be dug, filled and
+  reclaimed, with simulated water everywhere. Turned down: a cheap unworkable "far sea" ring, and
+  a workable coastal band with far sea beyond.
+- **`TerrainGenSettings.LandRadius`** (metres, 0 = the whole disc):
+  - The island is laid out in a frame of its own: a square LandRadius + 2 cells either side of
+    its middle, set in the middle of the disc.
+  - The land noise, ridge, benches, height noise, material noise and ores are all sampled in the
+    frame. Distances and floods stay in grid coordinates, where the frame's position doesn't
+    matter.
+  - The same seed gives the same island on any size of disc, and past LandRadius it is sea.
+  - `IslandSettings.asset` has LandRadius 447 m, the old disc's radius, so at 1792² the frame
+    sits exactly where the grid did.
+  - Tests (`LandRadiusTests`): the same island comes out cell for cell (heights, water, top
+    material) on a 256² and a 448² disc; no land past the radius.
+- **The grid is 3104²** (1552 m across, 3.0x the area of 1792²). The ring between the island and
+  the dam is open sea on a flat seabed 15 m down (the generator's ChannelDepth), all of it
+  workable ground.
+- **Measured at start-up:** generated in 7.0 s, meshed in 2.7 s, 9409 chunks, 15.1 M triangles.
+  The dam is 360 pieces round 4.9 km. The crew starts at (1551, 1551).
+- **Frame spikes found and fixed in the package.**
+  - At 3104² about 4–8% of frames ran over 16.6 ms, the worst at 42 ms. The profiler showed the
+    main thread in `WaitForLastPresentation`, waiting on the GPU. The cause was `WaterQuery`
+    reading the whole 154 MB state back five times a second; with the readback made rare, no
+    frame ran over.
+  - `WaterQuery` now sweeps the zone a band of rows at a time: at most `BandBytes` (4 MB, 84
+    rows at 3104 wide) a request and `MaxInFlight` (2) at once. A sweep starts at most every
+    `Interval`. A small zone is still one band. `HasData` needs one whole sweep, since a failed
+    band in the first sweep would leave zeros.
+  - A full sweep at 3104² now takes about 0.4 s, and the grid feed keeps pace.
+  - Test: `TheQueryReadsABigZoneInBandsAndGetsItAll` (13 bands, every row matches).
+- **Clean 20 s profile at 3104²** (no editor commands in the window): all 1880 frames under
+  16.6 ms, median 10.5 ms CPU and 6.0 ms GPU, worst 16.0 ms. That is near the budget; the terrain
+  mesh (15 M triangles, mostly flat seabed) is the obvious thing to thin if it gets tight.
+- **Memory:** managed heap about 2.7 GB (the layer store is 3104² × 16 × 8 B = 1.23 GB); the
+  machine has 64 GB.
