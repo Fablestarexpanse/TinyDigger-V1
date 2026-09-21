@@ -2015,3 +2015,19 @@ Stars are held at least about a pixel wide (by `fwidth`), so they don't flicker 
 turns. The island's lighting is unchanged: the ambient comes from LightingView's trilight colours,
 not from the sky.
 
+
+## Pivot: PromptWaffle Dynamic Water System (2026-09-21)
+
+Ronan: "we need to pivot and create a plugin for unity to help with water long term". He
+pasted KWS2's (Kripto289) store page as the feature benchmark. We build our own, per the
+standing water ruling (no bought assets), and copy none of its code, shaders or wording. His
+answers:
+- **What:** a reusable package, TinyDiggers first. Its own UPM package that the game consumes,
+  generic enough to sell later, with features prioritised by the game's needs.
+- **Pipelines:** URP first (Unity 6, RenderGraph) over a pipeline-agnostic core (simulation,
+  data and API in plain C# plus compute). HDRP and Built-in become adapters later.
+- **Milestone 1:** a shallow-water simulation zone on a heightfield: sources, drains, flow and
+  flooding, with water following the terrain.
+- **Name:** PromptWaffle Dynamic Water System.
+
+Status: package layout and API proposed; waiting for approval before code.
