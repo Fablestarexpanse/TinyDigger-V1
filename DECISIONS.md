@@ -5,9 +5,10 @@ this records why.
 
 ---
 
-**NEXT:** Slice 9 (water) is done and pushed; 291/291. Waiting on Ronan's look at the shots in
-`Screenshots/Slice9/`. Still owed: a real frame-time check on a mid-range machine (the in-editor
-number is not trustworthy, see Slice 9), the tilt-shift blur toggle, unit wakes, and waterfalls.
+**NEXT:** Art pipeline Phase 0 (style bible) is drafted: `Assets/TinyDiggers/Art/STYLE.md` plus
+`STYLE_TEST_SHEET.png`. Waiting on Ronan to approve it, and to answer vehicle scale and the
+de-lighting variant for Trellis2 inputs (STYLE.md §8). Phase 1 (tree_a, end to end) does not start
+until then. Still owed from Slice 9: a mid-range frame-time check.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1542,3 +1543,17 @@ figure. The mid-range machine check is still owed.
 on a running channel, so rapids foam is untested by eye. Unit wakes and waterfalls are not built.
 Rebuilding the field after digging costs up to ~57 ms in one frame; if that hitches, bake only the
 dirty region.
+
+## Art pipeline, Phase 0 — style bible (2026-09-21)
+
+Ronan's brief: a style bible from six reference images, then one asset end to end
+(Krea2 → Trellis2 → Blender → Unity), with an evaluation loop scored against the bible, stopping
+for approval after each phase. The bible is `Assets/TinyDiggers/Art/STYLE.md`; its "How the block
+got here" section records the prompt iterations. Facts worth keeping outside it:
+- `krea2_turbo_bf16` at 8 steps, not the saved `myKrea2UnlockedInt8_v10`, which drew blocky
+  artefacts into the background.
+- Krea2 turbo runs at CFG 1 and ignores negatives, so every "don't" has to be in the positive.
+- Any foliage wording in a shared block makes the model add bushes to rocks and machines, so
+  foliage lives only in the PLANT clause.
+- With Unity open, ComfyUI ran out of VRAM once (1.6 GB free) and a render stalled. Unloading the
+  models fixed it; queue with wait=false and watch the output folder.
