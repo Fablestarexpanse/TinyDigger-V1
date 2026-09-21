@@ -15,18 +15,18 @@ MonoBehaviour:
   Elevation: 38
   AzimuthFromCamera: -35
   Temperature: 4800
-  Intensity: 1.05
+  Intensity: 1.7
   SoftShadows: 1
   ShadowDistance: 300
   ShadowCascades: 4
   ShadowResolution: 4096
-  ShadowStrength: 0.65
+  ShadowStrength: 0.75
   ShadowBias: 0.1
   ShadowNormalBias: 0.6
-  SkyColour: {r: 0.68, g: 0.76, b: 0.86, a: 1}
-  GroundColour: {r: 0.62, g: 0.55, b: 0.44, a: 1}
-  EquatorColour: {r: 0.76, g: 0.73, b: 0.68, a: 1}
-  AmbientIntensity: 1.5
+  SkyColour: {r: 0.62, g: 0.72, b: 0.86, a: 1}
+  GroundColour: {r: 0.5, g: 0.44, b: 0.36, a: 1}
+  EquatorColour: {r: 0.7, g: 0.68, b: 0.64, a: 1}
+  AmbientIntensity: 1.1
   AmbientOcclusion: 1
   OcclusionRadius: 0.6
   OcclusionIntensity: 0.25

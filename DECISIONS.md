@@ -5,10 +5,9 @@ this records why.
 
 ---
 
-**NEXT:** The "more green" tune after 8e is done, green (283/283) and pushed on `main`. Nothing
-is in flight. Peaks now sit near 32 m, under the 8e brief's 35–45 m; if Ronan wants them back, raise
-`RidgeHeight` alone — the grass comes from the low coast, not the low ridge. Still deferred: water
-dynamic effects; still owed: a frame-time check on a mid-range machine and the tilt-shift blur toggle.
+**NEXT:** Haze pass (grade repaired, ambient down) is done and pushed. Waiting on Ronan's approval
+of the water proposal (waves, shoreline, the milky shallows) before any water code. Still owed: a
+frame-time check on a mid-range machine and the tilt-shift blur toggle.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1482,3 +1481,24 @@ BaseHeight 14→7, ValleyCut 9→5, BaseRelief 26→16. In the scene the land ge
 
 Cost: peaks drop to about 32 m, below the 8e target of 35–45. Before/after shots are in
 `Screenshots/Green/`.
+
+## Haze (2026-09-20)
+
+Two causes, both in the light rather than in fog (fog is off):
+
+1. **The grade was never applied.** `Grade.asset` had two component slots pointing at nothing
+   (`fileID: 0`): the Tonemapping and ColorAdjustments made in 8c were added to the profile in
+   memory but never saved as sub-assets, so the volume did nothing from the moment the editor
+   restarted. Rebuilt with `AddObjectToAsset`; the file now lists two real fileIDs.
+2. **The ambient was a wash.** Trilight at intensity 1.5 with a pale blue sky colour put
+   ~1.0–1.3 of flat blue-white fill on every surface, which lifts the shadows until nothing has
+   contrast. That is what read as haze.
+
+Now: AmbientIntensity 1.5 → 1.1 with a slightly deeper sky/ground (sky 0.62/0.72/0.86, equator
+0.70/0.68/0.64, ground 0.50/0.44/0.36); sun 1.05 → 1.7; shadow strength 0.65 → 0.75. Grade: Neutral
+tonemap, +0.25 EV, contrast +6, saturation +12. A test at ambient 0.85 went too dark and the grass
+went olive, so the middle value was kept.
+
+Left for the water pass: the shallow band is an opaque milky cyan (`_Shallow` alpha 0.45, very
+pale) and reads as fog on the sea. Shots: `Screenshots/Haze/` (light_ =
+ambient 0.85, mid_ = chosen).
