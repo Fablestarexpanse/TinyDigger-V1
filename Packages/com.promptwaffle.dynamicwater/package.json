@@ -1,0 +1,12 @@
+{
+  "name": "com.promptwaffle.dynamicwater",
+  "version": "0.1.0",
+  "displayName": "PromptWaffle Dynamic Water System",
+  "description": "GPU shallow-water simulation zones for Unity: water that follows the terrain, floods, drains and flows around obstacles. Pipeline-agnostic core with a URP renderer.",
+  "unity": "6000.0",
+  "author": { "name": "PromptWaffle" },
+  "dependencies": {},
+  "samples": [
+    { "displayName": "Basic Zone", "description": "A procedural basin with a source, a drain and a force.", "path": "Samples~/BasicZone" }
+  ]
+}

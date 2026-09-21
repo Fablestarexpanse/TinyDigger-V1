@@ -2031,3 +2031,33 @@ answers:
 - **Name:** PromptWaffle Dynamic Water System.
 
 Status: package layout and API proposed; waiting for approval before code.
+
+**Approved** ("approve", 2026-09-21): an embedded package at
+`Packages/com.promptwaffle.dynamicwater/`, with the virtual-pipes model and the API as proposed.
+
+**M1a: simulation core** (package 0.1.0):
+- `CpuShallowWater` is the reference model; `ShallowWater.compute` mirrors it step for step
+  (Flux, Depth, Velocity, Fill kernels, in place, no ping-pong).
+- `WaterSimulation` owns the buffers and a private copy of the compute shader (two zones sharing
+  the asset would share parameters), publishes a float `State` texture (surface, depth, vx, vz),
+  and uploads ground by dirty rectangle.
+- `WaterQuery`: async readback snapshots for gameplay sampling.
+- Components: `WaterZone`, `WaterEffectorComponent` (Source, Drain, Level, Force), and
+  `WaterGroundProvider` plus `TerrainWaterGround`.
+- Effectors are normalised over the cells they actually cover, so a source adds exactly its rate.
+- `WaterSimulationDesc.Validate` refuses a step above the pipe model's stable limit,
+  √(cell ÷ 4g).
+- **Tests (14, in the package; `testables` added to the manifest):**
+  - water is conserved (CPU dam break, and GPU 1024² over 600 steps, both within 1e-4);
+  - still water stays still;
+  - water settles at a sill;
+  - walls hold;
+  - sources and drains move their exact rate (±1%);
+  - a drain never goes negative; level holds; force pushes;
+  - the GPU matches the CPU to under 2 mm over 240 steps (ground, a wall, a source and a drain);
+  - digging a trench floods it;
+  - 60 steps of 1024² take 4.6–21 ms including a readback, so a step costs 0.08–0.35 ms.
+- **Test mistakes found and fixed** (the model was right each time):
+  1. equal basins level out above the sill, so the test was changed to use a deep receiving basin;
+  2. a drain on a thin sheet can't take its full rate, so it is now tested in a full pool;
+  3. a force surge travels about 2.2 m/s, so the test samples nearer the force.

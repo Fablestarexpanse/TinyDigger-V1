@@ -1,0 +1,200 @@
+// PromptWaffle Dynamic Water System: the shallow-water "virtual pipes" model on the GPU.
+// Mirrors Runtime/Reference/CpuShallowWater.cs step for step; see that file for the model.
+// Each kernel reads only what no thread of the same kernel writes, so no ping-pong is needed:
+// Flux writes each cell's own pipes from its neighbours' depths; Depth writes each cell's own
+// depth from its neighbours' pipes; Velocity reads both and writes the published state.
+
+#pragma kernel Flux
+#pragma kernel Depth
+#pragma kernel Velocity
+#pragma kernel Fill
+
+#define WALL 5e5
+
+struct Effector
+{
+    int kind;
+    float2 position;
+    float radius;
+    float rate;
+    float level;
+    float2 direction;
+    float scale;
+};
+
+StructuredBuffer<float> _Ground;
+RWStructuredBuffer<float> _Depth;
+RWStructuredBuffer<float4> _Flux;       // x left, y right, z down (-z), w up (+z); m³/s out
+StructuredBuffer<Effector> _Effectors;
+RWTexture2D<float4> _State;             // surface height, depth, velocity x, velocity z
+
+int _Width;
+int _Height;
+int _EffectorCount;
+float _CellSize;
+float2 _Origin;
+float _Dt;
+float _Pipe;                            // cell area × gravity / cell size
+float _Retention;
+float _DryDepth;
+float _MaxSpeed;
+float _Level;
+
+bool Inside(int x, int z) { return x >= 0 && z >= 0 && x < _Width && z < _Height; }
+int Index(int x, int z) { return z * _Width + x; }
+bool IsWall(float ground) { return ground >= WALL; }
+float2 Centre(int x, int z) { return _Origin + (float2(x, z) + 0.5) * _CellSize; }
+
+float Weight(float distance, float radius)
+{
+    float q = distance / radius;
+    if (q >= 1.0)
+        return 0.0;
+    float s = 1.0 - q * q;
+    return s * s;
+}
+
+float Outflow(float current, float surface, int nx, int nz)
+{
+    if (!Inside(nx, nz))
+        return 0.0;
+    int n = Index(nx, nz);
+    if (IsWall(_Ground[n]))
+        return 0.0;
+    float difference = surface - (_Ground[n] + _Depth[n]);
+    return max(0.0, current + _Dt * _Pipe * difference);
+}
+
+bool Closed(int nx, int nz)
+{
+    return !Inside(nx, nz) || IsWall(_Ground[Index(nx, nz)]);
+}
+
+[numthreads(8, 8, 1)]
+void Flux(uint3 id : SV_DispatchThreadID)
+{
+    int x = id.x, z = id.y;
+    if (!Inside(x, z))
+        return;
+    int i = Index(x, z);
+    float ground = _Ground[i];
+    if (IsWall(ground))
+    {
+        _Flux[i] = 0;
+        return;
+    }
+
+    float depth = _Depth[i];
+    float surface = ground + depth;
+    float4 f = _Flux[i] * _Retention;
+    f.x = Outflow(f.x, surface, x - 1, z);
+    f.y = Outflow(f.y, surface, x + 1, z);
+    f.z = Outflow(f.z, surface, x, z - 1);
+    f.w = Outflow(f.w, surface, x, z + 1);
+
+    if (depth > _DryDepth)
+    {
+        float2 centre = Centre(x, z);
+        for (int e = 0; e < _EffectorCount; e++)
+        {
+            Effector effector = _Effectors[e];
+            if (effector.kind != 3)
+                continue;
+            float weight = Weight(distance(centre, effector.position), effector.radius);
+            if (weight <= 0.0)
+                continue;
+            float2 push = effector.direction * (effector.rate * weight * _Dt * depth * _CellSize);
+            f += float4(max(0.0, -push.x), max(0.0, push.x), max(0.0, -push.y), max(0.0, push.y));
+        }
+    }
+
+    if (Closed(x - 1, z)) f.x = 0;
+    if (Closed(x + 1, z)) f.y = 0;
+    if (Closed(x, z - 1)) f.z = 0;
+    if (Closed(x, z + 1)) f.w = 0;
+    f = max(f, 0.0);
+
+    float total = f.x + f.y + f.z + f.w;
+    float available = depth * _CellSize * _CellSize;
+    if (total * _Dt > available && total > 0.0)
+        f *= available / (total * _Dt);
+    _Flux[i] = f;
+}
+
+[numthreads(8, 8, 1)]
+void Depth(uint3 id : SV_DispatchThreadID)
+{
+    int x = id.x, z = id.y;
+    if (!Inside(x, z))
+        return;
+    int i = Index(x, z);
+    float ground = _Ground[i];
+    if (IsWall(ground))
+    {
+        _Depth[i] = 0;
+        return;
+    }
+
+    float inflow = (x > 0 ? _Flux[i - 1].y : 0.0) + (x < _Width - 1 ? _Flux[i + 1].x : 0.0)
+                 + (z > 0 ? _Flux[i - _Width].w : 0.0) + (z < _Height - 1 ? _Flux[i + _Width].z : 0.0);
+    float4 f = _Flux[i];
+    float outflow = f.x + f.y + f.z + f.w;
+    float depth = _Depth[i] + _Dt * (inflow - outflow) / (_CellSize * _CellSize);
+
+    float2 centre = Centre(x, z);
+    for (int e = 0; e < _EffectorCount; e++)
+    {
+        Effector effector = _Effectors[e];
+        float weight = Weight(distance(centre, effector.position), effector.radius);
+        if (weight <= 0.0)
+            continue;
+        if (effector.kind == 0)
+            depth += effector.rate * weight * effector.scale * _Dt;
+        else if (effector.kind == 1)
+            depth = max(0.0, depth - effector.rate * weight * effector.scale * _Dt);
+        else if (effector.kind == 2)
+            depth += (effector.level - (ground + depth)) * saturate(effector.rate * _Dt) * weight;
+    }
+
+    _Depth[i] = max(0.0, depth);
+}
+
+[numthreads(8, 8, 1)]
+void Velocity(uint3 id : SV_DispatchThreadID)
+{
+    int x = id.x, z = id.y;
+    if (!Inside(x, z))
+        return;
+    int i = Index(x, z);
+    float ground = _Ground[i];
+    float depth = _Depth[i];
+    float2 v = 0;
+    if (depth > _DryDepth)
+    {
+        float4 f = _Flux[i];
+        float fromLeft = x > 0 ? _Flux[i - 1].y : 0.0;
+        float fromRight = x < _Width - 1 ? _Flux[i + 1].x : 0.0;
+        float fromDown = z > 0 ? _Flux[i - _Width].w : 0.0;
+        float fromUp = z < _Height - 1 ? _Flux[i + _Width].z : 0.0;
+        float flowX = 0.5 * (fromLeft - f.x + f.y - fromRight);
+        float flowZ = 0.5 * (fromDown - f.z + f.w - fromUp);
+        v = float2(flowX, flowZ) / (_CellSize * depth);
+        float speed = length(v);
+        if (speed > _MaxSpeed)
+            v *= _MaxSpeed / speed;
+    }
+
+    _State[int2(x, z)] = float4(IsWall(ground) ? -WALL : ground + depth, depth, v);
+}
+
+[numthreads(8, 8, 1)]
+void Fill(uint3 id : SV_DispatchThreadID)
+{
+    int x = id.x, z = id.y;
+    if (!Inside(x, z))
+        return;
+    int i = Index(x, z);
+    float ground = _Ground[i];
+    _Depth[i] = IsWall(ground) ? 0.0 : max(0.0, _Level - ground);
+    _Flux[i] = 0;
+}
