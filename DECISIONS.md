@@ -1893,3 +1893,38 @@ Now:
   to 12 m, with lit bands and a beacon mast.
 - **Light** material slot: emissive strips at the back of the slots. The preview colour is a pale
   cyan; the real colour is a Unity shader setting.
+
+## Dam rim: ship terminals and landing pads (2026-09-21)
+
+Ronan: the disc is **floating in space**. Supply ships dock at the rim and unload for the island.
+On each side of the dam he wants giant terminals for capital ships and smaller pads for landing
+ships. His answers:
+- **Four capital-ship terminals**, one per side (the compass points). Spillways and pads go
+  between them.
+- **Cantilevered docking arms:** massive gantries jut outward from the dam's outer face into the
+  void, with a berth, clamps and cranes between them. The ship hangs alongside, and cargo is
+  lifted over the crest to the island.
+- **Small pads on outriggers** off the outer face, between spillways.
+- **Docks now, ships later.** Ship models, arrivals and the supply gameplay are separate steps.
+
+Kit pieces:
+- `dam_terminal`: 60 m, five bays wide, replaces bays in the ring.
+- `dam_pad`: 24 m, two bays.
+
+Both carry their own wall section and the +x fin, like a bay.
+
+**Built:**
+- **`dam_terminal`** (84 m, 7 bays, ~3.3 k triangles):
+  - two docking arms 10 m wide, cantilevered 100 m out into the void either side of a 54 m
+    berth, 16 m deep at the root and thinning to a lit head;
+  - each arm has three lit clamps reaching into the berth, guide lights along its top edges, and
+    two raking braces back to the terraced face;
+  - three gantry cranes straddle the berth on 22 m legs, each with a trolley and hoist;
+  - the terminal building straddles the crest: 30 m monolith with a stepped top, lit bands,
+    cargo doors and a mast, and a control bridge cantilevered toward the berth;
+  - a covered conveyor runs from the berth up to the building.
+  - The first pass was 60 m wide with 72 m arms and a 36 m berth. That was too small to read as
+    a capital-ship dock beside a 510 m island.
+- **`dam_pad`** (24 m, 2 bays, ~960 triangles): an octagonal pad 22 m across, 3 m below the crest,
+  on a faceted inverted cone with a raking brace back to the wall. It has a lit landing ring, a
+  touchdown mark, four corner beacons and a ramp up to the crest.

@@ -53,24 +53,33 @@ def main():
     spill = kit.objects["dam_spillway"]
     water = kit.objects["dam_spillway_water"]
     tower = kit.objects["dam_tower"]
+    terminal = kit.objects["dam_terminal"]
+    pad = kit.objects["dam_pad"]
     kit.hide_render = True
 
-    # An arc: bays either side of a spillway, a tower on one bay.
+    # An arc, left to right: bays, a pad, bays, a spillway, bays with a tower, a terminal, bays.
     step = td_dam.BAY_WIDTH / RADIUS
-    angle = -6 * step
-    arc = []
-    for i in range(-6, 7):
-        if i == 0:
-            centre = angle + (td_dam.SPILL_WIDTH / 2) / RADIUS
-            arc.append(placed(spill, centre, "arc_spill"))
-            arc.append(placed(water, centre, "arc_water"))
-            angle += td_dam.SPILL_WIDTH / RADIUS
-            continue
-        centre = angle + step / 2
-        arc.append(placed(bay, centre, f"arc_bay_{i}"))
-        if i == 2:
-            arc.append(placed(tower, centre, "arc_tower"))
-        angle += step
+    sequence = ["bay", "bay", "pad", "bay", "spill", "bay", "tower", "bay", "terminal", "bay", "bay"]
+    widths = {"bay": td_dam.BAY_WIDTH, "tower": td_dam.BAY_WIDTH, "pad": td_dam.PAD_WIDTH,
+              "spill": td_dam.SPILL_WIDTH, "terminal": td_dam.TERMINAL_WIDTH}
+    total = sum(widths[k] for k in sequence)
+    angle = -(total / 2) / RADIUS
+    arc, centres = [], {}
+    for i, kind in enumerate(sequence):
+        width = widths[kind] / RADIUS
+        centre = angle + width / 2
+        centres.setdefault(kind, centre)
+        if kind == "spill":
+            arc += [placed(spill, centre, "arc_spill"), placed(water, centre, "arc_water")]
+        elif kind == "pad":
+            arc.append(placed(pad, centre, "arc_pad"))
+        elif kind == "terminal":
+            arc.append(placed(terminal, centre, "arc_terminal"))
+        else:
+            arc.append(placed(bay, centre, f"arc_bay_{i}"))
+            if kind == "tower":
+                arc.append(placed(tower, centre, "arc_tower"))
+        angle += width
 
     # The sea inside, and a scrap of island for scale.
     bpy.ops.mesh.primitive_circle_add(vertices=256, radius=RADIUS + 0.5, fill_type="NGON", location=(0, 0, 0))
@@ -106,26 +115,26 @@ def main():
         scene.render.filepath = os.path.join(shots, name + ".png")
         bpy.ops.render.render(write_still=True)
 
-    mid = Vector((0, RADIUS + 10, -6))
-    # Outside, three-quarter, looking back at the downstream face and the spillway.
-    shoot("dam_outside", (70, RADIUS + 95, 28), mid)
-    # Close on the spillway, from outside and below the crest.
-    shoot("dam_spillway_close", (22, RADIUS + 48, 4), (0, RADIUS + 12, -8))
-    # From inside, over the sea, as the player mostly sees it.
-    shoot("dam_inside", (-10, RADIUS - 75, 32), (8, RADIUS + 5, 2))
-    shoot("dam_gates_close", (-6, RADIUS - 26, 9), (0, RADIUS + 2, 2))
-    tower_at = 4.5 * step
-    tx, ty = math.sin(tower_at) * (RADIUS - 10), math.cos(tower_at) * (RADIUS - 10)
-    shoot("dam_tower", (tx - 30, ty - 40, 22), (tx, ty, 4))
-    shoot("dam_arc_high", (0, RADIUS - 150, 120), (0, RADIUS, -5))
+    def polar(a, r, z):
+        return (math.sin(a) * r, math.cos(a) * r, z)
+
+    t, p, sp = centres["terminal"], centres["pad"], centres["spill"]
+    # The terminal from out in the void, three-quarter, and from above the berth.
+    shoot("dock_terminal", polar(t - 0.42, RADIUS + 190, 55), polar(t, RADIUS + 50, -4))
+    shoot("dock_terminal_high", polar(t + 0.16, RADIUS + 160, 140), polar(t, RADIUS + 45, 0))
+    # A pad, close.
+    shoot("dock_pad", polar(p + 0.14, RADIUS + 60, 18), polar(p, RADIUS + 28, -2))
+    # The whole arc from outside and above, and from inside over the sea.
+    shoot("dam_arc_outside", polar(0.0, RADIUS + 300, 160), polar(0.0, RADIUS + 30, -10))
+    shoot("dam_inside", polar(t - 0.05, RADIUS - 110, 45), polar(t, RADIUS + 10, 4))
+    shoot("dam_spillway_close", polar(sp + 0.1, RADIUS + 48, 4), polar(sp, RADIUS + 12, -8))
     # Straight pieces, for the kit sheet.
     for obj in arc + [sea]:
         obj.hide_render = True
     kit.hide_render = False
-    bay.location = (-40, 0, 0)
-    tower.location = (-40, 0, 0)
-    spill.location = water.location = (0, 0, 0)
-    shoot("dam_kit_sheet", (-20, -70, 45), (-18, 8, -8))
+    for obj in kit.objects:
+        obj.hide_render = True
+    print("DAMSHOTS-done")
     print("DAMSHOTS", shots)
 
 

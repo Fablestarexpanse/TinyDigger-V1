@@ -20,6 +20,11 @@ once bent.
     build_tower()      the intake tower standing in the sea: a shaft under a corbelled,
                        cantilevered head with lit bands and a beacon mast, and a slab bridge to
                        the crest; placed on top of a bay
+    build_terminal()   84 m: a capital-ship terminal; two docking arms cantilevered 100 m out
+                       into the void either side of a 54 m berth, with clamps, three gantry cranes,
+                       a raking brace each, and the terminal building straddling the crest
+    build_pad()        24 m: an octagonal landing pad on an outrigger below the crest, with a
+                       lit landing ring and a ramp up to the crest
     build_kit(out)     all of them, bevelled, exported (FBX) and saved (.blend)
 
 Materials are slots only; Unity assigns the shaders. Concrete, ConcreteDark (recesses and
@@ -385,6 +390,167 @@ def build_tower(collection):
     return piece.to_object(collection, BEVEL)
 
 
+# --- docks: the disc floats in space and ships bring its supplies (Ronan, 2026-09-21) -----
+
+TERMINAL_WIDTH = 7 * BAY_WIDTH     # 84 m
+PAD_WIDTH = 2 * BAY_WIDTH          # 24 m
+ARM_REACH = 100.0                  # how far the docking arms reach out into the void
+ARM_WIDTH = 10.0
+ARM_X = 32.0                       # arm centre lines, either side of a 54 m berth
+PAD_Y = 30.0                       # pad centre, out from the inner face
+PAD_RADIUS = 11.0
+
+
+def ring(cx, cy, radius, sides, turn=0.0):
+    return [(cx + math.cos(turn + i * 2 * math.pi / sides) * radius,
+             cy + math.sin(turn + i * 2 * math.pi / sides) * radius) for i in range(sides)]
+
+
+def loft(piece, lower, z0, upper, z1, material=0, cap_bottom=True, cap_top=True):
+    """A solid between two rings of (x, y) points of the same count: a slab, a frustum, a cone."""
+    a = [piece.mesh.verts.new((x, y, z0)) for x, y in lower]
+    b = [piece.mesh.verts.new((x, y, z1)) for x, y in upper]
+    if cap_bottom:
+        piece._face(list(reversed(a)), material)
+    if cap_top:
+        piece._face(b, material)
+    n = len(a)
+    for i in range(n):
+        j = (i + 1) % n
+        piece._face([a[i], a[j], b[j], b[i]], material)
+
+
+def docking_arm(piece, cx):
+    """A box girder cantilevered off the outer face: deep at the root, thinning to a lit head."""
+    x0, x1 = cx - ARM_WIDTH / 2, cx + ARM_WIDTH / 2
+    piece.prism(x0, x1, [(DECK_OUT - 1.0, CREST), (ARM_REACH - 4.0, CREST), (ARM_REACH, CREST - 2.0),
+                         (ARM_REACH, CREST - 5.5), (ARM_REACH - 14.0, CREST - 7.5), (DECK_OUT + 16.0, -14.0),
+                         (DECK_OUT - 1.0, -14.0)])
+    # The brace under the root: a raking strut back to the terraced face.
+    for bx in (cx - 3.0, cx + 3.0):
+        piece.prism(bx - 1.2, bx + 1.2, [(DECK_OUT + 14.0, -13.0), (DECK_OUT + 36.0, CREST - 7.0),
+                                         (DECK_OUT + 42.0, CREST - 7.0), (TERRACES[-1][0] + 1.0, FOOTING + 1.0),
+                                         (TERRACES[-1][0] - 1.0, FOOTING + 1.0)])
+    # Docking clamps on the berth side: three blocks reaching in toward the ship.
+    inward = -1 if cx > 0 else 1
+    face = x0 if cx > 0 else x1
+    for y in (36.0, 58.0, 80.0):
+        c0, c1 = sorted((face, face + inward * 3.0))
+        piece.box(c0, c1, y - 2.5, y + 2.5, CREST - 5.0, CREST - 1.0)
+        with piece.trim():
+            l0, l1 = sorted((face + inward * 3.0, face + inward * 3.06))
+            piece.box(l0, l1, y - 1.5, y + 1.5, CREST - 3.3, CREST - 2.7, LIGHT)
+    with piece.trim():
+        # Guide lights along both top edges, and a lit head.
+        for edge in (x0 - 0.02, x1 - 0.04):
+            piece.box(edge, edge + 0.06, DECK_OUT + 2.0, ARM_REACH - 5.0, CREST - 0.6, CREST - 0.3, LIGHT)
+        piece.box(x0 + 1.0, x1 - 1.0, ARM_REACH, ARM_REACH + 0.06, CREST - 3.6, CREST - 2.9, LIGHT)
+
+
+def gantry_crane(piece, y, span):
+    """A bridge crane standing on both arms, straddling the berth, with a trolley."""
+    for cx in (-ARM_X, ARM_X):
+        piece.box(cx - 1.8, cx + 1.8, y - 1.8, y + 1.8, CREST, CREST + 22.0)
+    piece.prism(-span, span, [(y - 2.5, CREST + 21.0), (y + 2.5, CREST + 21.0), (y + 2.5, CREST + 25.0),
+                              (y - 1.5, CREST + 25.0), (y - 2.5, CREST + 24.0)])
+    piece.box(-5.0, 5.0, y - 3.2, y + 3.2, CREST + 18.0, CREST + 21.0, STEEL)
+    with piece.trim():
+        piece.box(-0.25, 0.25, y - 0.25, y + 0.25, CREST + 3.0, CREST + 18.0, STEEL)
+        piece.box(-span + 1.0, span - 1.0, y - 2.56, y - 2.5, CREST + 22.2, CREST + 22.7, LIGHT)
+
+
+def build_terminal(collection):
+    """
+    A capital-ship terminal: seven bays of wall, two docking arms cantilevered 100 m out into the
+    void either side of a 54 m berth, three gantry cranes across it, and the terminal building
+    straddling the crest with its control bridge looking out over the berth.
+    """
+    piece = Piece("dam_terminal")
+    half = TERMINAL_WIDTH / 2
+    wall_section(piece, -half, half)
+    footing(piece, -half, half)
+    crest_walls(piece, -half, half)
+    fin(piece, half)
+    for k in range(7):
+        x = -half + BAY_WIDTH * k
+        if k:
+            fin(piece, x)
+        for y, top, bottom in TERRACES[:3]:
+            slot(piece, x + 1.2, x + BAY_WIDTH - 1.2, y, bottom + 1.8, bottom + 2.6)
+    slot(piece, -half, half, 0.0, 0.6, 1.3, outward=False)
+
+    for cx in (-ARM_X, ARM_X):
+        docking_arm(piece, cx)
+    for y in (44.0, 68.0, 92.0):
+        gantry_crane(piece, y, ARM_X + 1.4)
+
+    # The terminal building: a monolith straddling the crest, stepped back at the top.
+    piece.box(-15.0, 15.0, -3.0, DECK_OUT + 4.0, CREST, CREST + 12.0)
+    piece.box(-12.0, 12.0, -1.5, DECK_OUT + 1.0, CREST + 12.0, CREST + 17.0)
+    # Control bridge cantilevered out toward the berth, glazed with a lit band.
+    piece.prism(-9.0, 9.0, [(DECK_OUT + 4.0, CREST + 8.0), (DECK_OUT + 12.0, CREST + 9.5),
+                            (DECK_OUT + 12.0, CREST + 13.0), (DECK_OUT + 4.0, CREST + 12.0)])
+    slot(piece, -8.0, 8.0, DECK_OUT + 12.0, CREST + 10.2, CREST + 12.2)
+    slot(piece, -13.0, 13.0, -3.0, CREST + 4.0, CREST + 6.0, outward=False)
+    slot(piece, -10.0, 10.0, -1.5, CREST + 13.5, CREST + 15.5, outward=False)
+    # The cargo hall's doors onto the crest, and the mast.
+    with piece.trim():
+        for dx in (-15.06, 15.0):
+            piece.box(dx, dx + 0.06, 1.0, DECK_OUT, CREST, CREST + 7.0, DARK)
+        piece.box(-0.3, 0.3, 3.0, 3.6, CREST + 17.0, CREST + 30.0, STEEL)
+        piece.box(-0.6, 0.6, 2.7, 3.9, CREST + 30.0, CREST + 30.8, LIGHT)
+    # A covered conveyor from the berth up to the hall.
+    piece.prism(-2.0, 2.0, [(DECK_OUT + 4.0, CREST + 2.0), (32.0, CREST - 0.5), (32.0, CREST + 2.5),
+                            (DECK_OUT + 4.0, CREST + 5.0)])
+    return piece.to_object(collection, BEVEL)
+
+
+def build_pad(collection):
+    """
+    A small landing pad: two bays of wall, and an octagonal pad on a raking outrigger off the
+    outer face, below the crest, with a lit landing ring and a ramp up to the crest.
+    """
+    piece = Piece("dam_pad")
+    half = PAD_WIDTH / 2
+    wall_section(piece, -half, half)
+    footing(piece, -half, half)
+    crest_walls(piece, -half, half)
+    fin(piece, half)
+    for x in (-half, 0.0):
+        for y, top, bottom in TERRACES[:3]:
+            slot(piece, x + 1.2, x + BAY_WIDTH - 1.2, y, bottom + 1.8, bottom + 2.6)
+    slot(piece, -half, half, 0.0, 0.6, 1.3, outward=False)
+
+    top = -1.0
+    deck = ring(0.0, PAD_Y, PAD_RADIUS, 8, math.pi / 8)
+    loft(piece, deck, top - 1.6, deck, top)
+    # The support: an inverted, faceted cone down to a stub, braced back to the wall.
+    loft(piece, ring(0.0, PAD_Y, 3.0, 8, math.pi / 8), top - 14.0, ring(0.0, PAD_Y, PAD_RADIUS - 1.0, 8, math.pi / 8), top - 1.6)
+    piece.prism(-2.0, 2.0, [(TERRACES[-1][0] - 0.5, FOOTING + 2.0), (PAD_Y - 3.0, top - 13.0),
+                            (PAD_Y - 3.0, top - 9.0), (TERRACES[1][0], -6.0)])
+    # The ramp from the crest down onto the pad.
+    piece.prism(-3.0, 3.0, [(DECK_OUT - 0.5, CREST - 1.0), (PAD_Y - PAD_RADIUS + 1.0, top - 1.2),
+                            (PAD_Y - PAD_RADIUS + 1.0, top), (DECK_OUT - 0.5, CREST)])
+    with piece.trim():
+        # Lit landing ring round the rim, and the touchdown mark.
+        outer = ring(0.0, PAD_Y, PAD_RADIUS - 0.6, 8, math.pi / 8)
+        inner = ring(0.0, PAD_Y, PAD_RADIUS - 1.1, 8, math.pi / 8)
+        for i in range(8):
+            j = (i + 1) % 8
+            quad = [piece.mesh.verts.new((x, y, top + 0.03)) for x, y in (inner[i], outer[i], outer[j], inner[j])]
+            piece._face(quad, LIGHT)
+        mark = ring(0.0, PAD_Y, 4.0, 8, math.pi / 8)
+        hole = ring(0.0, PAD_Y, 3.3, 8, math.pi / 8)
+        for i in range(8):
+            j = (i + 1) % 8
+            quad = [piece.mesh.verts.new((x, y, top + 0.03)) for x, y in (hole[i], mark[i], mark[j], hole[j])]
+            piece._face(quad, DARK)
+        # Beacons on the outer corners.
+        for x, y in ring(0.0, PAD_Y, PAD_RADIUS - 0.4, 4, math.pi / 4):
+            piece.box(x - 0.35, x + 0.35, y - 0.35, y + 0.35, top, top + 0.7, LIGHT)
+    return piece.to_object(collection, BEVEL)
+
+
 # --- finishing -----------------------------------------------------------------------------
 
 def bevel(obj, width=0.12):
@@ -412,10 +578,12 @@ def build_kit(out_dir):
     bay = build_bay(collection)
     spillway, water = build_spillway(collection)
     tower = build_tower(collection)
+    terminal = build_terminal(collection)
+    pad = build_pad(collection)
 
     os.makedirs(out_dir, exist_ok=True)
     report = {}
-    for obj in (bay, spillway, water, tower):
+    for obj in (bay, spillway, water, tower, terminal, pad):
         export(obj, os.path.join(out_dir, obj.name + ".fbx"))
         report[obj.name] = {"triangles": td.tris(obj),
                             "size": [round(d, 2) for d in obj.dimensions]}
