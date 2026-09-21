@@ -8,7 +8,6 @@ this records why.
 **NEXT:** Slices 14 (sea floor), 15 (load) and 16 (terrain LOD) are done: start-up about 5.3 s, frames 9.5 ms median; waiting on Ronan's look. PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
 swell, spillway overflows (a safety valve at sea level), game logic reading it and a Basic Zone sample; waiting on Ronan's look. Open:
 - start-up is about 5.3 s at 3104², nearly all generation (5.0 s);
-- `WaterTests.BakingAFullMapIsCheap` is a flaky 60 ms timing check;
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -2449,3 +2448,11 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   inside the disc edge, still in open water, and the terminals and pads follow the ring.
 - **Seen in play:** the view where the strip showed is clean, and a low close-up along the
   face has the water lapping the concrete round the curve. 382/382 pass.
+
+## Removed the flaky water-bake timing test (2026-09-21)
+- `WaterTests.BakingAFullMapIsCheap` asserted that baking the old static sea's `WaterField` on a
+  512² map took under 60 ms. It failed at 60.5–63 ms twice today on an editor holding the
+  3104² map. It measured code the dynamic water has replaced: `WaterView` is hidden while the
+  simulation runs.
+- Ronan's call: remove it rather than loosen it. The other WaterTests (what the bake produces,
+  and the swell rules) stay. 381/381 pass.

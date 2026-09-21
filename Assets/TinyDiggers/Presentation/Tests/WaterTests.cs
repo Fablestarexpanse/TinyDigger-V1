@@ -127,15 +127,5 @@ namespace TinyDiggers.Presentation.Tests
                 Assert.That(WaveSet.Sharpness(WaveSet.Generate(_settings)), Is.LessThanOrEqualTo(1f + 1e-4f));
             }
         }
-
-        [Test]
-        public void BakingAFullMapIsCheap()
-        {
-            var grid = HalfIsland(512, 200);
-            WaterField.Bake(grid); // Warm up.
-            var field = WaterField.Bake(grid);
-
-            Assert.That(field.Milliseconds, Is.LessThan(60f), $"baking took {field.Milliseconds:0.0} ms");
-        }
     }
 }
