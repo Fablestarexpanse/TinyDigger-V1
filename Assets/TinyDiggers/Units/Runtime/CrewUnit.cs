@@ -58,6 +58,9 @@ namespace TinyDiggers.Units
 
         /// <summary>Driving out of another unit's way, having given its job up.</summary>
         Yield,
+
+        /// <summary>Climbing out of water that has come up round it, having given its job up.</summary>
+        Escape,
     }
 
     /// <summary>
@@ -169,6 +172,9 @@ namespace TinyDiggers.Units
         int _pathIndex;
         float _jobHeight;
         bool _repath;
+
+        /// <summary>Seconds until a unit stuck in water with no way out looks for one again.</summary>
+        float _escapeRetry;
         bool _rethink = true;
         float _rethinkTimer;
         float _workTimer;
@@ -213,6 +219,7 @@ namespace TinyDiggers.Units
             Id = _dispatcher.Register(this);
             _dispatcher.SetCell(Id, startX, startZ);
             _grid.CellChanged += OnCellChanged;
+            _grid.WaterChanged += OnCellChanged;
             _designations.Changed += OnDesignationChanged;
             Status = "Idle";
         }
@@ -394,6 +401,10 @@ namespace TinyDiggers.Units
                     _rethink = true;
             }
 
+            _escapeRetry -= deltaTime;
+            if (Job != CrewJobKind.Escape && _escapeRetry <= 0f && IsInWater() && !TryEscape())
+                _escapeRetry = 1f;
+
             if (_rethink)
                 ChooseJob();
 
@@ -427,6 +438,7 @@ namespace TinyDiggers.Units
                 return;
             _disposed = true;
             _grid.CellChanged -= OnCellChanged;
+            _grid.WaterChanged -= OnCellChanged;
             _designations.Changed -= OnDesignationChanged;
             _dispatcher.Unregister(this);
             if (_ownsDispatcher)
@@ -836,6 +848,9 @@ namespace TinyDiggers.Units
         {
             if (_designations.GetKind(x, z) != DesignationKind.Dig)
                 return false;
+            // Deep water over it: nothing digs there until it drains.
+            if (_grid.IsWater(x, z))
+                return false;
             var after = _grid.GetSurfaceHeight(x, z) - Step;
             if (after < _dispatcher.DigFloor(x, z) - Epsilon || after < standHeight - DigReachLevels * Step - Epsilon)
                 return false;
@@ -1053,6 +1068,35 @@ namespace TinyDiggers.Units
             return true;
         }
 
+        /// <summary>Whether the water has come up round the unit's cell: ground it could not drive onto.</summary>
+        bool IsInWater()
+        {
+            var me = Cell;
+            return _grid.IsGround(me.x, me.y) && !_grid.IsPassableGround(me.x, me.y);
+        }
+
+        /// <summary>
+        /// Gives the job up and drives out of the water it is standing in, to the nearest cell that
+        /// is not water. False, and the unit stays put, when there is no way out.
+        /// </summary>
+        bool TryEscape()
+        {
+            var me = Cell;
+            if (!_pathfinder.TryFindWayOutOfWater(me.x, me.y, _path) || _path.Count <= 1)
+                return false;
+
+            _dispatcher.Release(Id);
+            Job = CrewJobKind.Escape;
+            JobTarget = _path[_path.Count - 1];
+            JobStand = JobTarget;
+            _pathIndex = 0;
+            _rethink = false;
+            _repath = false;
+            MarkPath();
+            SetState(CrewUnitState.Moving, "Climbing out of the water to " + DescribeJob());
+            return true;
+        }
+
         /// <summary>Where this frame's travel would take it, for the clearance check.</summary>
         Vector2 Probe(float deltaTime)
         {
@@ -1086,6 +1130,16 @@ namespace TinyDiggers.Units
             RepathCount++;
             _waitTimer = 0f;
             var cell = Cell;
+            if (Job == CrewJobKind.Escape)
+            {
+                // Still in the water: find the way out afresh; out of it: done.
+                if (IsInWater() && TryEscape())
+                    return true;
+                _rethink = true;
+                SetState(CrewUnitState.Idle, "Out of the water; looking for work");
+                return false;
+            }
+
             if (!_pathfinder.TryFindPath(cell.x, cell.y, JobStand.x, JobStand.y, _path, avoid))
             {
                 _rethink = true;
@@ -1120,6 +1174,10 @@ namespace TinyDiggers.Units
                 case CrewJobKind.Yield:
                     _rethink = true;
                     SetState(CrewUnitState.Idle, "Stood aside; looking for work");
+                    break;
+                case CrewJobKind.Escape:
+                    _rethink = true;
+                    SetState(CrewUnitState.Idle, "Out of the water; looking for work");
                     break;
                 case CrewJobKind.Dig:
                     SetState(CrewUnitState.Digging, "Digging " + DescribeJob());
@@ -1390,6 +1448,7 @@ namespace TinyDiggers.Units
                 case CrewJobKind.Serve:
                     return $"digger at ({JobTarget.x}, {JobTarget.y})";
                 case CrewJobKind.Yield:
+                case CrewJobKind.Escape:
                     return $"({JobTarget.x}, {JobTarget.y})";
                 default:
                     return "nothing";

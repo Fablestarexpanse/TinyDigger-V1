@@ -6,8 +6,8 @@ this records why.
 ---
 
 **NEXT:** PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
-swell and spillway overflows (a safety valve at sea level); waiting on Ronan's look. Open:
-- the game logic still reads `TerrainGrid.IsWater`, not the simulation;
+swell, spillway overflows (a safety valve at sea level) and game logic reading it; waiting on Ronan's look. Open:
+- the grid feed's 4.7 ms spike every 0.2 s (could be spread over frames or moved to a job);
 - a package sample scene.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
@@ -2166,3 +2166,42 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   - after a 0.5 m surge: all 8 at 0.79 (the head at the outlet is drawn down below 0.5 m);
   - after a 6 cm rise: thin ropes.
   - Tests: `SpillwaySheetTests` (3).
+
+## Game logic reads the simulated water (2026-09-21)
+- **Ruling (Ronan):**
+  - Water blocks digging once it is 0.5 m deep.
+  - The crew can't walk through water deeper than a wading depth: the pathfinder routes around
+    it, and a crew caught by a flood climbs out.
+  - The hover readout shows the real depth.
+- **API:** Terrain gets `IWaterMap.DepthAt(x, z)`, held by the grid.
+  - The default keeps today's rule: under sea level counts as water.
+  - TinyDiggers plugs in a map backed by the simulation, so Terrain and Units never depend on
+    the water package.
+- **As built, the proposal changed from pull to push.** A `DepthAt` interface the grid asked on
+  demand could not say when passability changed, and the regions and paths cache it. So the grid
+  now takes the water:
+  - `TerrainGrid.SetWaterSurfaces(span)` stores one water surface height per cell (negative
+    infinity when dry), recomputes the blocked flags, and raises the new `WaterChanged(x, z)` only
+    for cells that flip.
+  - `ClearWaterSurfaces()` goes back to the sea-level rule. `DeepWater` is 0.5 m.
+  - It keeps the surface, not the depth, so a cell filled above the water is dry at once, before
+    the next readback.
+  - RegionMap and CrewUnit listen to `WaterChanged` as they do to `CellChanged`.
+- **Crew:**
+  - A new job, `CrewJobKind.Escape`: a unit whose cell turns to water gives its job up and takes
+    `GridPathfinder.TryFindWayOutOfWater`. That path wades through water but never over the void
+    or up a step it can't climb, and ends at the nearest dry cell. With no way out it retries
+    every second.
+  - `CanDigStep` refuses a cell under deep water, so a flooded dig site waits until it drains.
+- **Hover readout:** "Water (depth x m)" for deep water, "Shallow water (x m)" from 5 cm.
+- **Package:** `WaterQuery.Snapshot` exposes the whole readback.
+- **`GridWaterFeed`** (TinyDiggers): on each fresh snapshot, it copies the surfaces into the grid,
+  in the terrain's own heights. It refuses (logs once, then keeps the sea-level rule) if the zone
+  is not laid one cell to one cell over the grid.
+- **Measured in play:**
+  - an update every 0.2 s costs 4.7 ms, so about 1 ms a frame on average, in one 4.7 ms spike;
+  - the 2 318 cells at exactly sea level, which the old rule called water, are dry land now;
+  - after the flood capture the trench and basin read as water 0.95–1.46 m deep, dig
+    designations there are refused, and dry land beside it can still be dug.
+  - The climb-out has been verified only in tests (`LiveWaterTests`, 8), not with a real flood
+    in play.

@@ -42,6 +42,7 @@ namespace TinyDiggers.Terrain
         readonly MaterialId[] _topMaterials;
         readonly bool[] _void;
         readonly bool[] _blocked;
+        float[] _waterSurfaces;
 
         public TerrainGrid(int width, int height, MaterialTable materials, float heightStep = 0f, float datum = 0f,
             float cellSize = 1f)
@@ -101,16 +102,82 @@ namespace TinyDiggers.Terrain
         public float Datum { get; }
 
         /// <summary>
-        /// Whether the cell is under the sea: a cell counts as land only once its surface has
-        /// reached one whole step above sea level, so tipping into the shallows has to actually
-        /// break the surface before anything can stand there.
+        /// Whether the cell is under water: nothing digs it and nothing drives through it.
+        ///
+        /// With live water (<see cref="SetWaterSurfaces"/>) that means water at least
+        /// <see cref="DeepWater"/> deep; shallower water is waded through and dug in. Without it,
+        /// the sea-level rule: a cell counts as land only once its surface has reached one whole
+        /// step above sea level, so tipping into the shallows has to actually break the surface
+        /// before anything can stand there.
         /// </summary>
         public bool IsWater(int x, int z)
         {
             if (!IsGround(x, z))
                 return false;
-            return _surfaceHeights[z * Width + x] < LandAt;
+            return IsDeep(z * Width + x);
         }
+
+        /// <summary>
+        /// Metres of live water at or above which a cell counts as water (<see cref="IsWater"/>):
+        /// the crew wades through less and digs in it. Only used with live water.
+        /// </summary>
+        public float DeepWater { get; set; } = 0.5f;
+
+        /// <summary>Whether water comes from <see cref="SetWaterSurfaces"/> rather than the sea-level rule.</summary>
+        public bool HasLiveWater => _waterSurfaces != null;
+
+        /// <summary>
+        /// Raised, with x and z, when live water makes a cell water or stops it being water, so
+        /// anything that caches passability (regions, paths) can catch up. Terrain edits raise
+        /// <see cref="CellChanged"/> instead.
+        /// </summary>
+        public event Action<int, int> WaterChanged;
+
+        /// <summary>
+        /// Takes the water from a simulation: the height of the water surface over each cell,
+        /// indexed <c>z * Width + x</c>, in the same metres as <see cref="GetSurfaceHeight"/>, or
+        /// negative infinity where the cell is dry. The surface is kept rather than the depth, so a
+        /// cell filled or dug before the next update still reads true: fill it above the water and
+        /// it is dry at once. Raises <see cref="WaterChanged"/> for every cell that turns water or
+        /// stops being water. Returns how many did.
+        /// </summary>
+        public int SetWaterSurfaces(ReadOnlySpan<float> surfaces)
+        {
+            if (surfaces.Length != _surfaceHeights.Length)
+                throw new ArgumentException("Needs one surface per cell.", nameof(surfaces));
+            _waterSurfaces ??= new float[_surfaceHeights.Length];
+            surfaces.CopyTo(_waterSurfaces);
+            return RefreshBlocked();
+        }
+
+        /// <summary>Goes back to the sea-level rule. Returns how many cells changed.</summary>
+        public int ClearWaterSurfaces()
+        {
+            if (_waterSurfaces == null)
+                return 0;
+            _waterSurfaces = null;
+            return RefreshBlocked();
+        }
+
+        int RefreshBlocked()
+        {
+            var changed = 0;
+            for (var cell = 0; cell < _blocked.Length; cell++)
+            {
+                var blocked = _void[cell] || IsDeep(cell);
+                if (blocked == _blocked[cell])
+                    continue;
+                _blocked[cell] = blocked;
+                changed++;
+                WaterChanged?.Invoke(cell % Width, cell / Width);
+            }
+
+            return changed;
+        }
+
+        bool IsDeep(int cell) => _waterSurfaces != null
+            ? _waterSurfaces[cell] - _surfaceHeights[cell] >= DeepWater
+            : _surfaceHeights[cell] < LandAt;
 
         /// <summary>The height a surface must reach to count as land rather than seabed.</summary>
         float LandAt => World.SeaLevel + LandStep;
@@ -118,10 +185,12 @@ namespace TinyDiggers.Terrain
         /// <summary>Rounds a height to the nearest millimetre, which is what keeps float drift out.</summary>
         static float Snap(float height) => (float)Math.Round(height * 1000.0) / 1000f;
 
-        /// <summary>Metres of water over a cell, or 0 where the ground is dry.</summary>
+        /// <summary>Metres of water over a cell, or 0 where the ground is dry: live water if there is any, else up to sea level.</summary>
         public float WaterDepth(int x, int z)
         {
             var surface = GetSurfaceHeight(x, z);
+            if (_waterSurfaces != null)
+                return Math.Max(0f, _waterSurfaces[z * Width + x] - surface);
             return surface < World.SeaLevel ? World.SeaLevel - surface : 0f;
         }
 
@@ -556,7 +625,7 @@ namespace TinyDiggers.Terrain
             // legitimately between steps, and rounding it would make material appear or vanish.
             var surface = Snap(Datum + height);
             _surfaceHeights[cell] = surface;
-            _blocked[cell] = _void[cell] || surface < LandAt;
+            _blocked[cell] = _void[cell] || IsDeep(cell);
             _topMaterials[cell] = count == 0 ? MaterialId.None : _layers[layerBase + count - 1].Material;
 
             CellChanged?.Invoke(x, z);

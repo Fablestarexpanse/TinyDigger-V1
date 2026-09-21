@@ -45,6 +45,13 @@ namespace PromptWaffle.DynamicWater
         /// <summary>Whether a snapshot has arrived yet.</summary>
         public bool HasData => _snapshot.IsCreated;
 
+        /// <summary>
+        /// The whole snapshot: one (surface, depth, velocity x, velocity z) per cell, indexed
+        /// <c>z * Width + x</c> of the simulation's <see cref="WaterSimulation.Desc"/>. Empty before
+        /// the first. For game logic that wants every cell at once, such as a grid's flood map.
+        /// </summary>
+        public NativeArray<Vector4>.ReadOnly Snapshot => _snapshot.IsCreated ? _snapshot.AsReadOnly() : default;
+
         /// <summary>Time.realtimeSinceStartup of the snapshot now held.</summary>
         public float SnapshotTime { get; private set; }
 

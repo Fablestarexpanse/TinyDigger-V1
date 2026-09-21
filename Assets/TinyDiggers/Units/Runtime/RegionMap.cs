@@ -40,6 +40,7 @@ namespace TinyDiggers.Units
             _label = new int[cells];
             _dirty = new bool[cells];
             _grid.CellChanged += OnCellChanged;
+            _grid.WaterChanged += OnCellChanged;
         }
 
         /// <summary>How many times regions have been (re)built. For tests and perf reporting.</summary>
@@ -118,6 +119,7 @@ namespace TinyDiggers.Units
                 return;
             _disposed = true;
             _grid.CellChanged -= OnCellChanged;
+            _grid.WaterChanged -= OnCellChanged;
         }
 
         void OnCellChanged(int x, int z)

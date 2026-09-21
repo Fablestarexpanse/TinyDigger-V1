@@ -139,6 +139,33 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
+        /// The way out for a unit the water has come up round: the cheapest path, driving through
+        /// water (but never the void, and never up a step it could not climb), to the nearest cell
+        /// that is not water. False if there is none, or the unit is not in water.
+        /// </summary>
+        public bool TryFindWayOutOfWater(int startX, int startZ, List<Vector2Int> path)
+        {
+            if (!_grid.IsGround(startX, startZ) || _grid.IsPassableGround(startX, startZ))
+                return false;
+            var width = _grid.Width;
+            _wading = true;
+            try
+            {
+                var found = Search(startX, startZ, cell => _grid.IsPassableGround(cell % width, cell / width), 0, 0, 0f, false);
+                return Reconstruct(found, path);
+            }
+            finally
+            {
+                _wading = false;
+            }
+        }
+
+        /// <summary>Whether a search may enter the cell: passable ground, or any ground while wading out of water.</summary>
+        bool Open(int x, int z) => _wading ? _grid.IsGround(x, z) : _grid.IsPassableGround(x, z);
+
+        bool _wading;
+
+        /// <summary>
         /// Marks every cell reachable from the start in <paramref name="reachable"/> (indexed
         /// z * width + x). Returns how many there are.
         ///
@@ -218,7 +245,7 @@ namespace TinyDiggers.Units
         }
 
         bool Climbable(int ax, int az, int bx, int bz) =>
-            _grid.IsPassableGround(ax, az) && _grid.IsPassableGround(bx, bz)
+            Open(ax, az) && Open(bx, bz)
             && Math.Abs(_grid.GetSurfaceHeight(ax, az) - _grid.GetSurfaceHeight(bx, bz)) <= MaxStepHeight + Tolerance;
 
         /// <summary>
@@ -268,7 +295,7 @@ namespace TinyDiggers.Units
                     var next = nz * width + nx;
                     if (_closed[next] == _generation)
                         continue;
-                    if (!_grid.IsPassableGround(nx, nz))
+                    if (!Open(nx, nz))
                         continue;
                     if (corridor == null ? !CanStep(x, z, nx, nz) : next != corridorGoal && !corridor(nx, nz))
                         continue;
