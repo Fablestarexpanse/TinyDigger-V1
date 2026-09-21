@@ -15,8 +15,8 @@ MonoBehaviour:
   Seed: 11
   Datum: -45
   FeatureSize: 120
-  BaseRelief: 26
-  BaseHeight: 14
+  BaseRelief: 16
+  BaseHeight: 7
   MediumSize: 40
   MediumRelief: 1.5
   DetailSize: 8
@@ -35,10 +35,10 @@ MonoBehaviour:
   BeachMaxSlope: 0.55
   ShallowCells: 10
   MaxCliffStep: 3
-  CliffSlope: 44
-  RidgeHeight: 40
+  CliffSlope: 55
+  RidgeHeight: 30
   RidgeWidth: 110
-  ValleyCut: 9
+  ValleyCut: 5
   Plateaus: 1
   RidgeWarpSize: 25
   RidgeWarpStrength: 18
@@ -59,8 +59,8 @@ MonoBehaviour:
   RiverDepth: 2.5
   RiverWander: 1.4
   SlopeSmoothing: 2
-  SlopeGrass: 15
-  SlopeMixed: 30
+  SlopeGrass: 25
+  SlopeMixed: 38
   SlopeBare: 45
   MaterialNoiseSize: 20
   MaterialNoiseDegrees: 7

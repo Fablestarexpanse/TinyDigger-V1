@@ -47,10 +47,12 @@ namespace TinyDiggers.Terrain
         [Min(10f)] public float FeatureSize = 120f;
 
         [Tooltip("Metres between the lowest and highest of the base field, before the island mask.")]
-        [Min(1f)] public float BaseRelief = 26f;
+        [Min(1f)] public float BaseRelief = 16f;
 
-        [Tooltip("Metres above sea level the base field sits at on average.")]
-        public float BaseHeight = 14f;
+        [Tooltip("Metres above sea level the base field sits at on average. Keep this low: every " +
+            "shore is a bank this tall, relaxed to forty-five degrees, and with a coast as long as " +
+            "an island's that was most of the steep ground on the map.")]
+        public float BaseHeight = 7f;
 
         [Tooltip("Metres across the features of the medium octave, which gives texture between terraces.")]
         [Min(4f)] public float MediumSize = 40f;
@@ -110,17 +112,17 @@ namespace TinyDiggers.Terrain
         [Min(1f)] public float MaxCliffStep = 3f;
 
         [Tooltip("Degrees of smoothed slope at which ground is allowed to stand in a cliff.")]
-        [Range(10f, 80f)] public float CliffSlope = 44f;
+        [Range(10f, 80f)] public float CliffSlope = 55f;
 
         [Header("Ridge and valleys")]
         [Tooltip("Metres the ridge stands at its highest.")]
-        [Min(0f)] public float RidgeHeight = 40f;
+        [Min(0f)] public float RidgeHeight = 30f;
 
         [Tooltip("Cells from the ridge line to where it has faded out.")]
         [Min(4f)] public float RidgeWidth = 110f;
 
         [Tooltip("How deep the rivers cut their valleys. 0 leaves the land as the noise made it.")]
-        [Min(0f)] public float ValleyCut = 9f;
+        [Min(0f)] public float ValleyCut = 5f;
 
         [Tooltip("Benches of flat ground cut into the lee of the ridge.")]
         [Range(0, 2)] public int Plateaus = 1;
@@ -185,10 +187,10 @@ namespace TinyDiggers.Terrain
         [Range(1, 4)] public int SlopeSmoothing = 2;
 
         [Tooltip("Degrees. Below this the ground is grass.")]
-        [Range(0f, 90f)] public float SlopeGrass = 15f;
+        [Range(0f, 90f)] public float SlopeGrass = 25f;
 
         [Tooltip("Degrees. Between the two the ground is grass with rock showing through.")]
-        [Range(0f, 90f)] public float SlopeMixed = 30f;
+        [Range(0f, 90f)] public float SlopeMixed = 38f;
 
         [Tooltip("Degrees. Past this the ground is bare rock.")]
         [Range(0f, 90f)] public float SlopeBare = 45f;

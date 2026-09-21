@@ -5,12 +5,10 @@ this records why.
 
 ---
 
-**NEXT:** Slice 8e (cliffs) is done, green (283/283) and pushed on `main`. Nothing is in flight.
-Open for Ronan's call: with the facets gone the island now reads alpine rather than cosy — the land
-is steeper overall, so the slope thresholds put rock on most of the ridge. The levers are
-`RidgeHeight`, `DetailRelief` and `SlopeGrass`/`SlopeMixed` on the settings asset; this is a tuning
-decision, not a bug. Still deferred: water dynamic effects; still owed: a frame-time check on a
-mid-range machine and the tilt-shift blur toggle.
+**NEXT:** The "more green" tune after 8e is done, green (283/283) and pushed on `main`. Nothing
+is in flight. Peaks now sit near 32 m, under the 8e brief's 35–45 m; if Ronan wants them back, raise
+`RidgeHeight` alone — the grass comes from the low coast, not the low ridge. Still deferred: water
+dynamic effects; still owed: a frame-time check on a mid-range machine and the tilt-shift blur toggle.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1453,3 +1451,34 @@ New: only rock stands in a cliff and none is taller than the limit; a freshly ge
 stable once the slump has settled; a cliff is a wall to the crew; a crew takes a cliffed hill down
 from the bottom. The old "land never steps more than a metre" test now says the rule as it is:
 soil never steps more than a metre, rock never more than a cliff.
+
+## More green — what was making the island rock (2026-09-20)
+
+Ronan asked to lower `RidgeHeight` and loosen `SlopeGrass` so more of the island is green. Measured
+on Continent seed 11 at 512², those two alone moved grass only from 22% to 26% (ridge 40→30 m,
+grass threshold 15°→22°), because 77% of the land sat above 25° of smoothed slope. The slope
+histogram showed the materials doing exactly what they were told; the land was steep everywhere,
+not only on the ridge.
+
+The cause was `BaseHeight`, 14 m: every shore is a bank that tall relaxed down to the sea, and an
+island's coastline is long and ragged, so the banks were most of the steep ground on the map.
+`ValleyCut` 9 added more. `BaseRelief` barely mattered (26→12 changed almost nothing on its own) and
+raising `CliffSlope` to 70 cut cliff steps from 7974 to 619 but rock only from 59% to 52%.
+
+Measured, all with ridge 30, grass 25°, mixed 38°, cliff slope 55°:
+
+| BaseHeight | ValleyCut | BaseRelief | grass | rock | peak | generate |
+|---|---|---|---|---|---|---|
+| 14 | 9 | 26 | 35% | 56% | 38 m | 405 ms |
+| 7 | 9 | 26 | 46% | 37% | 31 m | 383 ms |
+| 7 | 5 | 26 | 51% | 34% | 31 m | 384 ms |
+| **7** | **5** | **16** | **53%** | **33%** | **32 m** | **368 ms** |
+| 5 | 4 | 14 | 56% | 27% | 30 m | 385 ms |
+
+Chosen: the bold row. It is the one with rock still reading as a ridge from the disc view; 5 m base
+begins to flatten the lowlands into one plain. Set in both the code defaults and
+`IslandSettings.asset`: RidgeHeight 40→30, SlopeGrass 15→25, SlopeMixed 30→38, CliffSlope 44→55,
+BaseHeight 14→7, ValleyCut 9→5, BaseRelief 26→16. In the scene the land generates in 435 ms.
+
+Cost: peaks drop to about 32 m, below the 8e target of 35–45. Before/after shots are in
+`Screenshots/Green/`.
