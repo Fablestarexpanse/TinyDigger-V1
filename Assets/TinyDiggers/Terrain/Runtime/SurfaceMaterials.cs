@@ -33,9 +33,10 @@ namespace TinyDiggers.Terrain
         /// <param name="heights">Finished surface heights, metres above sea level.</param>
         /// <param name="inDisc">Which cells are on the map at all.</param>
         /// <param name="toWater">Cells to the nearest water, as a flood distance.</param>
+        /// <param name="reef">Sea cells that are reef, and so rock whatever their depth; null for none.</param>
         /// <param name="islandShift">Where the island's frame starts in the grid; the material noise is sampled in the frame, so it stays with the island.</param>
         public static MaterialId[] Assign(float[] heights, bool[] inDisc, float[] toWater,
-            int width, int depth, TerrainGenSettings settings, Vector2 noiseOffset, Vector2Int islandShift = default)
+            int width, int depth, TerrainGenSettings settings, Vector2 noiseOffset, Vector2Int islandShift = default, bool[] reef = null)
         {
             var smoothed = Smooth(heights, inDisc, width, depth, Mathf.Max(1, settings.SlopeSmoothing));
             var materials = new MaterialId[heights.Length];
@@ -52,8 +53,10 @@ namespace TinyDiggers.Terrain
                     var height = heights[cell];
                     if (height < World.SeaLevel)
                     {
-                        // The seabed: sand in the shallows, silt and rock further out.
-                        materials[cell] = height > settings.ShelfFarDepth ? MaterialTable.Sand : MaterialTable.Rock;
+                        // The seabed: sand in the shallows, silt and rock further out, and a reef is
+                        // rock however shallow it comes.
+                        materials[cell] = reef != null && reef[cell] ? MaterialTable.Rock
+                            : height > settings.ShelfFarDepth ? MaterialTable.Sand : MaterialTable.Rock;
                         continue;
                     }
 

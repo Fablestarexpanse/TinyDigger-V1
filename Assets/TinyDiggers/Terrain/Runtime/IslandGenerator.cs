@@ -253,7 +253,10 @@ namespace TinyDiggers.Terrain
             map.Mark("valleys", stopwatch, ref lastMark);
 
             // --- 6: the coast and the shelf --------------------------------------------------
-            ShapeCoast(heights, land, inDisc, width, depth, radius, centre, settings);
+            var toLandForSea = ShapeCoast(heights, land, inDisc, width, depth, radius, centre, settings);
+            var reef = settings.OpenSeaFloor
+                ? SeabedShaper.Shape(heights, land, inDisc, toLandForSea, width, depth, radius, centre, settings)
+                : null;
 
             map.Mark("coast", stopwatch, ref lastMark);
 
@@ -300,7 +303,7 @@ namespace TinyDiggers.Terrain
             for (var cell = 0; cell < cells; cell++)
                 wet[cell] = inDisc[cell] && heights[cell] < World.SeaLevel + step;
             var toWater = Distance(wet, inDisc, width, depth, from: true);
-            var surfaceMaterials = SurfaceMaterials.Assign(heights, inDisc, toWater, width, depth, settings, materialOffset, shift);
+            var surfaceMaterials = SurfaceMaterials.Assign(heights, inDisc, toWater, width, depth, settings, materialOffset, shift, reef);
 
             // Both sides of a cliff are rock by definition — the relaxation only lets a step stand
             // where the land was already steep — so the faces are promoted to rock rather than the
@@ -745,7 +748,7 @@ namespace TinyDiggers.Terrain
         ///
         /// Both are driven by how far a cell is from the waterline, which is one flood each way.
         /// </summary>
-        static void ShapeCoast(float[] heights, bool[] land, bool[] inDisc, int width, int depth,
+        static float[] ShapeCoast(float[] heights, bool[] land, bool[] inDisc, int width, int depth,
             float radius, Vector2 centre, TerrainGenSettings settings)
         {
             var toWater = Distance(land, inDisc, width, depth, from: false);
@@ -794,6 +797,8 @@ namespace TinyDiggers.Terrain
                     heights[cell] = Mathf.Lerp(sea, settings.ChannelDepth, rim);
                 }
             }
+
+            return toLand;
         }
 
         /// <summary>Cells to the nearest cell whose land flag is <paramref name="from"/>, by flood.</summary>

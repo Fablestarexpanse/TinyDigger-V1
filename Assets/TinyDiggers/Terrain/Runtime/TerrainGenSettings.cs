@@ -233,6 +233,61 @@ namespace TinyDiggers.Terrain
         [Tooltip("Metres of rock kept between the soil and the bedrock wherever there is room.")]
         [Min(0f)] public float RockCover = 4f;
 
+        [Header("Open sea floor (slice 14)")]
+        [Tooltip("Shape the open sea floor, past the island's shelf, with a broad swell, sandbanks, shoals and reefs. Off leaves it flat at ChannelDepth.")]
+        public bool OpenSeaFloor;
+
+        [Tooltip("Metres across the broad rise and fall of the deep floor.")]
+        [Min(4f)] public float SeabedFeatureSize = 220f;
+
+        [Tooltip("Metres the deep floor rises and falls either side of ChannelDepth.")]
+        [Min(0f)] public float SeabedRelief = 5f;
+
+        [Tooltip("Metres long a sandbank runs.")]
+        [Min(4f)] public float SandbankLength = 500f;
+
+        [Tooltip("Metres across a sandbank.")]
+        [Min(2f)] public float SandbankWidth = 170f;
+
+        [Tooltip("Degrees on the map (from +x toward +z) the sandbanks run along.")]
+        [Range(0f, 180f)] public float SandbankAngle = 35f;
+
+        [Tooltip("Share of the open sea where sandbanks form.")]
+        [Range(0f, 1f)] public float SandbankCoverage = 0.35f;
+
+        [Tooltip("Metres (negative: under the sea) a sandbank's crest comes up to.")]
+        public float SandbankTop = -1.5f;
+
+        [Tooltip("Metres across a shoal.")]
+        [Min(4f)] public float ShoalSize = 160f;
+
+        [Tooltip("Share of the open sea that is shoal.")]
+        [Range(0f, 1f)] public float ShoalCoverage = 0.35f;
+
+        [Tooltip("Metres a shoal comes up to.")]
+        public float ShoalTop = -1f;
+
+        [Tooltip("Metres across a reef.")]
+        [Min(2f)] public float ReefSize = 35f;
+
+        [Tooltip("Share of the shallow banks and shoals that is reef.")]
+        [Range(0f, 1f)] public float ReefCoverage = 0.25f;
+
+        [Tooltip("Metres: reefs only grow where the bank or shoal under them is already shallower than this.")]
+        public float ReefBase = -6f;
+
+        [Tooltip("Metres a reef comes up to, give or take a rough metre. Reefs are rock.")]
+        public float ReefTop = -0.6f;
+
+        [Tooltip("Metres of water always left over the floor: nothing out here breaks the surface.")]
+        [Min(0f)] public float SeabedClearDepth = 0.5f;
+
+        [Tooltip("Metres out from the island's shore before the features start, so they never run into its shelf.")]
+        [Min(0f)] public float SeabedShoreGap = 60f;
+
+        [Tooltip("Metres in from the dam face kept deep, for the ships at the terminals.")]
+        [Min(0f)] public float SeabedRimGap = 50f;
+
         [Header("Ore (slice 10)")]
         [Tooltip("Lay ore into the rock at all. Off gives exactly the land and strata without it.")]
         public bool Ores = true;
@@ -276,6 +331,8 @@ namespace TinyDiggers.Terrain
 
             s.FeatureSize *= k; s.MediumSize *= k; s.DetailSize *= k; s.WarpSize *= k; s.WarpStrength *= k;
             s.LandFeatureSize *= k; s.LandWarpStrength *= k; s.LandRadius *= k;
+            s.SeabedFeatureSize *= k; s.SandbankLength *= k; s.SandbankWidth *= k; s.ShoalSize *= k; s.ReefSize *= k;
+            s.SeabedShoreGap *= k; s.SeabedRimGap *= k;
             s.RidgeWidth *= k; s.RidgeWarpSize *= k; s.RidgeWarpStrength *= k; s.PlateauRadius *= k;
             s.CoastNoiseSize *= k; s.CoastNoiseCells *= k; s.MountainRadius *= k; s.ValleyRadius *= k;
             s.MaterialNoiseSize *= k; s.SandMaxDistance *= k; s.RiverWander *= k;

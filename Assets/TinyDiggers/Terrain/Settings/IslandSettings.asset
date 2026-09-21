@@ -76,6 +76,24 @@ MonoBehaviour:
   SandBand: 6
   GraniteShare: 0.55
   RockCover: 4
+  OpenSeaFloor: 1
+  SeabedFeatureSize: 220
+  SeabedRelief: 5
+  SandbankLength: 500
+  SandbankWidth: 170
+  SandbankAngle: 35
+  SandbankCoverage: 0.35
+  SandbankTop: -1.5
+  ShoalSize: 160
+  ShoalCoverage: 0.35
+  ShoalTop: -1
+  ReefSize: 35
+  ReefCoverage: 0.25
+  ReefBase: -6
+  ReefTop: -0.6
+  SeabedClearDepth: 0.5
+  SeabedShoreGap: 60
+  SeabedRimGap: 50
   Ores: 1
   CoalSeamHeight: -6
   LimestoneBelowHeight: 14

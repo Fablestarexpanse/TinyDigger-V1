@@ -5,11 +5,11 @@ this records why.
 
 ---
 
-**NEXT:** Slice 13 made the disc 3104² cells (1552 m) with the same island in open sea; waiting on Ronan's look. PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
+**NEXT:** Slice 14 shaped the open sea floor; next is Slice 15, a faster load (start-up about 10.5 s), then Slice 16, a terrain LOD. PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
 swell, spillway overflows (a safety valve at sea level), game logic reading it and a Basic Zone sample; waiting on Ronan's look. Open:
 - start-up is about 10 s at 3104² (generate 7.0 s, mesh 2.7 s);
 - the frame is 10.5 ms median, with 15 M terrain triangles, mostly flat seabed (a seabed LOD is the lever);
-- the open seabed is a flat 15 m floor (shoals and banks would give it shape).
+- the water stops 4 m short of the dam's inner face (the gap between disc edge and dam);
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -2344,3 +2344,33 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   mesh (15 M triangles, mostly flat seabed) is the obvious thing to thin if it gets tight.
 - **Memory:** managed heap about 2.7 GB (the layer store is 3104² × 16 × 8 B = 1.23 GB); the
   machine has 64 GB.
+
+## Slice 14: a shaped open sea floor (2026-09-21)
+- **Asked for:** shoals, sandbanks or reefs, so the open sea isn't one flat 15 m floor, giving
+  reclaiming and routes more to work with.
+- **`SeabedShaper`** (on with `TerrainGenSettings.OpenSeaFloor`; the scene's asset has it on)
+  shapes the sea past the island's shelf:
+  - a broad ±5 m rise and fall of the deep floor (220 m features);
+  - sandbanks: the upper part of a folded noise stretched along 35°, 500 × 170 m, the crests to
+    −1.5 m. How high a bank rises varies along its length;
+  - shoals: broad swells following a noise all the way up, 160 m, crests to −1 m;
+  - reefs: rough rock crowns, only on banks and shoals already shallower than 6 m, to about
+    −0.6 m. Their cells are rock (`SurfaceMaterials` takes a reef mask).
+- **Rules the tests hold it to** (`SeabedTests`, 4):
+  - nothing comes above −SeabedClearDepth (0.5 m), so the sea stays open;
+  - features fade in 60 m out from the shore and fade out 50 m in from the dam, so the island's
+    shelf is as it was and the terminals keep deep water;
+  - the pass has its own random stream: turning it on leaves every island cell as it was.
+- **Two failed looks first:**
+  - Hard thresholds on the noise gave sheer-sided rock pillars (reefs) and knife-edge banks.
+  - A wide soft threshold never reached the top of the Perlin range, so there were no shallows
+    at all.
+  - Now each feature's rise follows its noise from the coverage level up to the top of the
+    noise's range, and a bank or shoal is sized so its sides stay under about 20°.
+- **Measured on the 3104² map** (open ring, every 4th cell): 0–2 m 6.3%, 2–4 m 4.0%,
+  4–12 m 18.4%, over 12 m 71.3%; shallow reef rock 2.4%. Generation went from 7.0 to about
+  7.6 s.
+- **Seen, not from this slice:** a thin strip along the dam's inner face where the water stops
+  short. It is the 4 m between the disc's edge and the dam face (`DamSettings.InnerOffset`).
+- `WaterTests.BakingAFullMapIsCheap` (a 60 ms timing check) failed once at 63 ms on a busy
+  editor and passed on the rerun. It is flaky.
