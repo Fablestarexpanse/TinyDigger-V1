@@ -2675,3 +2675,65 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   clicked and held there (`Screenshots/Crew/rts_move_1.png`). The live mouse (drag and
   right-click) is wired, but only the code under it was driven in this check.
 - **Tests:** 401/401.
+
+## Natural terrain: the baseline (2026-09-21)
+- **Ronan:** the land "feels like swiss cheese". He wants a more natural landscape:
+  - smooth hills and flat sections;
+  - beaches that are not cliffs;
+  - some cliffs, and mountains.
+- **Measured** on the TerrainSandbox island (seed 11, Continent, 3104² cells of 0.5 m, 0.24 km² of
+  land, highest point 34.5 m). Slope is taken over 2 m. Shots are in
+  `Screenshots/Terrain/Baseline/`.
+
+  | Measure (land only) | Value |
+  |---|---|
+  | Flat, under 3° | 6% |
+  | 3–15° | 14% |
+  | 15–35° | 34% |
+  | Over 35° | 46% |
+  | Enclosed pits (all 8 neighbours higher) | 4,089 (4.3 per 1,000 land cells), 235 of them 1 m deep or more |
+  | Cells stepping more than 1 m to a neighbour | 8.1% |
+  | Coast cells stepping more than 0.5 m to a neighbour | 92% |
+
+- **Why it looks like this:**
+  - The same noise stack runs over the whole island: 16 m over 120 m features with four fBm
+    octaves, plus 1.5 m every 40 m and 1.1 m every 8 m. So nowhere is plain, and every slope
+    is crumpled.
+  - Nothing fills hollows, so the lumps and the valley cuts leave pits.
+  - The land starts about 7 m up at the waterline, so the coast is mostly a step.
+- **Rulings** (AskUserQuestion):
+  - **Land mix: random with every generation.** Ronan's words: "each generation should be
+    random". The seed draws the mix of plains, hills and mountains, instead of one fixed split.
+  - **Erosion: yes, at 2 m**, then scaled up to the grid.
+  - **Phase by phase:** preview tool and scorecard, then land types, then erosion and pit filling,
+    then coasts, then surfaces. Each phase is shown with shots and numbers before the next.
+
+### Natural terrain, phase 1: the preview and the scorecard (2026-09-21)
+- **`TerrainScorecard.Measure(grid)`** (Terrain runtime, tested) measures the land:
+  - area and highest point;
+  - slope bands over 1 m either side: under 3°, 3–15°, 15–35°, over 35°;
+  - pits (lower than all 8 neighbours), and deep pits (1 m or more);
+  - cells stepping more than 1 m;
+  - coast cells, and the beach share of them: at most 1 m above the sea and at most one step
+    to any land neighbour.
+- **`TinyDiggers/Terrain Preview`** (Editor, `TerrainPreviewMenu.cs`) builds the scene's grid for
+  the scene seed plus seeds 23, 37 and 58, the way TerrainView does (generate, then settle the
+  slump). For each it writes a shaded map, a slope map with pits in magenta, and the scorecard to
+  `Screenshots/Terrain/Preview/`, plus 2×2 contact sheets. About 5.5–6 s a seed.
+- **Baseline, all four seeds:**
+
+  | Measure | Range |
+  |---|---|
+  | Flat | 5–7% |
+  | Gentle | 12–15% |
+  | Moderate | 33–35% |
+  | Steep | 43–49% |
+  | Pits | 4,089–4,427 (4.1–4.9 per 1,000 land cells) |
+  | Cliff steps | 6.6–8.1% |
+  | Beach coast | 20–25% |
+
+  The slope maps are orange and red almost everywhere, lowlands included. So the problem is the
+  generator, not seed 11.
+- **Unity quirk:** a new script written from outside while the editor was busy was imported as a
+  MonoScript, but left out of its assembly's source list. Neither Refresh, nor a forced
+  reimport, nor a clean compile added it. Renaming it with `AssetDatabase.MoveAsset` did.

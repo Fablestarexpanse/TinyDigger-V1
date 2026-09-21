@@ -1,0 +1,4 @@
+baseline seed 11 (Continent), 5.97 s: land 0.240 km², highest 34.5 m; slope flat 6 %, gentle 14 %, moderate 34 %, steep 46 %; pits 4089 (4.3/1000, 235 ≥1 m); cliff steps 7.9 %; coast 18356 cells, beach 25 %
+baseline seed 23 (Continent), 5.50 s: land 0.242 km², highest 34.0 m; slope flat 6 %, gentle 13 %, moderate 33 %, steep 47 %; pits 4247 (4.4/1000, 268 ≥1 m); cliff steps 7.8 %; coast 15583 cells, beach 20 %
+baseline seed 37 (Continent), 5.54 s: land 0.224 km², highest 33.5 m; slope flat 5 %, gentle 12 %, moderate 33 %, steep 49 %; pits 4427 (4.9/1000, 268 ≥1 m); cliff steps 8.1 %; coast 19306 cells, beach 24 %
+baseline seed 58 (Continent), 5.76 s: land 0.267 km², highest 30.5 m; slope flat 7 %, gentle 15 %, moderate 35 %, steep 43 %; pits 4406 (4.1/1000, 384 ≥1 m); cliff steps 6.6 %; coast 16069 cells, beach 20 %
