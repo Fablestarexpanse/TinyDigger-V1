@@ -5,10 +5,10 @@ this records why.
 
 ---
 
-**NEXT:** Terrain look pass (loop 6) is done and pushed; 296/296 tests pass. Vegetation is off (the
-Grass object is disabled in the scene). Waiting on Ronan's look at `Screenshots/Look/l6_*`. Open:
-blocky per-cell rock outlines, warm tan beach bands, the rock faces show little texture at
-distance, and too much rock on the central range compared with the references.
+**NEXT:** Rock edges are smooth and pushed; 297/297 tests pass. Waiting on Ronan's look at
+`Screenshots/Look/e2_*`. Open: vertical streaks on steep cut faces (triplanar cut variant), tan
+beach bands, and too much rock on the central range. Timing tests (land 500 ms, water bake 60 ms)
+flake when Blender and ComfyUI are loading the machine; a re-run passed.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1660,3 +1660,18 @@ every custom lit shader copies URP Lit's light keyword pragmas.
 **Workflow gotcha.** Running "Generate Terrain Textures" inside a RunCommand timed out the MCP, and
 Unity restarted, losing the unsaved changes. Now: save settings in one command, trigger the
 generator through ManageMenuItem, and watch the log for "Terrain textures: wrote".
+
+## Smooth rock edges (2026-09-21)
+
+**Cell map channels.** B is now a tent-weighted 5×5 share of stone around each cell, recomputed
+over the 5×5 around any changed cell. A is 255 when the cell's top material is stone.
+
+**Shader.** The terrain shader blends stone cells and soil cells separately across the four
+neighbours, then mixes the two along the 0.5 contour of the bilinear-filtered stone field, pushed
+about by two octaves of noise, with a ±0.12 soft band. Before this, any grass-to-rock edge was drawn
+as the one-metre cell staircase.
+
+**Dirt colour.** Dirt and loose dirt are now a dry-grass olive, so the dirt band the slope rules
+put between grass and rock reads as sparse turf instead of a khaki outline.
+
+**Test.** One new cell-map test: the stone flag, plus a stone field that falls off with distance.

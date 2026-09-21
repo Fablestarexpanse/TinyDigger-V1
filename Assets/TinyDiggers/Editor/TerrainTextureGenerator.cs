@@ -347,12 +347,12 @@ namespace TinyDiggers.EditorTools
                     Main = new Pattern
                     {
                         File = "dirt",
-                        // Dark olive earth: under the diorama sun a pale dirt read as cream bands
-                        // across every hillside (Look loop 2).
-                        Base = new Color(0.40f, 0.37f, 0.22f),
+                        // Dry-grass olive: the dirt band between grass and rock reads as sparse
+                        // turf, not as a khaki outline round every outcrop (rock-edge pass).
+                        Base = new Color(0.36f, 0.42f, 0.14f),
                         // Stones a shade lighter than the earth, not pale: they cover much of the
                         // tile, and pale ones made dirt average a cream #A8A293 (Look loop 5).
-                        Fleck = new Color(0.46f, 0.44f, 0.34f),
+                        Fleck = new Color(0.44f, 0.46f, 0.22f),
                         Height = (x, y) => 0.55f * Fbm(x, y, Feature(6f), 3)
                                          + 0.3f * Fbm(x, y, Feature(45f), 2)
                                          + 0.15f * (1f - Worley(x, y, Feature(26f))),
@@ -369,8 +369,8 @@ namespace TinyDiggers.EditorTools
                     Main = new Pattern
                     {
                         File = "dirt_loose",
-                        Base = new Color(0.44f, 0.39f, 0.24f),
-                        Fleck = new Color(0.48f, 0.45f, 0.35f),
+                        Base = new Color(0.40f, 0.43f, 0.17f),
+                        Fleck = new Color(0.46f, 0.47f, 0.24f),
                         Height = (x, y) => 0.62f * (1f - Worley(x, y, Feature(40f)))
                                          + 0.25f * Fbm(x, y, Feature(12f), 3)
                                          + 0.13f * Fbm(x, y, Feature(80f), 2),

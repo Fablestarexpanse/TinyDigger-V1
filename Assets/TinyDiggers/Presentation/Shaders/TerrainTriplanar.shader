@@ -236,21 +236,29 @@ Shader "TinyDiggers/Terrain Triplanar"
                 TriplanarUV albedoUV = MakeTriplanarUV(positionWS, _AlbedoRepeat);
                 TriplanarUV detailUV = MakeTriplanarUV(positionWS, _DetailRepeat);
 
-                half3 albedo = 0;
-                half3 normalTS = 0;
-                half smoothness = 0;
+                // Stone and everything else are blended separately and then mixed along a smooth
+                // line: the 0.5 contour of the blurred stone field (cell map blue), bent by noise.
+                // Blending the four cells directly drew every grass-to-rock edge as the cell
+                // staircase.
+                half3 albedoSoil = 0, albedoStone = 0;
+                half3 normalSoil = 0, normalStone = 0;
+                half smoothSoil = 0, smoothStone = 0;
+                float weightSoil = 0, weightStone = 0;
+                float stoneField = 0;
                 float weights[4] = { w00, w10, w01, w11 };
                 float2 offsets[4] = { float2(0, 0), float2(1, 0), float2(0, 1), float2(1, 1) };
+                // Plain bilinear weights for the field, so its contour is smooth, not stepped.
+                float2 fs = f;
+                float fieldWeights[4] = { (1 - fs.x) * (1 - fs.y), fs.x * (1 - fs.y), (1 - fs.x) * fs.y, fs.x * fs.y };
 
                 [unroll]
                 for (int i = 0; i < 4; i++)
                 {
-                    float weight = weights[i];
-                    if (weight < 0.004)
-                        continue;
-
                     float2 lookup = (baseCell + offsets[i] + 0.5) * _MapSize.zw;
                     half4 ids = SAMPLE_TEXTURE2D_LOD(_CellMap, sampler_CellMap, lookup, 0);
+                    stoneField += ids.b * fieldWeights[i];
+
+                    float weight = weights[i] + 0.02;
                     float topSlice = floor(ids.r * 255.0 + 0.5);
                     float exposedSlice = floor(ids.g * 255.0 + 0.5);
 
@@ -261,11 +269,41 @@ Shader "TinyDiggers/Terrain Triplanar"
 
                     half4 albedoSample = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), albedoUV, axisWeights, slice);
                     half4 normalSample = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Normals, sampler_Normals), detailUV, axisWeights, slice);
+                    half3 n = normalSample.rgb * 2.0 - 1.0;
+                    half smooth = _MaterialParams[(int)slice].x;
 
-                    albedo += albedoSample.rgb * weight;
-                    normalTS += (normalSample.rgb * 2.0 - 1.0) * weight;
-                    smoothness += _MaterialParams[(int)slice].x * weight;
+                    if (ids.a > 0.5)
+                    {
+                        albedoStone += albedoSample.rgb * weight;
+                        normalStone += n * weight;
+                        smoothStone += smooth * weight;
+                        weightStone += weight;
+                    }
+                    else
+                    {
+                        albedoSoil += albedoSample.rgb * weight;
+                        normalSoil += n * weight;
+                        smoothSoil += smooth * weight;
+                        weightSoil += weight;
+                    }
                 }
+
+                // Where the edge falls: the smooth field, pushed about by two octaves of noise so
+                // it wanders like a real outcrop edge, with a soft band either side.
+                float edgeNoise = ValueNoise(positionWS.xz * 0.45) * 0.65 + ValueNoise(positionWS.xz * 1.7) * 0.35;
+                float stoneAmount = smoothstep(0.38, 0.62, stoneField + (edgeNoise - 0.5) * 0.35);
+                if (weightStone <= 0.0) stoneAmount = 0.0;
+                if (weightSoil <= 0.0) stoneAmount = 1.0;
+                albedoSoil /= max(weightSoil, 1e-4);
+                normalSoil /= max(weightSoil, 1e-4);
+                smoothSoil /= max(weightSoil, 1e-4);
+                albedoStone /= max(weightStone, 1e-4);
+                normalStone /= max(weightStone, 1e-4);
+                smoothStone /= max(weightStone, 1e-4);
+
+                half3 albedo = lerp(albedoSoil, albedoStone, stoneAmount);
+                half3 normalTS = lerp(normalSoil, normalStone, stoneAmount);
+                half smoothness = lerp(smoothSoil, smoothStone, stoneAmount);
 
                 // One slow mottle so a big flat does not read as a single colour.
                 float mottle = ValueNoise(positionWS.xz / _MottleRepeat) * 2.0 - 1.0;

@@ -6,7 +6,10 @@ namespace TinyDiggers.Presentation
 {
     /// <summary>
     /// What each cell is made of, as a texture the shader can read: one texel per cell, red the
-    /// material on top and green the material a cut through it would expose. The shader looks the
+    /// material on top and green the material a cut through it would expose. Blue is how much
+    /// stone there is around the cell (a tent-weighted 5 x 5 average of the stone flags) and alpha
+    /// is whether the cell itself is stone; the shader draws the rock edge along the 0.5 contour
+    /// of the blue field, so it follows a smooth line instead of the cell staircase. The shader looks the
     /// material up at the fragment rather than the vertex, which is what lets material edges be
     /// blended across half a cell instead of following the triangles.
     ///
@@ -38,6 +41,9 @@ namespace TinyDiggers.Presentation
             for (var z = 0; z < grid.Height; z++)
                 for (var x = 0; x < grid.Width; x++)
                     WriteCell(x, z);
+            for (var z = 0; z < grid.Height; z++)
+                for (var x = 0; x < grid.Width; x++)
+                    WriteStoneField(x, z);
             Upload();
             _grid.CellChanged += OnCellChanged;
         }
@@ -58,7 +64,34 @@ namespace TinyDiggers.Presentation
         void OnCellChanged(int x, int z)
         {
             WriteCell(x, z);
+            for (var dz = -Reach; dz <= Reach; dz++)
+                for (var dx = -Reach; dx <= Reach; dx++)
+                    if (_grid.InBounds(x + dx, z + dz))
+                        WriteStoneField(x + dx, z + dz);
             _dirty = true;
+        }
+
+        const int Reach = 2;
+
+        /// <summary>The blue channel: tent-weighted share of stone cells within <see cref="Reach"/>.</summary>
+        void WriteStoneField(int x, int z)
+        {
+            var total = 0f;
+            var stone = 0f;
+            for (var dz = -Reach; dz <= Reach; dz++)
+            {
+                for (var dx = -Reach; dx <= Reach; dx++)
+                {
+                    var nx = Mathf.Clamp(x + dx, 0, _grid.Width - 1);
+                    var nz = Mathf.Clamp(z + dz, 0, _grid.Height - 1);
+                    var weight = (Reach + 1 - Mathf.Abs(dx)) * (Reach + 1 - Mathf.Abs(dz));
+                    total += weight;
+                    if (_pixels[(nz * _grid.Width + nx) * 4 + 3] == 255 && !_grid.IsVoid(nx, nz))
+                        stone += weight;
+                }
+            }
+
+            _pixels[(z * _grid.Width + x) * 4 + 2] = (byte)Mathf.RoundToInt(stone / total * 255f);
         }
 
         void WriteCell(int x, int z)
@@ -68,16 +101,14 @@ namespace TinyDiggers.Presentation
             {
                 _pixels[at] = 0;
                 _pixels[at + 1] = 0;
-                _pixels[at + 2] = 0;
-                _pixels[at + 3] = 255;
+                _pixels[at + 3] = 0;
                 return;
             }
 
-            var top = _grid.GetTopMaterial(x, z).Value;
-            _pixels[at] = top;
-            _pixels[at + 1] = Exposed(x, z, top);
-            _pixels[at + 2] = 0;
-            _pixels[at + 3] = 255;
+            var top = _grid.GetTopMaterial(x, z);
+            _pixels[at] = top.Value;
+            _pixels[at + 1] = Exposed(x, z, top.Value);
+            _pixels[at + 3] = MaterialTable.IsStone(top) ? (byte)255 : (byte)0;
         }
 
         /// <summary>

@@ -93,5 +93,26 @@ namespace TinyDiggers.Presentation.Tests
             _map.Flush();
             Assert.That(At(0, 0), Is.EqualTo((0, 0)));
         }
+
+        [Test]
+        public void BlueIsHowMuchStoneIsAroundAndAlphaIsWhetherTheCellIsStone()
+        {
+            Assert.That(_map.Texture.GetPixel(3, 2).b, Is.EqualTo(0f).Within(1e-3f), "an all-grass map has no stone");
+            Assert.That(_map.Texture.GetPixel(3, 2).a, Is.EqualTo(0f).Within(1e-3f));
+
+            // Strip the turf off one cell: it is stone now, and the stone field rises round it,
+            // most at the cell and less the further away, and not at all three cells off.
+            _grid.SetColumn(3, 2, new[] { new Layer(MaterialTable.Rock, 3f) });
+            _map.Flush();
+
+            Assert.That(_map.Texture.GetPixel(3, 2).a, Is.EqualTo(1f).Within(1e-3f));
+            var at = _map.Texture.GetPixel(3, 2).b;
+            var near = _map.Texture.GetPixel(4, 2).b;
+            var far = _map.Texture.GetPixel(5, 2).b;
+            Assert.That(at, Is.GreaterThan(near));
+            Assert.That(near, Is.GreaterThan(far));
+            Assert.That(far, Is.GreaterThan(0f));
+            Assert.That(_map.Texture.GetPixel(6, 2).b, Is.EqualTo(0f).Within(1e-3f));
+        }
     }
 }
