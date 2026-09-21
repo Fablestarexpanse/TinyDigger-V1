@@ -2525,3 +2525,26 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   - The arms are rather big.
   - There is no hover glow mesh yet.
   - `CrewView` still draws primitive crew; putting the prefab in is the next step.
+
+### The crew robot fixed: back lens, arms, glow (2026-09-21)
+- **Ronan:** "Fix robot first the band isn't important". The orange band stays.
+- **Back lens.** Trellis2 painted a second lens on the back.
+  - `cap_back_lens` finds the densest group of teal faces facing away from the front.
+  - Its cone is the 95th-percentile angle plus 6°, which comes to 28.6°. A first try used the
+    widest teal face and painted 4,213 faces; stray flecks had widened the cone.
+  - The socket's vertices are pushed out onto the sphere, and 1,312 faces are painted the
+    median shell colour of the ring just outside the cone.
+- **Arms.** Each arm is its own mesh piece in Trellis2's output (557 and 470 vertices). The rig
+  had tied only the part past 1.12 r to the arm, which is about half. The shoulder half stayed
+  on Body, so the arm would tear at the socket when it swung. Arms are now whole pieces; the
+  distance rule is kept as a fallback.
+- **Arm size.** Kept as it is: the concept's arms are about this size.
+- **Glow.**
+  - `CrewGlow` is a 24-segment disc with a radius of 0.42 r, facing down, riding Body, 3 mm under
+    the lowest point of the mesh near the axis.
+  - That lowest point is Trellis2's dark hover pad, which hangs about 2.4 cm below the sphere. A
+    disc under the sphere itself was hidden inside the pad.
+  - In Unity it uses `crew_glow.mat`: URP Particles/Unlit, additive, no culling, no shadow,
+    with a 64² smooth radial falloff texture `crew_glow.png`.
+- **Open:** the glow reads whitish-yellow, not the concept's warm yellow, because the HDR colour
+  saturates. It is a material tweak.

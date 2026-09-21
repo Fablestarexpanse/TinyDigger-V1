@@ -7,11 +7,13 @@ TinyDiggers crew unit: the Trellis2 ball robot, cleaned, rigged and animated in 
 
 Stages:
     load      Trellis2 GLB, scaled so the robot is `height` metres tall, tidied, decimated to budget
-    parts     the ball fitted as a sphere; the lens found by its cyan texture (it gives the front);
-              the arms are what sticks out past the ball, one each side
+    parts     the ball fitted as a sphere; the lens found by its teal texture (it gives the front);
+              the arms are the mesh pieces reaching past the ball, one each side
+    cap       the lens Trellis2 copied onto the back is pushed flush and painted shell colour
     place     front turned to +Y (which Unity reads as +Z forward), the ball `hover` metres up
     rig       Root on the ground, Body at the ball's centre, Arm.L and Arm.R at the shoulders;
               every vertex rigid to one bone
+    glow      a downward disc under the belly pad, riding Body, for the hover glow
     animate   Idle, Move, Work and Carry: looping clips at 30 fps
     export    FBX with the armature and every clip, the albedo, and the .blend as the source
               (outside Assets, in Art/Blender~, or Unity imports it as a second model)
@@ -140,15 +142,123 @@ def find_parts(obj):
     front /= np.linalg.norm(front)
     side = np.cross([0.0, 0.0, 1.0], front)
 
-    # The arms: well past the ball's surface, not the lens, split by side.
-    out = (d > radius * 1.12) & ~lens
+    # The arms: Trellis2 makes each one its own piece of mesh, reaching well past the ball on one
+    # side. Taking whole pieces keeps the shoulder end with its arm, so it cannot tear off in a
+    # swing. If the arms are not separate, fall back to "well past the ball's surface".
     along = offset @ side
-    arm_l = out & (along > 0)
-    arm_r = out & (along < 0)
+    labels = islands(obj.data)
+    arm_l = np.zeros(len(co), dtype=bool)
+    arm_r = np.zeros(len(co), dtype=bool)
+    for label in np.unique(labels):
+        piece = labels == label
+        reach = d[piece].max() / radius
+        lean = along[piece].mean() / radius
+        if reach > 1.25 and abs(lean) > 0.5:
+            (arm_l if lean > 0 else arm_r)[piece] = True
+    arm_source = "pieces"
+    if not arm_l.any() or not arm_r.any():
+        out = (d > radius * 1.12) & ~lens
+        arm_l = out & (along > 0)
+        arm_r = out & (along < 0)
+        arm_source = "distance"
     return {
         "centre": centre, "radius": float(radius), "front": front, "side": side,
-        "lens": lens, "arm_l": arm_l, "arm_r": arm_r, "d": d,
+        "lens": lens, "arm_l": arm_l, "arm_r": arm_r, "d": d, "arm_source": arm_source,
     }
+
+
+def islands(mesh):
+    """A label per vertex: vertices joined by edges share one."""
+    parent = np.arange(len(mesh.vertices))
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for edge in mesh.edges:
+        a, b = root(edge.vertices[0]), root(edge.vertices[1])
+        if a != b:
+            parent[a] = b
+    return np.array([root(i) for i in range(len(parent))])
+
+
+def paint_faces(image, mesh, faces, colour):
+    """Fills the UV area of `faces` in `image` with `colour`, a little past the edges so no seam."""
+    w, h = image.size
+    pixels = np.empty(w * h * 4, dtype=np.float32)
+    image.pixels.foreach_get(pixels)
+    pixels = pixels.reshape(h, w, 4)
+    uv = mesh.uv_layers.active.data
+    for index in faces:
+        corners = np.array([uv[i].uv for i in mesh.polygons[index].loop_indices]) * (w, h)
+        for k in range(1, len(corners) - 1):  # fan into triangles
+            tri = corners[[0, k, k + 1]]
+            lo = np.floor(tri.min(axis=0)).astype(int) - 1
+            hi = np.ceil(tri.max(axis=0)).astype(int) + 1
+            xs, ys = np.meshgrid(np.arange(max(lo[0], 0), min(hi[0], w - 1) + 1),
+                                 np.arange(max(lo[1], 0), min(hi[1], h - 1) + 1))
+            p = np.stack([xs.ravel() + 0.5, ys.ravel() + 0.5], axis=1)
+            a, b, c = tri
+            m = np.array([b - a, c - a]).T
+            if abs(np.linalg.det(m)) < 1e-9:
+                continue
+            s, t = np.linalg.solve(m, (p - a).T)
+            inside = (s > -0.05) & (t > -0.05) & (s + t < 1.05)
+            pixels[ys.ravel()[inside], xs.ravel()[inside], :3] = colour
+    image.pixels.foreach_set(pixels.ravel())
+    image.update()
+
+
+def cap_back_lens(obj, parts):
+    """
+    Trellis2 paints a copy of the lens on the back it never saw. Pushes that socket out flush
+    with the ball and paints it the colour of the shell around it. Returns how many faces it
+    painted (0 if there is no back lens).
+    """
+    mesh = obj.data
+    image = td.base_colour_image(obj)
+    if image is None or not mesh.uv_layers:
+        return 0
+    centre, radius = parts["centre"], parts["radius"]
+    rgb = face_colours(obj)
+    face_centre = np.array([f.center for f in mesh.polygons])
+    face_area = np.array([f.area for f in mesh.polygons])
+    heading = face_centre - centre
+    heading /= np.maximum(np.linalg.norm(heading, axis=1), 1e-9)[:, None]
+    cyan = (rgb[:, 1] - rgb[:, 0] > 0.08) & (rgb[:, 2] - rgb[:, 0] > 0.05)
+    back = cyan & (heading @ parts["front"] < -0.3)
+    if face_area[back].sum() < 0.005 * 4.0 * math.pi * radius * radius:
+        return 0
+    # Only the densest group of teal faces is the lens; stray teal flecks must not widen the cap.
+    candidates = np.flatnonzero(back)
+    close = heading[candidates] @ heading[candidates].T > math.cos(math.radians(30))
+    seed = candidates[np.argmax(close @ face_area[candidates])]
+    back &= heading @ heading[seed] > math.cos(math.radians(40))
+    back_dir = (heading[back] * face_area[back, None]).sum(axis=0)
+    back_dir /= np.linalg.norm(back_dir)
+    angle = np.degrees(np.arccos(np.clip(heading @ back_dir, -1.0, 1.0)))
+    cone = float(np.percentile(angle[back], 95)) + 6.0
+    parts["back_lens_cone_deg"] = round(cone, 1)
+
+    # The shell colour: the plain light faces in a ring just outside the cone.
+    ring = (angle > cone + 5) & (angle < cone + 25) & ~cyan & (rgb.mean(axis=1) > 0.5)
+    shell = np.median(rgb[ring], axis=0) if ring.any() else np.array([0.85, 0.82, 0.74])
+
+    co = np.array([v.co for v in mesh.vertices])
+    offset = co - centre
+    dist = np.linalg.norm(offset, axis=1)
+    towards = offset / np.maximum(dist, 1e-9)[:, None]
+    vertex_angle = np.degrees(np.arccos(np.clip(towards @ back_dir, -1.0, 1.0)))
+    sunk = (vertex_angle < cone) & (dist < radius) & ~parts["arm_l"] & ~parts["arm_r"]
+    co[sunk] = centre + towards[sunk] * radius
+    mesh.vertices.foreach_set("co", co.ravel())
+    mesh.update()
+
+    painted = np.flatnonzero(angle < cone)
+    paint_faces(image, mesh, painted, shell)
+    return int(len(painted))
 
 
 def orient_outward(obj, parts):
@@ -361,7 +471,44 @@ def animate(rig):
 
 # --- export ------------------------------------------------------------------------------------
 
-def finish(obj, rig, out, blend):
+def add_glow(obj, rig, parts, segments=24):
+    """
+    The warm hover glow under the belly (the concept's): a flat disc facing down, riding the
+    Body bone, just under the lowest point of the mesh near the axis. That point is Trellis2's
+    dark hover pad, which hangs a little below the sphere. UVs run 0..1 across the disc, so the
+    engine can put a soft radial falloff on it. It is its own object, so it gets its own
+    glowing material.
+    """
+    radius = parts["radius"] * 0.42
+    co = np.array([v.co for v in obj.data.vertices])
+    near_axis = np.hypot(co[:, 0], co[:, 1]) < radius
+    z = float(co[near_axis, 2].min()) - 0.003
+    verts = [(0.0, 0.0, z)] + [(radius * math.cos(2 * math.pi * i / segments),
+                                 radius * math.sin(2 * math.pi * i / segments), z) for i in range(segments)]
+    faces = [(0, 1 + (i + 1) % segments, 1 + i) for i in range(segments)]  # wound to face down
+    mesh = bpy.data.meshes.new("CrewGlow")
+    mesh.from_pydata(verts, [], faces)
+    layer = mesh.uv_layers.new(name="UVMap")
+    for loop in mesh.loops:
+        x, y, _ = verts[loop.vertex_index]
+        layer.data[loop.index].uv = (0.5 + x / (2 * radius), 0.5 + y / (2 * radius))
+    mesh.update()
+    glow = bpy.data.objects.new("CrewGlow", mesh)
+    bpy.context.scene.collection.objects.link(glow)
+    material = bpy.data.materials.new("CrewGlow")
+    material.use_nodes = True
+    principled = next(n for n in material.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+    principled.inputs["Base Color"].default_value = (1.0, 0.85, 0.5, 1.0)
+    principled.inputs["Emission Color"].default_value = (1.0, 0.85, 0.5, 1.0)
+    principled.inputs["Emission Strength"].default_value = 3.0
+    mesh.materials.append(material)
+    glow.vertex_groups.new(name="Body").add(list(range(len(verts))), 1.0, "REPLACE")
+    glow.modifiers.new("Armature", "ARMATURE").object = rig
+    glow.parent = rig
+    return glow
+
+
+def finish(obj, rig, out, blend, glow=None):
     name = os.path.basename(out)
     obj.name = name
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -378,7 +525,7 @@ def finish(obj, rig, out, blend):
     for polygon in obj.data.polygons:
         polygon.use_smooth = True
 
-    td.select_only(rig, obj)
+    td.select_only(rig, obj, *([glow] if glow else []))
     td.run(bpy.ops.export_scene.fbx, filepath=out + ".fbx", use_selection=True,
            object_types={"ARMATURE", "MESH"}, apply_scale_options="FBX_SCALE_UNITS",
            # No bake_space_transform: Blender marks it broken with armatures and it flattened the
@@ -451,6 +598,9 @@ def main():
     parts = find_parts(obj)
     report["parts"] = {"radius_m": round(parts["radius"], 3), "lens_vertices": int(parts["lens"].sum()),
                        "arm_l_vertices": int(parts["arm_l"].sum()), "arm_r_vertices": int(parts["arm_r"].sum())}
+    report["arm_source"] = parts["arm_source"]
+    report["back_lens_faces_painted"] = cap_back_lens(obj, parts)
+    report["back_lens_cone_deg"] = parts.get("back_lens_cone_deg")
     report["faces_flipped"] = orient_outward(obj, parts)
     place(obj, parts, a.hover)
     co = np.array([v.co for v in obj.data.vertices])
@@ -458,8 +608,9 @@ def main():
     report["arm_l_offset"] = [round(float(x), 2) for x in (co[parts["arm_l"]].mean(axis=0) - co.mean(axis=0))]
     rig, weights = build_rig(obj, parts, a.hover)
     report["weights"] = weights
+    glow = add_glow(obj, rig, parts)
     report["clips"] = animate(rig)
-    finish(obj, rig, a.out, a.blend)
+    finish(obj, rig, a.out, a.blend, glow)
     if a.shots:
         report["sheet"] = shots(rig, a.shots)
     print("TD_CREW " + json.dumps(report))
