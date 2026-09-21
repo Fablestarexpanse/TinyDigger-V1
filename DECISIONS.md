@@ -1874,3 +1874,22 @@ Found along the way:
    gantry (the reference photos) so the gates stand clear.
 2. Bevelling the zero-thickness gate skins and the thin rails threw long spikes across the scene.
    A piece is now a bevelled body plus trim added after the bevel.
+
+**Kit restyled: sci-fi brutalism** (Ronan: "can you give it more of a scifi brutalism look").
+The first kit was a plain civil-engineering dam: railings, radial gates and a smooth batter.
+Now:
+- **Bay** (540 triangles):
+  - a 9 m crest deck cantilevered 2.5 m out over a downstream face that steps down in four
+    terraces;
+  - solid chamfered crest walls instead of parapets and railings;
+  - a lit slot in each terrace and one along the inner face above the waterline;
+  - a 2 m wedge fin on every joint, rising 4 m above the crest, with lit slots down its sides.
+- **Spillway** (~1.4 k triangles):
+  - four chamfered gate towers under one monolithic lintel 3.5 m deep, with a lit band;
+  - a control cabin cantilevered off the lintel over the sea;
+  - slab lift gates with ribs;
+  - a chute that steps down in 1.5 m risers to the lip, with angular training walls.
+- **Tower** (~500 triangles): a 7 m shaft with a lit slot, under a corbelled head cantilevered out
+  to 12 m, with lit bands and a beacon mast.
+- **Light** material slot: emissive strips at the back of the slots. The preview colour is a pale
+  cyan; the real colour is a Unity shader setting.
