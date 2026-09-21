@@ -147,16 +147,22 @@ class Piece:
             j = (i + 1) % n
             self._face([ring0[i], ring0[j], ring1[j], ring1[i]], material)
 
-    def sheet(self, rows, material, alpha=None):
-        """A grid of quads from rows of points (each row the same length), one-sided."""
+    def sheet(self, rows, material, alpha=None, across=None):
+        """
+        A grid of quads from rows of points (each row the same length), one-sided. Optional
+        vertex colours: alpha per row, and red per column (the water uses red as "how far into
+        the sheet from its edge", 0 at the edges and 1 in the middle).
+        """
         grid = [[self.mesh.verts.new(p) for p in row] for row in rows]
         for r in range(len(grid) - 1):
             for c in range(len(grid[r]) - 1):
                 face = self._face([grid[r][c], grid[r][c + 1], grid[r + 1][c + 1], grid[r + 1][c]], material)
-                if alpha is not None:
+                if alpha is not None or across is not None:
                     for loop in face.loops:
                         row = r if loop.vert in (grid[r][c], grid[r][c + 1]) else r + 1
-                        loop[self.colour] = (1.0, 1.0, 1.0, alpha[row])
+                        column = c if loop.vert in (grid[r][c], grid[r + 1][c]) else c + 1
+                        loop[self.colour] = (across[column] if across else 1.0, 1.0, 1.0,
+                                             alpha[row] if alpha else 1.0)
 
     def _face(self, verts, material):
         face = self.mesh.faces.new(verts)
@@ -356,11 +362,13 @@ def build_spillway(collection):
         noses = [p for k, p in enumerate(chute) if k % 2 == 1 and k > 1]
         path += [(yy - 0.5, zz + 0.9) for yy, zz in noses]
         path += [(lip_y, lip_z + 0.5)]
-        for step in range(1, 13):
-            t = step * 0.28
+        for step in range(1, 25):
+            t = step * 0.14
             path.append((lip_y + 6.0 * t, lip_z + 0.5 + 2.0 * t - 4.9 * t * t))
         alpha = [1.0 if zz > FOOTING else max(0.0, 1.0 - (FOOTING - zz) / 22.0) for yy, zz in path]
-        water.sheet([[(w0, yy, zz), ((w0 + w1) / 2, yy, zz), (w1, yy, zz)] for yy, zz in path], WATER, alpha)
+        columns = [0.0, 0.2, 0.5, 0.8, 1.0]
+        across = [1.0 - abs(2.0 * t - 1.0) for t in columns]
+        water.sheet([[(w0 + (w1 - w0) * t, yy, zz) for t in columns] for yy, zz in path], WATER, alpha, across)
 
     return piece.to_object(collection, BEVEL), water.to_object(collection)
 

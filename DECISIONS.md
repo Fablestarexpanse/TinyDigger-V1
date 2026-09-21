@@ -5,10 +5,12 @@ this records why.
 
 ---
 
-**NEXT:** Slice 11 (half-metre cells) is done and committed; waiting on Ronan's look at
-`Screenshots/Slice11/`. Open from it: crew body size vs 0.5 m cells, regenerate-in-play hitch
-(1.4 s + 2.1 s frame), stripes on stepped slopes, and the Slice 8–10 capture tools, which still
-pose the camera in cells.
+**NEXT:** Dam rim steps 1–4 are done (kit, ring, concrete, spillway water); waiting on Ronan's
+look. Open:
+- a proper sci-fi underside for the floating disc (for now a flat concrete floor at −24 m);
+- a space backdrop (stars) instead of the navy gradient;
+- ship models and arrivals, then the supply gameplay;
+- the Slice 11 items: crew size, stripes on slopes, the regenerate hitch.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1986,3 +1988,17 @@ Found along the way:
      grade. The concrete now takes its ambient mostly desaturated (`_AmbientSaturation` 0.25), so
      shade reads grey.
   3. The light strips blew out to white at 3× emission. They are now cyan × 1.6.
+
+**Step 4 done: spillway water** (`TinyDiggers/Spillwater`, transparent, two-sided).
+- **Kit change:** the water sheets are five columns wide. Vertex red is "how far into the sheet
+  from its edge" (0 at the edges, 1 in the middle) so the edges thin raggedly; alpha keeps the
+  fade below the footing. The curtain has twice as many rows so it can wobble.
+- **Flow:** one downstream coordinate, metres out minus height (it grows down the chute and
+  down the fall), scrolls everything. The curtain speeds up with free fall.
+- **The chute:** blue water carrying long, sharpened streaks, and a white burst just below
+  every step nose (every 2 m out from 2.5 m), settling before the next.
+- **The curtain:** it leaves the lip glassy, whitens as it aerates, sways outward and back more
+  the further it has fallen, and tears into strands and then spray until it is gone 30 m down.
+- **First pass:** the water was white paint (too much foam, round blotchy noise). Deeper blue,
+  sharpened streaks and the step bursts fixed it.
+
