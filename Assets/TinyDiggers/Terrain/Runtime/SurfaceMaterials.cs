@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace TinyDiggers.Terrain
@@ -38,7 +39,8 @@ namespace TinyDiggers.Terrain
             var smoothed = Smooth(heights, inDisc, width, depth, Mathf.Max(1, settings.SlopeSmoothing));
             var materials = new MaterialId[heights.Length];
 
-            for (var z = 0; z < depth; z++)
+            // A row per task: each cell reads the finished fields and writes only its own slot.
+            Parallel.For(0, depth, z =>
             {
                 for (var x = 0; x < width; x++)
                 {
@@ -54,13 +56,13 @@ namespace TinyDiggers.Terrain
                         continue;
                     }
 
-                    var slope = SlopeDegrees(smoothed, inDisc, width, depth, x, z);
+                    var slope = SlopeDegrees(smoothed, inDisc, width, depth, x, z, settings.GenerationCellSize);
                     // The boundaries wander: a few degrees of give either way, from a noise field
                     // a couple of dozen metres across, so no material edge traces a threshold.
                     var wander = (Noise(x, z, noiseOffset, settings.MaterialNoiseSize) - 0.5f) * 2f * settings.MaterialNoiseDegrees;
                     materials[cell] = Pick(height, slope + wander, toWater[cell], settings);
                 }
-            }
+            });
 
             // Twice: absorbing one speck can leave its neighbour below the minimum in turn.
             Despeckle(materials, inDisc, width, depth, settings.MinMaterialPatch);
@@ -95,7 +97,7 @@ namespace TinyDiggers.Terrain
                     continue; // The seabed is allowed its sand.
                 if (heights[cell] <= settings.SandMaxHeight && toWater[cell] <= settings.SandMaxDistance)
                     continue;
-                var slope = SlopeDegrees(smoothed, inDisc, width, depth, cell % width, cell / width);
+                var slope = SlopeDegrees(smoothed, inDisc, width, depth, cell % width, cell / width, settings.GenerationCellSize);
                 materials[cell] = slope < settings.SlopeGrass ? MaterialTable.Topsoil
                     : slope < settings.SlopeBare ? MaterialTable.Dirt : MaterialTable.Rock;
             }
@@ -236,7 +238,9 @@ namespace TinyDiggers.Terrain
 
             for (var repeat = 0; repeat < 2; repeat++)
             {
-                for (var z = 0; z < depth; z++)
+                // Each row reads the previous pass and writes only itself: a row per task.
+                var from = source;
+                Parallel.For(0, depth, z =>
                 {
                     for (var x = 0; x < width; x++)
                     {
@@ -248,15 +252,15 @@ namespace TinyDiggers.Terrain
                             var cell = z * width + nx;
                             if (!inDisc[cell])
                                 continue;
-                            sum += source[cell];
+                            sum += from[cell];
                             count++;
                         }
 
-                        pass[z * width + x] = count == 0 ? source[z * width + x] : sum / count;
+                        pass[z * width + x] = count == 0 ? from[z * width + x] : sum / count;
                     }
-                }
+                });
 
-                for (var z = 0; z < depth; z++)
+                Parallel.For(0, depth, z =>
                 {
                     for (var x = 0; x < width; x++)
                     {
@@ -274,7 +278,7 @@ namespace TinyDiggers.Terrain
 
                         output[z * width + x] = count == 0 ? pass[z * width + x] : sum / count;
                     }
-                }
+                });
 
                 source = output;
             }
@@ -283,7 +287,7 @@ namespace TinyDiggers.Terrain
         }
 
         /// <summary>The slope of the smoothed field at a cell, in degrees.</summary>
-        public static float SlopeDegrees(float[] smoothed, bool[] inDisc, int width, int depth, int x, int z)
+        public static float SlopeDegrees(float[] smoothed, bool[] inDisc, int width, int depth, int x, int z, float cellSize = 1f)
         {
             float At(int ax, int az)
             {
@@ -294,8 +298,9 @@ namespace TinyDiggers.Terrain
             }
 
             // Central differences over two cells, so one cell of noise cannot swing the answer.
-            var dx = (At(x + 1, z) - At(x - 1, z)) * 0.5f;
-            var dz = (At(x, z + 1) - At(x, z - 1)) * 0.5f;
+            // Heights are metres and cells are cellSize metres: the gradient is metres per metre.
+            var dx = (At(x + 1, z) - At(x - 1, z)) * 0.5f / cellSize;
+            var dz = (At(x, z + 1) - At(x, z - 1)) * 0.5f / cellSize;
             return Mathf.Atan(Mathf.Sqrt(dx * dx + dz * dz)) * Mathf.Rad2Deg;
         }
 

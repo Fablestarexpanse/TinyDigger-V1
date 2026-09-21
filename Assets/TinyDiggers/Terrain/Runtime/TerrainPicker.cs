@@ -8,6 +8,8 @@ namespace TinyDiggers.Terrain
     /// treating each column as a flat-topped box of its surface height. Needs no colliders, so
     /// digging never waits on a physics rebake. The renderer draws columns the same way, flat
     /// tops and vertical walls, so the picked cell is the one drawn under the cursor.
+    /// The ray is in the terrain's local space (metres); the walk is in cells, and the hit point
+    /// comes back in metres.
     /// </summary>
     public static class TerrainPicker
     {
@@ -27,6 +29,10 @@ namespace TinyDiggers.Terrain
 
             cellX = cellZ = -1;
             point = default;
+            // Into cells: squash x and z, so one unit is one cell and heights stay metres.
+            var cellSize = grid.CellSize;
+            origin = new Vector3(origin.x / cellSize, origin.y, origin.z / cellSize);
+            direction = new Vector3(direction.x / cellSize, direction.y, direction.z / cellSize);
             if (direction.sqrMagnitude < Parallel)
                 return false;
             direction.Normalize();
@@ -64,13 +70,13 @@ namespace TinyDiggers.Terrain
                 if (yEnter <= height)
                 {
                     // Entered through the side of a taller column.
-                    return Hit(x, z, origin + direction * tEnter, out cellX, out cellZ, out point);
+                    return Hit(x, z, origin + direction * tEnter, out cellX, out cellZ, out point, cellSize);
                 }
 
                 if (yExit <= height)
                 {
                     var tTop = (height - origin.y) / direction.y;
-                    return Hit(x, z, origin + direction * tTop, out cellX, out cellZ, out point);
+                    return Hit(x, z, origin + direction * tTop, out cellX, out cellZ, out point, cellSize);
                 }
 
                 if (tNextX < tNextZ)
@@ -93,11 +99,11 @@ namespace TinyDiggers.Terrain
             return false;
         }
 
-        static bool Hit(int x, int z, Vector3 at, out int cellX, out int cellZ, out Vector3 point)
+        static bool Hit(int x, int z, Vector3 at, out int cellX, out int cellZ, out Vector3 point, float cellSize)
         {
             cellX = x;
             cellZ = z;
-            point = at;
+            point = new Vector3(at.x * cellSize, at.y, at.z * cellSize);
             return true;
         }
 

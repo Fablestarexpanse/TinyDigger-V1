@@ -87,13 +87,15 @@ namespace TinyDiggers.Presentation
                         continue;
 
                     var random = new System.Random(unchecked(_seed * 73856093 ^ x * 19349663 ^ z * 83492791));
-                    var count = (int)_density;
-                    if (random.NextDouble() < _density - count)
+                    // Density is tufts per m², so the count per cell follows the cell's area.
+                    var perCell = _density * _grid.CellArea;
+                    var count = (int)perCell;
+                    if (random.NextDouble() < perCell - count)
                         count++;
                     var height = _grid.GetSurfaceHeight(x, z);
                     for (var i = 0; i < count; i++)
                     {
-                        var position = new Vector3(x + (float)random.NextDouble(), height, z + (float)random.NextDouble());
+                        var position = new Vector3((x + (float)random.NextDouble()) * _grid.CellSize, height, (z + (float)random.NextDouble()) * _grid.CellSize);
                         var rotation = Quaternion.Euler(0f, (float)random.NextDouble() * 360f, 0f);
                         var size = Mathf.Lerp(_scale.x, _scale.y, (float)random.NextDouble());
                         list.Add(Matrix4x4.TRS(position, rotation, Vector3.one * size));
@@ -104,7 +106,7 @@ namespace TinyDiggers.Presentation
             }
 
             _bounds[index] = list.Count == 0
-                ? new Bounds(new Vector3((cx + 0.5f) * ChunkSize, 0f, (cz + 0.5f) * ChunkSize), Vector3.zero)
+                ? new Bounds(new Vector3((cx + 0.5f) * ChunkSize * _grid.CellSize, 0f, (cz + 0.5f) * ChunkSize * _grid.CellSize), Vector3.zero)
                 : new Bounds((min + max) * 0.5f, max - min + new Vector3(2f, 2.5f, 2f));
         }
     }

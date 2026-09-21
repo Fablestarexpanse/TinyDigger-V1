@@ -156,7 +156,9 @@ namespace TinyDiggers.Terrain
                 var nz = z + NeighbourDz[n];
                 if (!_grid.IsGround(nx, nz))
                     continue;
-                var distance = n < 4 ? 1f : Diagonal;
+                // Metres between cell centres: the angle of repose is a real angle, whatever the
+                // cell size.
+                var distance = (n < 4 ? 1f : Diagonal) * _grid.CellSize;
                 var slope = (height - _grid.GetSurfaceHeight(nx, nz)) / distance;
                 if (slope <= 0f)
                     continue;
@@ -176,7 +178,7 @@ namespace TinyDiggers.Terrain
             for (var c = 0; c < candidates; c++)
             {
                 var n = _order[c];
-                TryShed(x, z, x + NeighbourDx[n], z + NeighbourDz[n], n < 4 ? 1f : Diagonal, unit);
+                TryShed(x, z, x + NeighbourDx[n], z + NeighbourDz[n], (n < 4 ? 1f : Diagonal) * _grid.CellSize, unit);
             }
         }
 

@@ -34,6 +34,9 @@ namespace TinyDiggers.Presentation
     {
         [SerializeField, Min(1)] int _width = 512;
         [SerializeField, Min(1)] int _height = 512;
+
+        [Tooltip("Metres across one cell. The island's settings are in metres, so a smaller cell gives the same island at a finer grain; set Height Step to match to keep one step per cell a 45-degree slope.")]
+        [SerializeField, Min(0.05f)] float _cellSize = 1f;
         [SerializeField, Range(1, ChunkedTerrainRenderer.MaxChunkSize)] int _chunkSize = ChunkedTerrainRenderer.DefaultChunkSize;
         [SerializeField] int _seed = 1;
         [SerializeField] Material _material;
@@ -64,7 +67,7 @@ namespace TinyDiggers.Presentation
         /// <summary>How far the mottle lifts and drops brightness, either way.</summary>
         [Range(0f, 0.4f)] public float MottleStrength = 0.1f;
 
-        /// <summary>Cells a material boundary is blended across.</summary>
+        /// <summary>Metres a material boundary is blended across.</summary>
         [Range(0.05f, 4f)] public float BlendWidth = 2f;
 
         /// <summary>
@@ -82,11 +85,12 @@ namespace TinyDiggers.Presentation
 
         public TerrainGrid Grid { get; private set; }
 
-        /// <summary>Cells from the middle of the grid to the edge of the disc of land.</summary>
+        /// <summary>Metres from the middle of the grid to the edge of the disc of land.</summary>
         public float DiscRadius { get; private set; }
 
-        /// <summary>The middle of the disc, in cells.</summary>
-        public Vector2 DiscCentre => Grid == null ? Vector2.zero : new Vector2(Grid.Width * 0.5f, Grid.Height * 0.5f);
+        /// <summary>The middle of the disc, in metres in the terrain's local space.</summary>
+        public Vector2 DiscCentre => Grid == null ? Vector2.zero
+            : new Vector2(Grid.Width * 0.5f, Grid.Height * 0.5f) * Grid.CellSize;
 
         /// <summary>The height the disc reads as at its rim: the top of the wall the land sits in.</summary>
         public float RimHeight => PlinthTop;
@@ -143,12 +147,12 @@ namespace TinyDiggers.Presentation
         {
             var stopwatch = Stopwatch.StartNew();
             var datum = UsingIsland ? _settings.Datum : 0f;
-            Grid = new TerrainGrid(_width, _height, MaterialTable.CreateDefault(), HeightStep, datum);
+            Grid = new TerrainGrid(_width, _height, MaterialTable.CreateDefault(), HeightStep, datum, _cellSize);
             // The simulator is built before the land so that generation queues every cell it
             // touches, and one settle at the end leaves nothing standing steeper than it should.
             _slump = new AngleOfReposeSimulator(Grid);
             Fill();
-            DiscRadius = TerrainGenerator.DiscRadius(Grid);
+            DiscRadius = TerrainGenerator.DiscRadius(Grid) * Grid.CellSize;
             var generated = stopwatch.Elapsed.TotalMilliseconds;
 
             var material = _material;

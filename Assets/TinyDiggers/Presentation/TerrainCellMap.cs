@@ -7,7 +7,8 @@ namespace TinyDiggers.Presentation
     /// <summary>
     /// What each cell is made of, as a texture the shader can read: one texel per cell, red the
     /// material on top and green the material a cut through it would expose. Blue is how much
-    /// stone there is around the cell (a tent-weighted 5 x 5 average of the stone flags) and alpha
+    /// stone there is around the cell (a tent-weighted average of the stone flags within about two
+    /// metres) and alpha
     /// is whether the cell itself is stone; the shader draws the rock edge along the 0.5 contour
     /// of the blue field, so it follows a smooth line instead of the cell staircase. The shader looks the
     /// material up at the fragment rather than the vertex, which is what lets material edges be
@@ -37,13 +38,16 @@ namespace TinyDiggers.Presentation
                 hideFlags = HideFlags.DontSave,
             };
 
+            // Two metres whatever the cell size, so a rock edge is as smooth on half-metre cells
+            // as it was on metre ones: 2 cells at 1 m, 4 at 0.5 m.
+            Reach = Mathf.Max(2, Mathf.RoundToInt(2f / grid.CellSize));
             _pixels = new byte[grid.Width * grid.Height * 4];
             for (var z = 0; z < grid.Height; z++)
                 for (var x = 0; x < grid.Width; x++)
                     WriteCell(x, z);
-            for (var z = 0; z < grid.Height; z++)
-                for (var x = 0; x < grid.Width; x++)
-                    WriteStoneField(x, z);
+            _changedMark = new bool[grid.Width * grid.Height];
+            _fieldMark = new bool[grid.Width * grid.Height];
+            WriteWholeStoneField();
             Upload();
             _grid.CellChanged += OnCellChanged;
         }
@@ -58,20 +62,86 @@ namespace TinyDiggers.Presentation
         {
             if (!_dirty)
                 return;
+            UpdateStoneField();
             Upload();
         }
 
         void OnCellChanged(int x, int z)
         {
             WriteCell(x, z);
-            for (var dz = -Reach; dz <= Reach; dz++)
-                for (var dx = -Reach; dx <= Reach; dx++)
-                    if (_grid.InBounds(x + dx, z + dz))
-                        WriteStoneField(x + dx, z + dz);
+            // The blue field is caught up once, at the flush: a regenerate changes every cell,
+            // and redoing each one's whole neighbourhood per change cost seconds at 1024².
+            var cell = z * _grid.Width + x;
+            if (!_changedMark[cell])
+            {
+                _changedMark[cell] = true;
+                _changed.Add(cell);
+            }
+
             _dirty = true;
         }
 
-        const int Reach = 2;
+        readonly bool[] _changedMark;
+        readonly bool[] _fieldMark;
+        readonly System.Collections.Generic.List<int> _changed = new System.Collections.Generic.List<int>();
+        readonly System.Collections.Generic.List<int> _field = new System.Collections.Generic.List<int>();
+
+        /// <summary>Recomputes blue around every cell changed since the last flush.</summary>
+        void UpdateStoneField()
+        {
+            if (_changed.Count == 0)
+                return;
+
+            // Past an eighth of the map it is cheaper to redo the lot, in parallel.
+            if (_changed.Count > _changedMark.Length / 8)
+            {
+                WriteWholeStoneField();
+            }
+            else
+            {
+                var width = _grid.Width;
+                foreach (var cell in _changed)
+                {
+                    var x = cell % width;
+                    var z = cell / width;
+                    for (var dz = -Reach; dz <= Reach; dz++)
+                        for (var dx = -Reach; dx <= Reach; dx++)
+                        {
+                            if (!_grid.InBounds(x + dx, z + dz))
+                                continue;
+                            var near = (z + dz) * width + x + dx;
+                            if (_fieldMark[near])
+                                continue;
+                            _fieldMark[near] = true;
+                            _field.Add(near);
+                        }
+                }
+
+                foreach (var cell in _field)
+                {
+                    WriteStoneField(cell % width, cell / width);
+                    _fieldMark[cell] = false;
+                }
+
+                _field.Clear();
+            }
+
+            foreach (var cell in _changed)
+                _changedMark[cell] = false;
+            _changed.Clear();
+        }
+
+        /// <summary>Blue for every texel. Each reads only alpha, so a row per task.</summary>
+        void WriteWholeStoneField()
+        {
+            System.Threading.Tasks.Parallel.For(0, _grid.Height, z =>
+            {
+                for (var x = 0; x < _grid.Width; x++)
+                    WriteStoneField(x, z);
+            });
+        }
+
+        readonly int Reach;
 
         /// <summary>The blue channel: tent-weighted share of stone cells within <see cref="Reach"/>.</summary>
         void WriteStoneField(int x, int z)

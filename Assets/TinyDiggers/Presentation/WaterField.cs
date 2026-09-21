@@ -61,6 +61,13 @@ namespace TinyDiggers.Presentation
             ShoreDistances(raw, field.ShoreDistance, width, height);
             Directions(field.ShoreDistance, field.ShoreDirection, width, height);
 
+            // Distances were walked in cells; the shader and the swell rule want metres.
+            var cellSize = grid.CellSize;
+            if (!Mathf.Approximately(cellSize, 1f))
+                for (var i = 0; i < field.ShoreDistance.Length; i++)
+                    if (field.ShoreDistance[i] < Open)
+                        field.ShoreDistance[i] *= cellSize;
+
             field.Milliseconds = (float)clock.Elapsed.TotalMilliseconds;
             return field;
         }

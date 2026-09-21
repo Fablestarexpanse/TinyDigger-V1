@@ -35,7 +35,7 @@ namespace TinyDiggers.Interaction
         [SerializeField] CameraPreset _preset;
 
         [Header("Pan")]
-        [Tooltip("Cells a second at the closest zoom; scaled up with distance.")]
+        [Tooltip("Metres a second at the closest zoom; scaled up with distance.")]
         public float PanSpeed = 14f;
 
         [Tooltip("How many times faster panning is at the furthest zoom.")]
@@ -102,7 +102,7 @@ namespace TinyDiggers.Interaction
         /// <summary>What the camera is easing toward.</summary>
         public RtsCameraRig Rig => _rig;
 
-        /// <summary>The ground point the camera orbits, in cells.</summary>
+        /// <summary>The ground point the camera orbits, in metres in the terrain's local space.</summary>
         public Vector3 Pivot => _pivot;
 
         public float Distance => _distance;
@@ -341,10 +341,10 @@ namespace TinyDiggers.Interaction
         float GroundHeightAt(Vector3 point)
         {
             var grid = _terrain != null ? _terrain.Grid : null;
-            return grid == null ? point.y : TerrainSurface.SampleHeight(grid, point.x, point.z);
+            return grid == null ? point.y : TerrainSurface.SampleHeight(grid, point.x / grid.CellSize, point.z / grid.CellSize);
         }
 
-        /// <summary>The ground point under a screen position, in cells.</summary>
+        /// <summary>The ground point under a screen position, in metres in the terrain's local space.</summary>
         bool TryGroundPointUnder(Vector2 screen, out Vector3 point)
         {
             point = default;
@@ -358,7 +358,7 @@ namespace TinyDiggers.Interaction
             var direction = terrainTransform.InverseTransformDirection(ray.direction);
             if (TerrainPicker.TryPick(grid, origin, direction, out var x, out var z, out _) && grid.IsGround(x, z))
             {
-                point = new Vector3(x + 0.5f, grid.GetSurfaceHeight(x, z), z + 0.5f);
+                point = new Vector3((x + 0.5f) * grid.CellSize, grid.GetSurfaceHeight(x, z), (z + 0.5f) * grid.CellSize);
                 return true;
             }
 

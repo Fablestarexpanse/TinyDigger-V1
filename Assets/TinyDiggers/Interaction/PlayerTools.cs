@@ -41,7 +41,7 @@ namespace TinyDiggers.Interaction
     /// </summary>
     public sealed class PlayerTools : MonoBehaviour
     {
-        /// <summary>Metres of rise per cell a road may climb before the crew is asked to do too much.</summary>
+        /// <summary>Metres of rise per metre a road may climb before the crew is asked to do too much.</summary>
         public const float MaxGrade = 0.25f;
 
         [SerializeField] TerrainView _terrain;
@@ -365,7 +365,7 @@ namespace TinyDiggers.Interaction
                 {
                     Blueprints.PlanLevel(grid, area, _strokeHeight, _plan);
                     var made = Blueprints.Apply(Map, _plan);
-                    Blueprints.Volumes(_plan, out var cut, out var fill);
+                    Blueprints.Volumes(_plan, out var cut, out var fill, _terrain.Grid.CellArea);
                     LastAction = $"Level to {_strokeHeight:0.#} m: {made} cells, {cut:0} m³ cut, {fill:0} m³ fill";
                     _plan.Clear();
                     break;
@@ -432,12 +432,12 @@ namespace TinyDiggers.Interaction
                 return;
             if (RoadTooSteep)
             {
-                LastAction = $"Too steep: {RoadGrade:0.00} m per cell, limit {MaxGrade:0.00}";
+                LastAction = $"Too steep: {RoadGrade:0.00} m per m, limit {MaxGrade:0.00}";
                 return;
             }
 
             var made = Blueprints.Apply(Map, _plan);
-            Blueprints.Volumes(_plan, out var cut, out var fill);
+            Blueprints.Volumes(_plan, out var cut, out var fill, _terrain.Grid.CellArea);
             LastAction = $"Road laid: {made} cells, {cut:0} m³ cut, {fill:0} m³ fill";
             CancelDrawing();
         }
@@ -487,7 +487,7 @@ namespace TinyDiggers.Interaction
                         var height = _painting ? _strokeHeight : TargetHeight;
                         ApplyBrush(HoverX, HoverZ, cell =>
                         {
-                            DesignationsView.AddTile(cell.x, cell.y, height, height, height, height, _previewColor, _vertices, _colors, _triangles);
+                            DesignationsView.AddTile(cell.x, cell.y, height, height, height, height, _previewColor, _vertices, _colors, _triangles, _terrain.Grid.CellSize);
                             return true;
                         });
                     }
@@ -519,7 +519,7 @@ namespace TinyDiggers.Interaction
             if (Mode == ToolMode.Level)
             {
                 Blueprints.PlanLevel(grid, area, height, _plan, includeSettled: true);
-                Blueprints.Volumes(_plan, out var cut, out var fill);
+                Blueprints.Volumes(_plan, out var cut, out var fill, _terrain.Grid.CellArea);
                 PlannedCut = cut;
                 PlannedFill = fill;
             }
@@ -531,7 +531,7 @@ namespace TinyDiggers.Interaction
                     if (!grid.IsGround(x, z))
                         continue;
                     if (Mode == ToolMode.Level || Mode == ToolMode.DumpZone)
-                        DesignationsView.AddTile(x, z, height, height, height, height, _rectColor, _vertices, _colors, _triangles);
+                        DesignationsView.AddTile(x, z, height, height, height, height, _rectColor, _vertices, _colors, _triangles, _terrain.Grid.CellSize);
                     else
                         DesignationsView.AddSurfaceTile(grid, x, z, _rectColor, _vertices, _colors, _triangles, 0.08f);
                 }
@@ -546,10 +546,10 @@ namespace TinyDiggers.Interaction
             if (next.HasValue)
                 _previewPoints.Add(next.Value);
 
-            RoadGrade = Blueprints.SteepestGrade(_previewPoints, out _);
+            RoadGrade = Blueprints.SteepestGrade(_previewPoints, out _, grid.CellSize);
             RoadTooSteep = RoadGrade > MaxGrade + 1e-4f;
             Blueprints.PlanRoad(grid, _previewPoints, RoadWidth, _plan, includeSettled: true);
-            Blueprints.Volumes(_plan, out var cut, out var fill);
+            Blueprints.Volumes(_plan, out var cut, out var fill, _terrain.Grid.CellArea);
             PlannedCut = cut;
             PlannedFill = fill;
         }
@@ -578,7 +578,7 @@ namespace TinyDiggers.Interaction
                 // Lie on the road bed, or on the ground where the road is cut into it, so the
                 // ribbon reads as one line rather than disappearing into the hill it cuts.
                 var height = Mathf.Max(cell.Height, grid.GetSurfaceHeight(cell.X, cell.Z)) + 0.06f;
-                DesignationsView.AddTile(cell.X, cell.Z, height, height, height, height, color, _vertices, _colors, _triangles);
+                DesignationsView.AddTile(cell.X, cell.Z, height, height, height, height, color, _vertices, _colors, _triangles, _terrain.Grid.CellSize);
             }
         }
     }

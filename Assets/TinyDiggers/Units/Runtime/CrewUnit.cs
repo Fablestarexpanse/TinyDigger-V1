@@ -110,7 +110,7 @@ namespace TinyDiggers.Units
         static readonly int[] NeighbourX = { 1, -1, 0, 0, 1, 1, -1, -1 };
         static readonly int[] NeighbourZ = { 0, 0, 1, -1, 1, -1, 1, -1 };
 
-        /// <summary>Cells per second.</summary>
+        /// <summary>Metres per second.</summary>
         public float Speed = 3f;
 
         /// <summary>How many height steps above its own cell the unit can dig, or tip up to.</summary>
@@ -334,6 +334,9 @@ namespace TinyDiggers.Units
 
         float Step => _grid.HeightStep > 0f ? _grid.HeightStep : 1f;
 
+        /// <summary>m³ in one height step on one cell: what a load has to hold to tip a step.</summary>
+        float StepVolume => Step * _grid.CellArea;
+
         /// <summary>Whether a unit standing at height <paramref name="standHeight"/> can dig or fill a cell at <paramref name="cellHeight"/>.</summary>
         public bool WithinReach(float standHeight, float cellHeight) =>
             Math.Abs(cellHeight - standHeight) <= DigReachLevels * Step + Epsilon;
@@ -447,7 +450,7 @@ namespace TinyDiggers.Units
 
         void ChooseDiggerJob(Vector2Int start)
         {
-            var step = Step;
+            var step = StepVolume;
             var full = _loadFull || Inventory.Remaining + Epsilon < step;
             if (!full && TryPlan(CrewJobKind.Dig, start))
                 return;
@@ -499,7 +502,7 @@ namespace TinyDiggers.Units
 
         void ChooseHaulerJob(Vector2Int start)
         {
-            var step = Step;
+            var step = StepVolume;
             var loaded = Inventory.Total + Epsilon >= step;
 
             // A load is delivered before anything else. Serving first was tried, and a hauler
@@ -875,7 +878,8 @@ namespace TinyDiggers.Units
             return true;
         }
 
-        float WholeStepsHeld() => (float)Math.Floor((Inventory.Total + Epsilon) / Step) * Step;
+        /// <summary>Metres the load would raise one cell by, in whole height steps.</summary>
+        float WholeStepsHeld() => (float)Math.Floor((Inventory.Total + Epsilon) / StepVolume) * Step;
 
         /// <summary>
         /// Counts designations this unit could work but cannot reach, and lists the unreachable
@@ -904,7 +908,7 @@ namespace TinyDiggers.Units
                     if (_grid.GetSurfaceHeight(x, z) - Step < _dispatcher.DigFloor(x, z) - Epsilon)
                         continue;
                 }
-                else if (Inventory.Total + Epsilon < Step)
+                else if (Inventory.Total + Epsilon < StepVolume)
                 {
                     // An empty unit is not held up by a fill it has nothing to put in.
                     continue;
@@ -998,7 +1002,7 @@ namespace TinyDiggers.Units
                 SetState(CrewUnitState.Moving, "Moving to " + DescribeJob());
             }
 
-            var travel = Speed * deltaTime;
+            var travel = Speed * deltaTime / _grid.CellSize;
             while (travel > 0f && _pathIndex < _path.Count)
             {
                 var waypoint = _path[_pathIndex];
@@ -1058,7 +1062,7 @@ namespace TinyDiggers.Units
             var target = new Vector2(waypoint.x + 0.5f, waypoint.y + 0.5f);
             var delta = target - Position;
             var distance = delta.magnitude;
-            var travel = Speed * deltaTime;
+            var travel = Speed * deltaTime / _grid.CellSize;
             return distance <= travel || distance < 1e-5f ? target : Position + delta / distance * travel;
         }
 
@@ -1208,7 +1212,7 @@ namespace TinyDiggers.Units
             var amount = TipAmount(standHeight, target.x, target.y, cap);
             if (amount + Epsilon >= Step && CanTipHere(target.x, target.y))
             {
-                var report = Excavation.Tip(_grid, Inventory, target.x, target.y, amount);
+                var report = Excavation.Tip(_grid, Inventory, target.x, target.y, amount * _grid.CellArea);
                 if (report.Tipped > 0f)
                     _loadFull = false;
             }

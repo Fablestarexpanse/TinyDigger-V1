@@ -34,10 +34,13 @@ namespace TinyDiggers.Presentation
         readonly Material _material;
         bool _disposed;
 
+        readonly float _cellSize;
+
         public TerrainDetail(TerrainGrid grid, TerrainTextureSet set, Vector2 originWS)
         {
             if (grid == null)
                 throw new ArgumentNullException(nameof(grid));
+            _cellSize = grid.CellSize;
 
             var shader = Shader.Find(ShaderName);
             if (shader == null)
@@ -50,7 +53,7 @@ namespace TinyDiggers.Presentation
             _material.SetTexture(AlbedosId, _atlas.Albedo);
             _material.SetTexture(NormalsId, _atlas.Normal);
             _material.SetVectorArray(MaterialParamsId, _atlas.Parameters);
-            _material.SetVector(TerrainOriginId, new Vector4(originWS.x, originWS.y, 0f, 0f));
+            _material.SetVector(TerrainOriginId, new Vector4(originWS.x, originWS.y, 1f / grid.CellSize, 0f));
             _material.SetVector(MapSizeId, new Vector4(grid.Width, grid.Height, 1f / grid.Width, 1f / grid.Height));
         }
 
@@ -68,7 +71,8 @@ namespace TinyDiggers.Presentation
             _material.SetFloat(DetailStrengthId, detailStrength);
             _material.SetFloat(MottleRepeatId, mottleRepeat);
             _material.SetFloat(MottleStrengthId, mottleStrength);
-            _material.SetFloat(BlendWidthId, blendWidth);
+            // Tuned in metres; the shader blends in cells.
+            _material.SetFloat(BlendWidthId, blendWidth / _cellSize);
         }
 
         /// <summary>Sends any cells changed since the last frame. Does nothing when nothing changed.</summary>

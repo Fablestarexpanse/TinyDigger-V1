@@ -124,7 +124,7 @@ namespace TinyDiggers.Interaction
                 TerrainSurface.CornerHeight(grid, x, z + 1) + lift,
                 TerrainSurface.CornerHeight(grid, x + 1, z + 1) + lift,
                 TerrainSurface.CornerHeight(grid, x + 1, z) + lift,
-                color, vertices, colors, triangles);
+                color, vertices, colors, triangles, grid.CellSize);
         }
 
         /// <summary>
@@ -143,10 +143,11 @@ namespace TinyDiggers.Interaction
                 var v0 = (float)band / bands;
                 var v1 = (float)(band + 1) / bands;
                 var first = vertices.Count;
-                vertices.Add(new Vector3(x, Mathf.Lerp(sw, nw, v0), z + v0));
-                vertices.Add(new Vector3(x, Mathf.Lerp(sw, nw, v1), z + v1));
-                vertices.Add(new Vector3(x + 1, Mathf.Lerp(se, ne, v1), z + v1));
-                vertices.Add(new Vector3(x + 1, Mathf.Lerp(se, ne, v0), z + v0));
+                var s = grid.CellSize;
+                vertices.Add(new Vector3(x * s, Mathf.Lerp(sw, nw, v0), (z + v0) * s));
+                vertices.Add(new Vector3(x * s, Mathf.Lerp(sw, nw, v1), (z + v1) * s));
+                vertices.Add(new Vector3((x + 1) * s, Mathf.Lerp(se, ne, v1), (z + v1) * s));
+                vertices.Add(new Vector3((x + 1) * s, Mathf.Lerp(se, ne, v0), (z + v0) * s));
                 for (var k = 0; k < 4; k++)
                     colors.Add(color);
                 triangles.Add(first);
@@ -158,15 +159,17 @@ namespace TinyDiggers.Interaction
             }
         }
 
-        /// <summary>A quad over cell (x, z) with the given corner heights (sw, nw, ne, se).</summary>
-
-        public static void AddTile(int x, int z, float sw, float nw, float ne, float se, Color32 color, List<Vector3> vertices, List<Color32> colors, List<int> triangles)
+        /// <summary>
+        /// A quad over cell (x, z) with the given corner heights (sw, nw, ne, se), on cells
+        /// <paramref name="cellSize"/> metres across.
+        /// </summary>
+        public static void AddTile(int x, int z, float sw, float nw, float ne, float se, Color32 color, List<Vector3> vertices, List<Color32> colors, List<int> triangles, float cellSize = 1f)
         {
             var first = vertices.Count;
-            vertices.Add(new Vector3(x, sw, z));
-            vertices.Add(new Vector3(x, nw, z + 1));
-            vertices.Add(new Vector3(x + 1, ne, z + 1));
-            vertices.Add(new Vector3(x + 1, se, z));
+            vertices.Add(new Vector3(x * cellSize, sw, z * cellSize));
+            vertices.Add(new Vector3(x * cellSize, nw, (z + 1) * cellSize));
+            vertices.Add(new Vector3((x + 1) * cellSize, ne, (z + 1) * cellSize));
+            vertices.Add(new Vector3((x + 1) * cellSize, se, z * cellSize));
             for (var k = 0; k < 4; k++)
                 colors.Add(color);
             triangles.Add(first);

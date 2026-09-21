@@ -127,10 +127,11 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
-        /// The steepest leg of a road, in metres of rise per cell travelled. A road is refused
-        /// when this is over the machines' limit.
+        /// The steepest leg of a road, in metres of rise per metre travelled, on cells
+        /// <paramref name="cellSize"/> metres across. A road is refused when this is over the
+        /// machines' limit.
         /// </summary>
-        public static float SteepestGrade(IReadOnlyList<RoadPoint> points, out int steepestLeg)
+        public static float SteepestGrade(IReadOnlyList<RoadPoint> points, out int steepestLeg, float cellSize = 1f)
         {
             steepestLeg = -1;
             var worst = 0f;
@@ -138,7 +139,7 @@ namespace TinyDiggers.Units
                 return 0f;
             for (var leg = 0; leg + 1 < points.Count; leg++)
             {
-                var grade = LegGrade(points[leg], points[leg + 1]);
+                var grade = LegGrade(points[leg], points[leg + 1], cellSize);
                 if (grade <= worst)
                     continue;
                 worst = grade;
@@ -148,10 +149,10 @@ namespace TinyDiggers.Units
             return worst;
         }
 
-        /// <summary>Metres of rise per cell travelled along one leg.</summary>
-        public static float LegGrade(RoadPoint from, RoadPoint to)
+        /// <summary>Metres of rise per metre travelled along one leg, on cells <paramref name="cellSize"/> across.</summary>
+        public static float LegGrade(RoadPoint from, RoadPoint to, float cellSize = 1f)
         {
-            var run = Vector2.Distance(from.Cell, to.Cell);
+            var run = Vector2.Distance(from.Cell, to.Cell) * cellSize;
             return run < 1e-4f ? 0f : Math.Abs(to.Height - from.Height) / run;
         }
 
@@ -175,8 +176,11 @@ namespace TinyDiggers.Units
             return made;
         }
 
-        /// <summary>Total metres to cut and to fill across a plan, as volumes in m³ (one cell is 1 m²).</summary>
-        public static void Volumes(IReadOnlyList<PlannedCell> cells, out float cut, out float fill)
+        /// <summary>
+        /// Total cut and fill across a plan in m³: each cell's metres of cut or fill times
+        /// <paramref name="cellArea"/> (the grid's <see cref="TerrainGrid.CellArea"/>).
+        /// </summary>
+        public static void Volumes(IReadOnlyList<PlannedCell> cells, out float cut, out float fill, float cellArea = 1f)
         {
             cut = 0f;
             fill = 0f;
@@ -187,6 +191,9 @@ namespace TinyDiggers.Units
                 cut += cells[i].Cut;
                 fill += cells[i].Fill;
             }
+
+            cut *= cellArea;
+            fill *= cellArea;
         }
 
         /// <summary>

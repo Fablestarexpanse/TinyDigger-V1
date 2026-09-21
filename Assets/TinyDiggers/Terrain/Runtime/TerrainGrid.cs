@@ -8,7 +8,10 @@ namespace TinyDiggers.Terrain
     /// to top, and the surface height is the sum of their thicknesses. There are no overhangs or
     /// tunnels by construction.
     ///
-    /// Cells are 1x1 metres, so one unit of volume equals one metre of thickness.
+    /// Cells are <see cref="CellSize"/> metres square (1 by default; the game plays at 0.5). The
+    /// "volume" that <see cref="Add"/> and <see cref="Remove"/> deal in is metres of thickness in
+    /// one cell; multiply by <see cref="CellArea"/> for cubic metres. Everything the grid does is in
+    /// cell indices: turning a cell into world metres is <see cref="TerrainSpace"/>'s job.
     ///
     /// Digging and tipping deal in disturbed material: <see cref="Remove"/> reports what came out
     /// as its disturbed form (rock comes out as loose rock), and <see cref="Add"/> places the
@@ -40,8 +43,11 @@ namespace TinyDiggers.Terrain
         readonly bool[] _void;
         readonly bool[] _blocked;
 
-        public TerrainGrid(int width, int height, MaterialTable materials, float heightStep = 0f, float datum = 0f)
+        public TerrainGrid(int width, int height, MaterialTable materials, float heightStep = 0f, float datum = 0f,
+            float cellSize = 1f)
         {
+            if (!(cellSize > 0f))
+                throw new ArgumentOutOfRangeException(nameof(cellSize));
             if (width <= 0)
                 throw new ArgumentOutOfRangeException(nameof(width));
             if (height <= 0)
@@ -54,6 +60,7 @@ namespace TinyDiggers.Terrain
             Materials = materials ?? throw new ArgumentNullException(nameof(materials));
             HeightStep = heightStep;
             Datum = datum;
+            CellSize = cellSize;
 
             var cellCount = width * height;
             _layers = new Layer[cellCount * MaxLayersPerCell];
@@ -73,6 +80,12 @@ namespace TinyDiggers.Terrain
         public int Height { get; }
 
         public MaterialTable Materials { get; }
+
+        /// <summary>Metres across one cell, in x and in z.</summary>
+        public float CellSize { get; }
+
+        /// <summary>Square metres of one cell: turns a thickness into cubic metres.</summary>
+        public float CellArea => CellSize * CellSize;
 
         /// <summary>
         /// Metres. Edits move material in whole multiples of this; 0 means volumes are used as

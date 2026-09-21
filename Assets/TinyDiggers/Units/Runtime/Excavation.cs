@@ -21,11 +21,13 @@ namespace TinyDiggers.Units
         const float Epsilon = 1e-4f;
 
         /// <summary>
-        /// Digs up to <paramref name="volumePerCell"/> (in place) from each cell within
+        /// Digs up to <paramref name="depthPerCell"/> metres (in place) from each cell within
         /// <paramref name="radius"/> of the centre, nearest cells first, into the inventory.
+        /// The grid holds metres of thickness; the inventory and the report hold m³, which is
+        /// thickness times <see cref="TerrainGrid.CellArea"/>.
         /// Cells whose loose output would not fit in what is left are skipped, not part-dug.
         /// </summary>
-        public static DigReport Dig(TerrainGrid grid, MaterialInventory inventory, int centreX, int centreZ, int radius, float volumePerCell)
+        public static DigReport Dig(TerrainGrid grid, MaterialInventory inventory, int centreX, int centreZ, int radius, float depthPerCell)
         {
             if (grid == null)
                 throw new ArgumentNullException(nameof(grid));
@@ -37,6 +39,7 @@ namespace TinyDiggers.Units
             Span<Layer> preview = stackalloc Layer[TerrainGrid.MaxLayersPerCell];
             Span<MaterialVolume> removed = stackalloc MaterialVolume[TerrainGrid.MaxLayersPerCell];
             var report = new DigReport(grid.Materials.MaxId + 1);
+            var area = grid.CellArea;
             foreach (var (dx, dz) in DiscNearestFirst(radius))
             {
                 var x = centreX + dx;
@@ -44,7 +47,7 @@ namespace TinyDiggers.Units
                 if (!grid.InBounds(x, z))
                     continue;
 
-                var layers = grid.PeekRemove(x, z, volumePerCell, preview);
+                var layers = grid.PeekRemove(x, z, depthPerCell, preview);
                 if (layers == 0)
                 {
                     report.CellsAtBedrock++;
@@ -53,7 +56,7 @@ namespace TinyDiggers.Units
 
                 var loose = 0f;
                 for (var i = 0; i < layers; i++)
-                    loose += preview[i].Thickness * grid.Materials.Get(preview[i].Material).BulkingFactor;
+                    loose += preview[i].Thickness * area * grid.Materials.Get(preview[i].Material).BulkingFactor;
                 if (!inventory.CanFit(loose))
                 {
                     report.CellsThatDidNotFit++;
@@ -63,16 +66,17 @@ namespace TinyDiggers.Units
 
                 for (var i = 0; i < layers; i++)
                 {
-                    report.InPlaceBySource[preview[i].Material.Value] += preview[i].Thickness;
-                    report.InPlace += preview[i].Thickness;
+                    report.InPlaceBySource[preview[i].Material.Value] += preview[i].Thickness * area;
+                    report.InPlace += preview[i].Thickness * area;
                 }
 
-                var pieces = grid.Remove(x, z, volumePerCell, removed);
+                var pieces = grid.Remove(x, z, depthPerCell, removed);
                 for (var i = 0; i < pieces; i++)
                 {
                     // The preview said it fits; tiny float differences are absorbed by TryAdd's slack.
-                    inventory.Add(removed[i].Material, removed[i].Volume);
-                    report.Loose += removed[i].Volume;
+                    var volume = removed[i].Volume * area;
+                    inventory.Add(removed[i].Material, volume);
+                    report.Loose += volume;
                 }
 
                 report.CellsDug++;
@@ -83,7 +87,8 @@ namespace TinyDiggers.Units
 
         /// <summary>
         /// Tips as many whole height steps of the load as it holds, up to
-        /// <paramref name="maxVolume"/>, onto cell (x, z) in one go. The steps are made up from the
+        /// <paramref name="maxVolume"/> m³, onto cell (x, z) in one go. One step on the cell is
+        /// <see cref="TerrainGrid.HeightStep"/> times <see cref="TerrainGrid.CellArea"/> m³. The steps are made up from the
         /// top of the load downwards, and one step may mix several materials: a load of small
         /// interleaved pieces still tips. Within one tip the load is mixed into one layer per landed
         /// material, newest material lowest, so a tip adds only as many layers as it has distinct
@@ -128,7 +133,8 @@ namespace TinyDiggers.Units
                 throw new ArgumentNullException(nameof(inventory));
 
             var report = new TipReport(grid.Materials.MaxId + 1);
-            var step = grid.HeightStep;
+            var step = grid.HeightStep * grid.CellArea;
+            var area = grid.CellArea;
             var total = inventory.Total;
             var wanted = Math.Min(total, maxVolume);
             var amount = step > 0f ? (float)Math.Floor((wanted + Epsilon) / step) * step : wanted;
@@ -168,7 +174,11 @@ namespace TinyDiggers.Units
                     landed[at] = new MaterialVolume(material, landed[at].Volume + taken[i].Volume);
             }
 
-            if (!grid.AddStack(x, z, new ReadOnlySpan<MaterialVolume>(landed, 0, landedCount)))
+            // The grid takes metres of thickness.
+            var thicknesses = new MaterialVolume[landedCount];
+            for (var i = 0; i < landedCount; i++)
+                thicknesses[i] = new MaterialVolume(landed[i].Material, landed[i].Volume / area);
+            if (!grid.AddStack(x, z, thicknesses))
             {
                 report.StackFull = true;
                 report.HeldBack = total;

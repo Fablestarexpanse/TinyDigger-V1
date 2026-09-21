@@ -77,7 +77,7 @@ namespace TinyDiggers.Terrain
 
             var at = new Vector2(x, z);
             var wander = -1f;
-            float Wander() => wander >= 0f ? wander : wander = Noise(at, fields.Depth, 50f);
+            float Wander() => wander >= 0f ? wander : wander = Noise(at, fields.Depth, 50f / settings.GenerationCellSize);
 
             // Coal: one seam height for the island, undulating a few metres.
             var coal = Strength(at, fields.Coal, settings.CoalOre);

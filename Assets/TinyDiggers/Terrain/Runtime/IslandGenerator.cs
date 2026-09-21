@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace TinyDiggers.Terrain
@@ -30,6 +31,25 @@ namespace TinyDiggers.Terrain
 
         /// <summary>Milliseconds the land took to generate.</summary>
         public double Milliseconds;
+
+        /// <summary>Milliseconds per stage, in order, for perf reporting.</summary>
+        public readonly List<KeyValuePair<string, double>> Stages = new List<KeyValuePair<string, double>>();
+
+        /// <summary>The stages as one line: "mask 120, heights 300, ...".</summary>
+        public string StageSummary()
+        {
+            var text = new System.Text.StringBuilder();
+            foreach (var stage in Stages)
+                text.Append(text.Length > 0 ? ", " : "").Append(stage.Key).Append(' ').Append(stage.Value.ToString("0"));
+            return text.ToString();
+        }
+
+        internal void Mark(string stage, System.Diagnostics.Stopwatch clock, ref double last)
+        {
+            var now = clock.Elapsed.TotalMilliseconds;
+            Stages.Add(new KeyValuePair<string, double>(stage, now - last));
+            last = now;
+        }
     }
 
     /// <summary>
@@ -80,7 +100,25 @@ namespace TinyDiggers.Terrain
             if (settings == null)
                 throw new ArgumentNullException(nameof(settings));
 
+            // The generator works in cells; the settings are in metres. At one-metre cells they
+            // are the same thing, so the asset is used as it is.
+            if (Mathf.Approximately(grid.CellSize, 1f))
+                return GenerateInCells(grid, settings);
+            var scaled = settings.ScaledForCells(grid.CellSize);
+            try
+            {
+                return GenerateInCells(grid, scaled);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(scaled);
+            }
+        }
+
+        static IslandMap GenerateInCells(TerrainGrid grid, TerrainGenSettings settings)
+        {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var lastMark = 0d;
             var random = new System.Random(settings.Seed);
             var width = grid.Width;
             var depth = grid.Height;
@@ -106,9 +144,13 @@ namespace TinyDiggers.Terrain
             };
 
             // --- 1: where the land is --------------------------------------------------------
+            // The per-cell passes run a row per task: each cell reads only the settings and the
+            // noise, and writes only its own slot, so the result is the same as in series.
+            // Anything that touches the grid (and so raises its events) stays on this thread.
             var land = new bool[cells];
             var inDisc = new bool[cells];
-            for (var z = 0; z < depth; z++)
+            var shape = map.Shape;
+            Parallel.For(0, depth, z =>
             {
                 for (var x = 0; x < width; x++)
                 {
@@ -116,24 +158,25 @@ namespace TinyDiggers.Terrain
                     var here = new Vector2(x + 0.5f, z + 0.5f);
                     var toCentre = Vector2.Distance(here, centre);
                     if (toCentre > radius)
-                    {
-                        grid.SetVoid(x, z, true);
                         continue;
-                    }
 
                     inDisc[cell] = true;
-                    land[cell] = IsLand(here, toCentre, radius, centre, landOffset, landWarp, landWarpFine, settings, map.Shape);
+                    land[cell] = IsLand(here, toCentre, radius, centre, landOffset, landWarp, landWarpFine, settings, shape);
                 }
-            }
+            });
+            for (var cell = 0; cell < cells; cell++)
+                if (!inDisc[cell])
+                    grid.SetVoid(cell % width, cell / width, true);
 
             RemoveSmallBlobs(land, inDisc, width, depth, settings, map.Shape);
+            map.Mark("mask", stopwatch, ref lastMark);
 
             // --- 2-4: height over the land ---------------------------------------------------
             var ridge = RidgeLine(random, centre, radius);
             var benches = Benches(random, ridge, centre, radius, settings);
             var heights = new float[cells];
             var highGround = new float[cells];
-            for (var z = 0; z < depth; z++)
+            Parallel.For(0, depth, z =>
             {
                 for (var x = 0; x < width; x++)
                 {
@@ -186,14 +229,20 @@ namespace TinyDiggers.Terrain
 
                     heights[cell] = height;
                 }
-            }
+            });
+
+            map.Mark("heights", stopwatch, ref lastMark);
 
             // --- 5: valleys where the water would run ---------------------------------------
             var accumulation = FlowAccumulation(heights, land, width, depth);
             CutValleys(heights, land, accumulation, settings);
 
+            map.Mark("valleys", stopwatch, ref lastMark);
+
             // --- 6: the coast and the shelf --------------------------------------------------
             ShapeCoast(heights, land, inDisc, width, depth, radius, centre, settings);
+
+            map.Mark("coast", stopwatch, ref lastMark);
 
             // --- 7: quantise and relax -------------------------------------------------------
             var isLand = new bool[cells];
@@ -208,6 +257,8 @@ namespace TinyDiggers.Terrain
             // there are any materials to ask.
             var cliff = CliffMask(heights, inDisc, width, depth, settings);
             var sweeps = Relax(heights, isLand, cliff, width, depth, step, settings.MaxCliffStep);
+
+            map.Mark("relax", stopwatch, ref lastMark);
 
             // --- 8: rivers -------------------------------------------------------------------
             CarveRivers(map, heights, land, accumulation, width, depth, grid, settings, step);
@@ -227,6 +278,8 @@ namespace TinyDiggers.Terrain
             CleanUpShores(heights, inDisc, width, depth, settings, map.Shape, step, fillPockets: false);
             ReadRiverFloors(map, heights, width);
 
+            map.Mark("rivers+shores", stopwatch, ref lastMark);
+
             // --- 9: surface materials --------------------------------------------------------
             // Its own pass over the finished heights, so what a hillside is made of is decided by
             // the hillside rather than cell by cell as columns are built. See SurfaceMaterials.
@@ -243,27 +296,63 @@ namespace TinyDiggers.Terrain
             SurfaceMaterials.PromoteCliffFaces(surfaceMaterials, heights, inDisc, width, depth, step);
             SurfaceMaterials.Tidy(surfaceMaterials, heights, inDisc, toWater, width, depth, settings);
 
+            map.Mark("materials", stopwatch, ref lastMark);
+
             // --- 10: strata ------------------------------------------------------------------
             // Ore offsets come last off the island's random stream, so turning ores on changed
             // nothing about the land any existing seed already made.
             var oreFields = OreDeposits.Fields.Draw(random);
+            // Columns are built a band of rows at a time in parallel, then written to the grid
+            // in series, because writing a cell raises the grid's events.
             var peak = -1;
-            Span<Layer> column = stackalloc Layer[TerrainGrid.MaxLayersPerCell];
-            for (var z = 0; z < depth; z++)
+            const int bandRows = 64;
+            var perCell = TerrainGrid.MaxLayersPerCell;
+            var bandLayers = new Layer[bandRows * width * perCell];
+            var bandCounts = new byte[bandRows * width];
+            var datum = grid.Datum;
+            for (var bandStart = 0; bandStart < depth; bandStart += bandRows)
             {
-                for (var x = 0; x < width; x++)
+                var rows = Math.Min(bandRows, depth - bandStart);
+                var start = bandStart;
+                Parallel.For(0, rows, row =>
                 {
-                    var cell = z * width + x;
-                    if (!inDisc[cell])
-                        continue;
-                    if (peak < 0 || heights[cell] > heights[peak])
-                        peak = cell;
-                    var count = BuildColumn(column, heights[cell], surfaceMaterials[cell],
-                        highGround[cell], ValleyStrength(accumulation[cell]), grid.Datum, settings);
-                    OreDeposits.Apply(column, ref count, x, z, heights[cell], grid.Datum, highGround[cell], oreFields, settings);
-                    grid.SetColumn(x, z, column.Slice(0, count));
+                    var z = start + row;
+                    Span<Layer> column = stackalloc Layer[TerrainGrid.MaxLayersPerCell];
+                    for (var x = 0; x < width; x++)
+                    {
+                        var cell = z * width + x;
+                        var slot = row * width + x;
+                        if (!inDisc[cell])
+                        {
+                            bandCounts[slot] = 0;
+                            continue;
+                        }
+
+                        var count = BuildColumn(column, heights[cell], surfaceMaterials[cell],
+                            highGround[cell], ValleyStrength(accumulation[cell]), datum, settings);
+                        OreDeposits.Apply(column, ref count, x, z, heights[cell], datum, highGround[cell], oreFields, settings);
+                        column.Slice(0, count).CopyTo(new Span<Layer>(bandLayers, slot * perCell, perCell));
+                        bandCounts[slot] = (byte)count;
+                    }
+                });
+
+                for (var row = 0; row < rows; row++)
+                {
+                    var z = start + row;
+                    for (var x = 0; x < width; x++)
+                    {
+                        var cell = z * width + x;
+                        if (!inDisc[cell])
+                            continue;
+                        if (peak < 0 || heights[cell] > heights[peak])
+                            peak = cell;
+                        var slot = row * width + x;
+                        grid.SetColumn(x, z, new ReadOnlySpan<Layer>(bandLayers, slot * perCell, bandCounts[slot]));
+                    }
                 }
             }
+
+            map.Mark("strata+ore", stopwatch, ref lastMark);
 
             if (peak >= 0)
                 map.Peak = new Vector2Int(peak % width, peak / width);
@@ -760,7 +849,7 @@ namespace TinyDiggers.Terrain
             for (var z = 0; z < depth; z++)
                 for (var x = 0; x < width; x++)
                     cliff[z * width + x] = inDisc[z * width + x]
-                        && SurfaceMaterials.SlopeDegrees(smoothed, inDisc, width, depth, x, z) >= settings.CliffSlope;
+                        && SurfaceMaterials.SlopeDegrees(smoothed, inDisc, width, depth, x, z, settings.GenerationCellSize) >= settings.CliffSlope;
             return cliff;
         }
 

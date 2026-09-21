@@ -37,8 +37,10 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
 - Per-cell **stack of material layers** with thickness. Surface height = sum.
 - Heights and edits are quantised to `HeightStep`. Data stays float internally
   for volume/slump maths.
-- Cell size: **1 m** (CoI tiles are ~2 m per community measurement; we go finer
-  because our machines are smaller relative to the land).
+- Cell size: **0.5 m** since slice 11, with a 0.5 m height step, so one step per
+  cell is still 45° (CoI tiles are ~2 m per community measurement; we are 4× finer
+  because our machines are smaller relative to the land). `TerrainGrid.CellSize`
+  converts at the boundaries; generation settings stay in metres.
 - **The world is a disc on a table** (built, slice 6). The grid stays square,
   and the cells outside the disc are marked void: they hold no layers, are not
   drawn, cannot be walked on, designated or slumped into, and belong to no

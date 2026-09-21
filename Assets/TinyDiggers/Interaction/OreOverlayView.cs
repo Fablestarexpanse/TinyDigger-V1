@@ -117,6 +117,7 @@ namespace TinyDiggers.Interaction
             }
 
             _mesh.Clear();
+            _mesh.indexFormat = _vertices.Count > ushort.MaxValue ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
             _mesh.SetVertices(_vertices);
             _mesh.SetColors(_colors);
             _mesh.SetTriangles(_triangles, 0, true);

@@ -21,7 +21,7 @@ namespace TinyDiggers.Interaction
 
         public const float MaxFov = 60f;
 
-        /// <summary>The ground point the camera orbits, in cells.</summary>
+        /// <summary>The ground point the camera orbits, in metres in the terrain's local space.</summary>
         public Vector3 Pivot;
 
         /// <summary>Degrees clockwise from +z.</summary>
@@ -50,7 +50,7 @@ namespace TinyDiggers.Interaction
         /// <summary>Fraction of the distance one scroll notch covers.</summary>
         public float ZoomStep = 0.15f;
 
-        /// <summary>Cells a second of panning at the closest zoom.</summary>
+        /// <summary>Metres a second of panning at the closest zoom.</summary>
         public float PanSpeed = 12f;
 
         /// <summary>How many times faster panning is at the furthest zoom.</summary>
@@ -60,10 +60,10 @@ namespace TinyDiggers.Interaction
 
         public float FarPitch = 60f;
 
-        /// <summary>The middle of the disc of land, in cells.</summary>
+        /// <summary>The middle of the disc of land, in metres.</summary>
         public Vector2 DiscCentre = Vector2.zero;
 
-        /// <summary>Cells from the middle of the disc to its rim; the pivot never leaves it.</summary>
+        /// <summary>Metres from the middle of the disc to its rim; the pivot never leaves it.</summary>
         public float DiscRadius = 128f;
 
         /// <summary>How far out the camera is, 0 closest and 1 furthest.</summary>

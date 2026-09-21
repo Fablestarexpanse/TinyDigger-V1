@@ -5,13 +5,10 @@ this records why.
 
 ---
 
-**NEXT:** Slice 10 (ore underground) is built, green (309/309) and pushed. Waiting on Ronan's look at
-`Screenshots/Slice10/`. Open:
-- seams don't show as bands on pit walls (the shader has no strata-by-height);
-- deep stone pit walls collapse into loose rock and bury a seam;
-- the crew is too slow to reach ore 5–7 m down in a short test, and small deep pits block the
-  auto-ramp.
-The next CoI step after ore is stockpiles (count what the haulers bring).
+**NEXT:** Slice 11 (half-metre cells) is done and committed; waiting on Ronan's look at
+`Screenshots/Slice11/`. Open from it: crew body size vs 0.5 m cells, regenerate-in-play hitch
+(1.4 s + 2.1 s frame), stripes on stepped slopes, and the Slice 8–10 capture tools, which still
+pose the camera in cells.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1723,3 +1720,80 @@ shows "Dug: Iron ore 12 m³ · …".
 2. A coal seam seen on a pit wall. The terrain shader colours faces by the column's top and next
    layer, not by strata at that height, and a 7 m stone wall collapsed into loose rock over the
    seam anyway.
+
+## Slice 11 — half-metre cells (2026-09-21)
+
+Ronan asked for a finer dirt surface: "can we make the dirt surface even smaller". He chose the
+same ~512 m island at **1024² cells of 0.5 m**, with the **height step halved to 0.5 m**, so one
+step per cell is still 45° and the slump, cliff and slope rules keep their meaning. He also
+approved moving the generation budget from 500 ms at 512² to **≤ 1.2 s at 1024²**.
+
+**Approach.** `TerrainGrid.CellSize` (default 1, so every existing test and caller is unchanged)
+and `CellArea`. Grid, generation and crew logic stay in cell indices; only the places that turn
+cells into metres multiply by `CellSize`. There is no scale on the terrain root, because it would
+squash the camera orbit and metre-sized props. Where each conversion lives:
+- **Slopes:** `AngleOfReposeSimulator` neighbour distances, `SurfaceMaterials.SlopeDegrees`
+  (new `cellSize` argument), `GridPathfinder` step cost and heuristic (metres),
+  `GridPathfinder.MaxStepHeight` (defaults to one cell's width, a 45° step), and
+  `Blueprints.LegGrade`/`SteepestGrade` (metres per metre; `PlayerTools.MaxGrade` 0.25 m/m).
+- **Volumes:** `Excavation.Dig` takes a depth in metres and fills the load with thickness ×
+  `CellArea` m³. `Excavation.Tip` takes m³ and lays m³ ÷ `CellArea` of thickness.
+  `CrewUnit.StepVolume` is one step on one cell. `Blueprints.Volumes` takes the cell area.
+- **Generation:** `TerrainGenSettings` stay in metres, as tuned. `IslandGenerator.Generate` makes
+  a copy scaled into cells (`ScaledForCells`): lengths ×1/cell, cell counts rounded, areas ×1/cell²,
+  and `MaxCliffStep`/`BeachMaxSlope` per cell. The ore depth wander noise is scaled too.
+- **Rendering:** chunk GameObjects get `localScale (cell, 1, cell)`. Meshes are still built in
+  cells, and Unity's inverse-transpose normal transform keeps the per-cell normals right per metre.
+  The shader reads `_TerrainOrigin.z` = cells per metre. `BlendWidth` is now metres. The stone-field
+  reach in `TerrainCellMap` is 2 m (4 cells at 0.5 m); a fixed 2 cells had halved the rock-edge
+  smoothing in metres.
+- **Water, overlays, camera and picking:** `WaterView`/`WaterField` build in cells and scale to
+  metres, and shore distances are metres. `GrassField` density is per m². `DesignationsView`
+  tiles take the cell size. `TerrainView.DiscCentre`/`DiscRadius` are now metres (camera, table,
+  sea). `TerrainPicker.TryPick` takes and returns metres. `RtsCamera` pivot is metres.
+- **Crew:** `CrewUnit.Speed` is m/s. `CrewView.digReach` 2 m and `cliffReach` 6 m become levels
+  through `HeightStep`. A unit is still a one-cell machine, so its body is scaled to the cell:
+  diggers now read as about 0.35 × 0.48 m. Brush and road width stay in cells, so the tools got
+  finer too.
+
+**Performance.** 1024² started at 1801 ms. Per-cell passes now run a row per task
+(`Parallel.For`): the land mask, heights, material pick, `SurfaceMaterials.Smooth`, and strata/ore
+columns built in 64-row bands, then written to the grid in series, because writing raises the
+grid's events. Output is identical run to run (checksum and ore count compared).
+- 1024² at 0.5 m: 760–980 ms. Stages are now recorded on `IslandMap.Stages`.
+- 512² at 1 m: still under 500 ms.
+- `TerrainCellMap` now catches the stone field up once per flush, deduplicated, and redoes the
+  whole map in parallel past an eighth of it. A 9×9 kernel redone per changed cell would have
+  made a regenerate take minutes.
+
+**Measured in play (Continent seed 11, editor, `TinyDiggers/Slice 11 Capture`):**
+- Start-up: 1024 chunks, 1.63 M triangles, generated plus settled in 1142 ms, meshed in 297 ms.
+- Frame time on the disc pose: 3.7–4.0 ms.
+- A 4×4-cell dig: under 1 ms to apply; the next frame rebuilt 1 chunk in 4.8–8.9 ms.
+- Regenerate in play: 1.4–1.5 s, then a 2.1–2.3 s frame (every chunk rebuilt, every listener
+  notified). It is a hitch, not a loop, but worth a look.
+- The crew cleared a 6 m square (12×12 cells) designation 2 m deep: 0 designations left,
+  ~30 m³ dug.
+
+**Same island in metres** (seed 11, scene settings): top-material shares 1 m vs 0.5 m are topsoil
+61.5/59.7%, rock 24.2/26.0%, sand 14.2/14.1%. `CellSizeTests` also checks land area and peak
+within 10%.
+
+**Tests:** 13 new (`CellSizeTests`, `CellSizeCrewTests`); 322/322 pass. They cover:
+- a 45° step standing at 0.5 m, and the same 1 m step slumping only on 0.5 m cells;
+- slope as rise over metres, and a ray in metres picking the right cell;
+- dig and tip volumes; path cost; road grade;
+- the same island at both sizes, with iron inside its depth window;
+- 1024² generated under 1.2 s.
+
+**Found along the way:** the capture tool's close-ups first came out at 700 m. `RtsCamera`'s edge
+pan and wheel zoom read the real mouse over the Game view mid-capture, so the tool now switches
+the RtsCamera off and places the camera itself. The Slice 8–10 capture tools still pose in cells
+and will frame wrongly at 0.5 m.
+
+**Not good yet** (said plainly):
+1. Stepped slopes show fine stripes: each half-metre terrace reads as a band.
+2. The crew-pit shots are weak. No flat grass was found near the crew, so the pit was dug in a
+   valley side and does not read well.
+3. Crew bodies are tiny at cell size.
+

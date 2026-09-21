@@ -166,15 +166,16 @@ MonoBehaviour:
   _terrain: {fileID: 551060599}
   _designations: {fileID: 1108996318}
   _pathMaterial: {fileID: 2100000, guid: 189053e189be60c4eb80f5df95575af8, type: 2}
-  _spawnCell: {x: 256, y: 256}
+  _spawnCell: {x: 512, y: 512}
   _diggerCount: 2
   _haulerCount: 2
   _speed: 3
   _capacity: 5
   _haulerCapacity: 20
   _workInterval: 0.4
-  digReachLevels: 2
-  maxStepHeight: 1
+  digReach: 2
+  cliffReach: 6
+  maxStepHeight: 0.5
   benching: 1
   autoRamp: 1
   _bodySize: {x: 1, y: 0.8, z: 2}
@@ -316,8 +317,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0a5c2b29950659f43b84bed8a40cf78c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: TinyDiggers.Presentation::TinyDiggers.Presentation.TerrainView
-  _width: 512
-  _height: 512
+  _width: 1024
+  _height: 1024
+  _cellSize: 0.5
   _chunkSize: 32
   _seed: 1
   _material: {fileID: 2100000, guid: 4fd8fa78ded655542ae757b61b907654, type: 2}
@@ -331,7 +333,7 @@ MonoBehaviour:
   MottleRepeat: 12
   MottleStrength: 0.18
   BlendWidth: 1
-  HeightStep: 1
+  HeightStep: 0.5
   SlumpTilesPerTick: 1000
 --- !u!4 &551060600
 Transform:

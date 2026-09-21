@@ -244,5 +244,52 @@ namespace TinyDiggers.Terrain
         public OreSpec IronOre = new OreSpec(abundance: 0.32f, patchSize: 45f, depthMin: 4f, depthMax: 15f, maxThickness: 4f);
         public OreSpec CopperOre = new OreSpec(abundance: 0.4f, patchSize: 32f, depthMin: 3f, depthMax: 12f, maxThickness: 3f);
         public OreSpec LimestoneOre = new OreSpec(abundance: 0.4f, patchSize: 110f, depthMin: 1.5f, depthMax: 5f, maxThickness: 6f);
+
+        /// <summary>
+        /// The cell size a scaled copy was made for (<see cref="ScaledForCells"/>); 1 on an asset.
+        /// Not saved.
+        /// </summary>
+        [System.NonSerialized] public float GenerationCellSize = 1f;
+
+        /// <summary>
+        /// A copy with every horizontal setting turned from metres into cells of
+        /// <paramref name="cellSize"/> metres, which is what the generator works in. The values on
+        /// the asset were tuned when a cell was a metre, so they read as metres; heights and
+        /// angles are unchanged. Lengths and cell counts divide by the cell size, areas (the
+        /// minimum patch counts) by its square, and per-cell steps (cliff step, beach slope)
+        /// multiply by it so the angle they make stays the same. The caller destroys the copy.
+        /// </summary>
+        public TerrainGenSettings ScaledForCells(float cellSize)
+        {
+            var s = Instantiate(this);
+            s.hideFlags = HideFlags.DontSave;
+            s.GenerationCellSize = cellSize;
+            if (Mathf.Approximately(cellSize, 1f))
+                return s;
+
+            var k = 1f / cellSize;
+            int Count(int cells) => Mathf.Max(1, Mathf.RoundToInt(cells * k));
+            int Area(int cells) => Mathf.Max(1, Mathf.RoundToInt(cells * k * k));
+
+            s.FeatureSize *= k; s.MediumSize *= k; s.DetailSize *= k; s.WarpSize *= k; s.WarpStrength *= k;
+            s.LandFeatureSize *= k; s.LandWarpStrength *= k;
+            s.RidgeWidth *= k; s.RidgeWarpSize *= k; s.RidgeWarpStrength *= k; s.PlateauRadius *= k;
+            s.CoastNoiseSize *= k; s.CoastNoiseCells *= k; s.MountainRadius *= k; s.ValleyRadius *= k;
+            s.MaterialNoiseSize *= k; s.SandMaxDistance *= k; s.RiverWander *= k;
+
+            s.RimWaterCells = Count(RimWaterCells); s.BeachCells = BeachCells == 0 ? 0 : Count(BeachCells);
+            s.ShallowCells = Count(ShallowCells); s.ShelfCells = Count(ShelfCells); s.ChannelCells = Count(ChannelCells);
+            s.RiverWidth = Count(RiverWidth); s.SlopeSmoothing = Count(SlopeSmoothing);
+            s.MinLandBlob = Area(MinLandBlob); s.MinWaterPocket = Area(MinWaterPocket); s.MinMaterialPatch = Area(MinMaterialPatch);
+
+            s.BeachMaxSlope *= cellSize; s.MaxCliffStep *= cellSize;
+
+            s.CoalOre = Scaled(CoalOre, k); s.IronOre = Scaled(IronOre, k);
+            s.CopperOre = Scaled(CopperOre, k); s.LimestoneOre = Scaled(LimestoneOre, k);
+            return s;
+        }
+
+        static OreSpec Scaled(OreSpec spec, float k) =>
+            new OreSpec(spec.Abundance, spec.PatchSize * k, spec.DepthMin, spec.DepthMax, spec.MaxThickness);
     }
 }

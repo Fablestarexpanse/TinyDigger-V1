@@ -220,10 +220,12 @@ namespace TinyDiggers.Presentation
         /// </summary>
         Mesh BuildSea(Mesh mesh)
         {
+            // Built in cells, like the grid it follows, and scaled to metres at the end.
             var grid = _terrain.Grid;
-            var step = Mathf.Max(1, _seaResolution);
-            var centre = _terrain.DiscCentre;
-            var radius = _terrain.DiscRadius + _seaOverhang;
+            var cellSize = grid.CellSize;
+            var step = Mathf.Max(1, Mathf.RoundToInt(_seaResolution / cellSize));
+            var centre = _terrain.DiscCentre / cellSize;
+            var radius = (_terrain.DiscRadius + _seaOverhang) / cellSize;
 
             var columns = grid.Width / step + 1;
             var rows = grid.Height / step + 1;
@@ -297,7 +299,7 @@ namespace TinyDiggers.Presentation
                 }
             }
 
-            return Fill(mesh, "Sea", vertices, depths, shores, directions, indices);
+            return Fill(mesh, "Sea", vertices, depths, shores, directions, indices, cellSize);
         }
 
         /// <summary>
@@ -317,8 +319,11 @@ namespace TinyDiggers.Presentation
                 return Fill(mesh, "River", vertices, depths, flows, directions, indices);
             var flowSpeed = _settings != null ? _settings.FlowSpeed : 1.2f;
 
+            // The river's points are in cells; the ribbon is built in cells and scaled to metres at
+            // the end. The settings' RiverWidth is metres.
+            var cellSize = _terrain.Grid.CellSize;
             var settings = _terrain.Settings;
-            var halfWidth = Mathf.Max(1f, (settings != null ? settings.RiverWidth : 4) * 0.5f);
+            var halfWidth = Mathf.Max(1f, (settings != null ? settings.RiverWidth : 4) * 0.5f) / cellSize;
             var travelled = 0f;
 
             for (var i = 0; i < island.River.Count; i++)
@@ -334,7 +339,7 @@ namespace TinyDiggers.Presentation
                 var across = new Vector3(-along.z, 0f, along.x) * halfWidth;
 
                 if (i > 0)
-                    travelled += Vector3.Distance(new Vector3(previous.x, 0f, previous.z), new Vector3(point.x, 0f, point.z));
+                    travelled += Vector3.Distance(new Vector3(previous.x, 0f, previous.z), new Vector3(point.x, 0f, point.z)) * cellSize;
 
                 // The surface stands above the floor, but never above the sea: where the channel
                 // reaches the coast the river simply becomes the sea.
@@ -350,7 +355,7 @@ namespace TinyDiggers.Presentation
                 depths.Add(new Vector2(depth, travelled));
 
                 // Steeper reaches run faster: a metre of drop in ten metres doubles the speed.
-                var run = Mathf.Max(0.5f, new Vector2(next.x - previous.x, next.z - previous.z).magnitude);
+                var run = Mathf.Max(0.5f, new Vector2(next.x - previous.x, next.z - previous.z).magnitude * cellSize);
                 var drop = Mathf.Max(0f, previous.y - next.y) / run;
                 var speed = flowSpeed * (1f + drop * 10f);
                 // Past the reach of the shore waves, so none break on a river.
@@ -375,12 +380,17 @@ namespace TinyDiggers.Presentation
                 vertices[i + 1] = Vector3.Lerp(middle, vertices[i + 1], 1.05f);
             }
 
-            return Fill(mesh, "River", vertices, depths, flows, directions, indices);
+            return Fill(mesh, "River", vertices, depths, flows, directions, indices, cellSize);
         }
 
+        /// <summary>Uploads a sheet built in cells, scaling x and z by <paramref name="cellSize"/> into metres.</summary>
         static Mesh Fill(Mesh mesh, string name, List<Vector3> vertices, List<Vector2> depths,
-            List<Vector2> shores, List<Vector2> directions, List<int> indices)
+            List<Vector2> shores, List<Vector2> directions, List<int> indices, float cellSize = 1f)
         {
+            if (!Mathf.Approximately(cellSize, 1f))
+                for (var i = 0; i < vertices.Count; i++)
+                    vertices[i] = new Vector3(vertices[i].x * cellSize, vertices[i].y, vertices[i].z * cellSize);
+
             if (mesh == null)
                 mesh = new Mesh { name = name, hideFlags = HideFlags.DontSave };
             mesh.Clear();

@@ -26,7 +26,7 @@ namespace TinyDiggers.Interaction
         [Tooltip("How many haulers to spawn.")]
         [SerializeField, Min(0)] int _haulerCount = 2;
 
-        [Tooltip("Cells per second.")]
+        [Tooltip("Metres per second.")]
         [SerializeField, Min(0.1f)] float _speed = 3f;
 
         [Tooltip("Loose m³ a digger's scoop holds.")]
@@ -38,8 +38,12 @@ namespace TinyDiggers.Interaction
         [Tooltip("Seconds per height step dug, or per tip.")]
         [SerializeField, Min(0.01f)] float _workInterval = 0.4f;
 
-        /// <summary>How many height steps above or below its own cell a unit can dig or fill. Read every frame.</summary>
-        [Min(0)] public int digReachLevels = 2;
+        /// <summary>How far above or below its own cell a unit can dig or fill, in metres. Read every frame.</summary>
+        [UnityEngine.Serialization.FormerlySerializedAs("digReachLevels")]
+        [Min(0f)] public float digReach = 2f;
+
+        /// <summary>How far up a rock face a unit can work from its foot, in metres. Read every frame.</summary>
+        [Min(0f)] public float cliffReach = 6f;
 
         /// <summary>Largest height change a unit can drive across between neighbouring cells, in metres.</summary>
         [Min(0f)] public float maxStepHeight = 1f;
@@ -98,7 +102,8 @@ namespace TinyDiggers.Interaction
                 body.name = $"{role} {i} Body";
                 body.hideFlags = HideFlags.DontSave;
                 body.transform.SetParent(transform, false);
-                body.transform.localScale = role == UnitRole.Digger ? _bodySize : _haulerBodySize;
+                // A unit is a one-cell machine to the crew logic, so its body is sized to the cell.
+                body.transform.localScale = (role == UnitRole.Digger ? _bodySize : _haulerBodySize) * grid.CellSize;
                 var bodyRenderer = body.GetComponent<MeshRenderer>();
                 bodyRenderer.material.color = role == UnitRole.Digger ? _bodyColor : _haulerColor;
                 _bodies.Add(body.transform);
@@ -124,7 +129,8 @@ namespace TinyDiggers.Interaction
             Dispatcher.Tick(Time.deltaTime);
             foreach (var unit in _units)
             {
-                unit.DigReachLevels = digReachLevels;
+                unit.DigReachLevels = Levels(digReach);
+                unit.CliffReachLevels = Levels(cliffReach);
                 unit.Speed = _speed;
                 unit.WorkInterval = _workInterval;
                 unit.Tick(Time.deltaTime);
@@ -156,11 +162,13 @@ namespace TinyDiggers.Interaction
         {
             var terrainTransform = _terrain.transform;
             var grid = _terrain.Grid;
+            var cellSize = grid.CellSize;
             for (var i = 0; i < _units.Count; i++)
             {
                 var unit = _units[i];
-                var position = unit.Position;
-                var size = unit.Role == UnitRole.Digger ? _bodySize : _haulerBodySize;
+                // Unit positions are in cells; the terrain's local space is metres.
+                var position = unit.Position * cellSize;
+                var size = (unit.Role == UnitRole.Digger ? _bodySize : _haulerBodySize) * cellSize;
                 _bodies[i].SetPositionAndRotation(
                     terrainTransform.TransformPoint(new Vector3(position.x, unit.Height + size.y * 0.5f, position.y)),
                     terrainTransform.rotation * Quaternion.Euler(0f, unit.Heading, 0f));
@@ -178,13 +186,20 @@ namespace TinyDiggers.Interaction
                     {
                         var x = path[p].x + 0.5f;
                         var z = path[p].y + 0.5f;
-                        _pathPoints[count++] = terrainTransform.TransformPoint(new Vector3(x, TerrainSurface.SampleHeight(grid, x, z) + 0.3f, z));
+                        _pathPoints[count++] = terrainTransform.TransformPoint(new Vector3(x * cellSize, TerrainSurface.SampleHeight(grid, x, z) + 0.3f, z * cellSize));
                     }
                 }
 
                 _lines[i].positionCount = count;
                 _lines[i].SetPositions(_pathPoints);
             }
+        }
+
+        /// <summary>Metres of reach as whole height steps, never less than one.</summary>
+        int Levels(float metres)
+        {
+            var step = _terrain.Grid.HeightStep > 0f ? _terrain.Grid.HeightStep : 1f;
+            return Mathf.Max(1, Mathf.RoundToInt(metres / step));
         }
 
         void OnDestroy()

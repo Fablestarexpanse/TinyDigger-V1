@@ -204,11 +204,12 @@ Shader "TinyDiggers/Terrain Triplanar"
                 // Which cells this fragment sits between. Cell (i, j) spans i..i+1, so the centre
                 // of the cell is at +0.5, and the fragment blends toward whichever centres are
                 // near it.
-                float2 cell = positionWS.xz - _TerrainOrigin.xy;
+                // _TerrainOrigin.z is cells per metre (1 / cell size).
+                float2 cell = (positionWS.xz - _TerrainOrigin.xy) * _TerrainOrigin.z;
                 // The boundary is pushed about by a little noise before the blend is worked out,
                 // so a material edge is a ragged line rather than a straight one between two cell
                 // centres. Metres, not cells, so it does not scale with the blend width.
-                cell += (float2(ValueNoise(positionWS.xz * 0.35), ValueNoise(positionWS.zx * 0.35 + 17.0)) - 0.5) * 1.6;
+                cell += (float2(ValueNoise(positionWS.xz * 0.35), ValueNoise(positionWS.zx * 0.35 + 17.0)) - 0.5) * 1.6 * _TerrainOrigin.z;
                 float2 centred = cell - 0.5;
                 float2 baseCell = floor(centred);
                 float2 f = centred - baseCell;

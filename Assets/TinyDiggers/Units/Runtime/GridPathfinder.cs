@@ -27,8 +27,11 @@ namespace TinyDiggers.Units
         static readonly int[] StepX = { 1, -1, 0, 0, 1, 1, -1, -1 };
         static readonly int[] StepZ = { 0, 0, 1, -1, 1, -1, 1, -1 };
 
-        /// <summary>Largest surface-height difference a single step can climb or drop, in metres.</summary>
-        public float MaxStepHeight = 1f;
+        /// <summary>
+        /// Largest surface-height difference a single step can climb or drop, in metres. Defaults to
+        /// one cell's width: a 45-degree step.
+        /// </summary>
+        public float MaxStepHeight;
 
         /// <summary>Extra cost per metre of height change, as a fraction of the step's length.</summary>
         public float SlopeCostFactor = 1f;
@@ -55,6 +58,7 @@ namespace TinyDiggers.Units
             _seen = new int[cells];
             _closed = new int[cells];
             _floodCells = new int[cells];
+            MaxStepHeight = grid.CellSize;
 
         }
 
@@ -84,7 +88,7 @@ namespace TinyDiggers.Units
         /// <summary>Cost of stepping from a to adjacent b; only meaningful when <see cref="CanStep"/> is true.</summary>
         public float StepCost(int ax, int az, int bx, int bz)
         {
-            var distance = ax != bx && az != bz ? Diagonal : 1f;
+            var distance = (ax != bx && az != bz ? Diagonal : 1f) * _grid.CellSize;
             var rise = Math.Abs(_grid.GetSurfaceHeight(bx, bz) - _grid.GetSurfaceHeight(ax, az));
             return distance * (1f + rise * SlopeCostFactor);
         }
@@ -288,7 +292,7 @@ namespace TinyDiggers.Units
         float CorridorCost(int ax, int az, int bx, int bz, float steepPenalty)
         {
             var rise = Math.Abs(_grid.GetSurfaceHeight(bx, bz) - _grid.GetSurfaceHeight(ax, az));
-            var cost = 1f + rise * SlopeCostFactor;
+            var cost = _grid.CellSize * (1f + rise * SlopeCostFactor);
             if (rise > MaxStepHeight + Tolerance)
                 cost += (rise - MaxStepHeight) * steepPenalty;
             return cost;
@@ -309,13 +313,16 @@ namespace TinyDiggers.Units
             return true;
         }
 
-        /// <summary>Octile distance to (tx, tz), less a slack for goals that only need to be near it.</summary>
-        static float Heuristic(int x, int z, int tx, int tz, float slack)
+        /// <summary>
+        /// Octile distance in metres to (tx, tz), less a slack (in cells) for goals that only need to
+        /// be near it.
+        /// </summary>
+        float Heuristic(int x, int z, int tx, int tz, float slack)
         {
             var dx = Math.Abs(x - tx);
             var dz = Math.Abs(z - tz);
             var octile = Math.Max(dx, dz) + (Diagonal - 1f) * Math.Min(dx, dz);
-            return Math.Max(0f, octile - slack);
+            return Math.Max(0f, octile - slack) * _grid.CellSize;
         }
 
         void Push(int cell, float key)

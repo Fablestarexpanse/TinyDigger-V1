@@ -67,7 +67,7 @@ namespace TinyDiggers.Presentation
                 for (var cx = 0; cx < ChunkCountX; cx++)
                 {
                     var index = cz * ChunkCountX + cx;
-                    _chunks[index] = new Chunk(cx, cz, chunkSize, parent, material);
+                    _chunks[index] = new Chunk(cx, cz, chunkSize, grid.CellSize, parent, material);
                     MarkChunkDirty(index);
                 }
             }
@@ -190,7 +190,8 @@ namespace TinyDiggers.Presentation
 
         /// <summary>
         /// Fills <paramref name="builder"/> with the chunk whose first cell is (originX, originZ).
-        /// Positions are local to the chunk: cell (originX + i, originZ + j) spans i..i+1, j..j+1.
+        /// Positions are local to the chunk: cell (originX + i, originZ + j) spans i..i+1, j..j+1,
+        /// in cells; the chunk's transform scales them to metres.
         /// </summary>
         protected abstract void BuildChunk(int originX, int originZ, int width, int depth, TerrainMeshBuilder builder);
 
@@ -213,7 +214,7 @@ namespace TinyDiggers.Presentation
         {
             readonly GameObject _gameObject;
 
-            public Chunk(int x, int z, int chunkSize, Transform parent, Material material)
+            public Chunk(int x, int z, int chunkSize, float cellSize, Transform parent, Material material)
             {
                 X = x;
                 Z = z;
@@ -223,7 +224,11 @@ namespace TinyDiggers.Presentation
 
                 _gameObject = new GameObject($"Chunk {x},{z}") { hideFlags = HideFlags.DontSave };
                 _gameObject.transform.SetParent(parent, false);
-                _gameObject.transform.localPosition = new Vector3(x * chunkSize, 0f, z * chunkSize);
+                // Meshes are built in cells (one unit per cell, heights in metres); the chunk's
+                // scale turns cells into metres. Unity transforms the normals by the inverse
+                // scale, so a slope built per cell comes out right per metre.
+                _gameObject.transform.localPosition = new Vector3(x * chunkSize * cellSize, 0f, z * chunkSize * cellSize);
+                _gameObject.transform.localScale = new Vector3(cellSize, 1f, cellSize);
                 _gameObject.AddComponent<MeshFilter>().sharedMesh = Mesh;
                 var meshRenderer = _gameObject.AddComponent<MeshRenderer>();
                 meshRenderer.sharedMaterial = material;
