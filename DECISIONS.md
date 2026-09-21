@@ -5,13 +5,12 @@ this records why.
 
 ---
 
-**NEXT:** Slice 8 (island, sea, depth) is done, green (266/266) and pushed on `main`. Nothing is
-in flight. Known and deliberately left: the material boundaries dither into a diamond pattern on
-freshly dug slopes (the per-cell blend showing at close range), the island reads flatter than the
-brief's +60 m because the one-metre neighbour rule planes steep ground off, and the water has no
-dynamic effects yet (wakes, breaking shoreline waves, waterfalls) — Ronan has asked for those, and
-they are a tool set of their own. Still owed from before: a frame-time check on a mid-range
-machine, and the tilt-shift blur toggle.
+**NEXT:** Slice 8b (landmasses and slope lighting) is done, green (272/272) and pushed on `main`.
+Nothing is in flight. Known and deliberately left: the island still reads darker and greyer than a
+cosy sandbox should — the sun, ambient and material colours want a pass together, not one at a
+time; the material boundaries still dither on freshly dug slopes; cliffs are still deferred; and
+the water has no dynamic effects yet (wakes, breaking shoreline waves, waterfalls). Still owed from
+before: a frame-time check on a mid-range machine, and the tilt-shift blur toggle.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
 
@@ -1261,3 +1260,55 @@ seed gives the same island and a different seed a different one; there is sand a
 topsoil well above it. Plus the water rules: depth, passability, the pathfinder and regions
 refusing water, dig refused and fill and dump zone accepted, filling a water cell into land, and
 cutting land back to sea level giving it to the sea.
+
+
+---
+
+## Slice 8b — landmasses and slope-readable lighting (2026-09-20)
+
+### The land
+The radial mask is gone. Land is twice-warped fBm above a threshold, which is what gives bays,
+headlands and inlets; only the outer ring of the disc is forced to sea. Five archetypes bias that
+field — Continent, Crescent, Twin, Archipelago, Lagoon — and a seed picks one unless the settings
+asset says otherwise. Relief is a ridge along a curve with ridged multifractal noise on it, benches
+in its lee, and valleys cut by one D8 flow-accumulation pass, with the rivers put in the wettest of
+those valleys rather than traced downhill and hoped over.
+
+Three things worth remembering:
+- **A guarantee about the mask is not a guarantee about the land.** Culling small patches before
+  the heights are final leaves specks behind, because relaxing, beaching and carving all move cells
+  across the waterline afterwards. The cleanup now runs again on the finished heights, and once
+  more after the last relax, dropping specks only.
+- **Land has to be defined the same way everywhere.** The generator was culling patches at "above
+  sea level" while the sim calls a cell land only a whole step above it. The two definitions have
+  to agree or the cleanup passes over exactly the cells that will be holes.
+- **A column's height is a sum of floats over a datum, and it drifts.** A cell built to exactly one
+  step above the sea came out a few millionths under, which made it water — one such cell in the
+  middle of a field is a hole the crew cannot cross. The land test carries a millimetre of
+  tolerance now.
+
+### The lighting
+The sun is placed relative to the camera's heading, so the light always comes over the player's
+left shoulder however they turn the map: one face of every terrace lit, the other not. Ambient is a
+three-colour gradient rather than a flat colour, SSAO is on, and the terrain shader tints steep
+faces toward a cool grey independently of the light, so slope reads even on the shadowed side.
+Contour lines every 5 m and 1 m are drawn in the shader from world height, toggled with F4. All of
+it lives on a `LightingSettings` asset.
+
+Two things that were wrong and are worth remembering:
+- **Shadow bias is not a detail on a stepped heightfield.** A one-metre step seen from 450 m out is
+  the worst case for shadow acne: with a small bias the island shadowed itself everywhere and read
+  as dark, dirty rock. The bias is now on the settings asset, set generously, with a note saying
+  why.
+- **SSAO's radius is in world metres.** At 0.8 m and full strength it shaded the whole island from
+  far out instead of its creases. Gentled to 0.5 intensity at 0.6 m.
+
+Also: keying soil to a hard steepness threshold drew a line across every hillside and, with the
+new rugged relief, left the entire island bare. Soil now thins with slope and stops when it is too
+thin to be turf, which puts grass on the rolling land and bare ground on the ridges.
+
+### Tests (272/272 green)
+New: every archetype generates for five seeds; the coastline has bays in it; no patch of land is
+smaller than the minimum unless it is an archipelago; every river ends below sea level and only
+descends; there are beaches on the gentle coasts and bare ground on the steep ones; and a 512²
+map generates in under half a second.

@@ -984,17 +984,23 @@ namespace TinyDiggers.Terrain
             }
 
             var underwater = surface < World.SeaLevel;
-            // Ground that averages better than two thirds of a metre a cell is too steep to hold
-            // soil: that is a slope of roughly thirty-five degrees.
-            var steep = steepness > 0.67f;
+            // How bare the ground is, from nothing at half a metre a cell to completely bare at
+            // one and a quarter. A hard threshold would draw a line across the hillside; ground
+            // does not work that way, and neither does this.
+            var bare = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.5f, 1.25f, steepness));
+            var steep = bare > 0.6f;
             // A beach is low ground that is not steep; a steep shore is rock to the waterline.
             var coastal = !steep && Mathf.Abs(surface - World.SeaLevel) <= settings.SandBand;
 
-            var topsoil = underwater || coastal || steep ? 0f : settings.TopsoilThickness;
+            var topsoil = underwater || coastal ? 0f : settings.TopsoilThickness * (1f - bare);
+            // Turf thinner than this is not turf: the ground is bare from here on, which is what
+            // puts rock on the ridges and the steep flanks while the rolling land stays green.
+            if (topsoil < 0.12f)
+                topsoil = 0f;
             var sand = underwater || coastal ? settings.SandThickness : 0f;
             if (underwater && steep)
                 sand *= 0.3f;
-            var dirt = underwater ? 0.4f : steep ? settings.DirtOnSlopes : settings.DirtOnPlains;
+            var dirt = underwater ? 0.4f : Mathf.Lerp(settings.DirtOnPlains, settings.DirtOnSlopes, bare);
             if (coastal && !underwater)
                 dirt *= 0.5f;
             var clay = valley > 0.35f && !underwater ? settings.ClayInValleys * valley : 0f;

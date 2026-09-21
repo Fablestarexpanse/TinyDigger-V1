@@ -127,6 +127,9 @@ namespace TinyDiggers.Presentation
 
         public ITerrainRenderer Renderer => _terrainRenderer;
 
+        /// <summary>The terrain's material, for anything that tunes how it is shaded. May be null.</summary>
+        public Material DetailMaterial => _detail?.Material;
+
         /// <summary>Triangles across all chunks as last built.</summary>
         public long TriangleCount => _terrainRenderer?.TriangleCount ?? 0;
 

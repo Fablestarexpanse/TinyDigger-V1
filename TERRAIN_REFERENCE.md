@@ -47,6 +47,30 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
   gradient instead of a sky, make it a model on a surface rather than a
   landscape.
 
+### Landmasses (built, slice 8b)
+- Where land is is decided by **noise, not a radius**: twice-warped fBm above a
+  threshold, so the coast has bays, headlands and inlets. Only the outer ~25
+  cells of the disc are forced to sea.
+- **Archetypes** on the settings asset, chosen by seed unless overridden:
+  Continent (one rugged mass), Crescent (a bay bitten out of one side), Twin
+  (two masses and a strait), Archipelago (one main island plus islets), Lagoon
+  (a ring of land around a shallow lake that opens to the sea).
+- Patches of land under 40 cells are dropped into the sea (an archipelago keeps
+  its islets) and pockets of water under 12 cells are filled. It runs twice,
+  because relaxing the land moves cells across the waterline.
+- **Relief**: a ridge along a curve of 2–4 control points with ridged
+  multifractal noise on it, benches of flat ground in its lee, and valleys cut
+  by **one D8 flow-accumulation pass** — the more water a cell would gather,
+  the deeper it is cut, so valleys converge and the rivers go in the wettest of
+  them.
+- **Coast profile**: a beach (sand, rising to about +2 m over 3–8 cells) where
+  the land meets the sea gently; bare ground to the waterline where it is
+  steep; a shallow shelf 6–15 cells out before the sea drops away.
+- Soil thins with slope rather than switching off at a threshold, so a hillside
+  goes from turf to bare ground gradually instead of in a line.
+- Generation stays under half a second for 512²: 280–340 ms across the
+  archetypes, and a test says so.
+
 ### Sea, depth and water cells (built, slice 8)
 - Heights are metres above **sea level, which is 0 m** and is the datum the
   whole world reads against (`World.SeaLevel`). A grid also has a **datum**:

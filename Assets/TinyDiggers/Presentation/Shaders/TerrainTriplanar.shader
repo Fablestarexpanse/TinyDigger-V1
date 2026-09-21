@@ -36,6 +36,14 @@ Shader "TinyDiggers/Terrain Triplanar"
         _SteepEnd ("Cut complete (degrees)", Range(0, 90)) = 55
         _CutDarken ("Cut face darkening", Range(0, 0.5)) = 0.15
         _Occlusion ("Slope shading", Range(0, 1)) = 0.25
+
+        [Header(Slope and contours)]
+        _SlopeTint ("Slope tint", Range(0, 0.6)) = 0.2
+        _SlopeColour ("Slope colour", Color) = (0.55, 0.6, 0.68, 1)
+        _SlopeFullAt ("Slope full at (degrees)", Range(10, 80)) = 45
+        _ContourStrength ("Contour strength", Range(0, 1)) = 0
+        _MajorContour ("Major contour (m)", Range(1, 25)) = 5
+        _MinorContour ("Minor contour (m)", Range(0.25, 10)) = 1
     }
 
     SubShader
@@ -63,6 +71,12 @@ Shader "TinyDiggers/Terrain Triplanar"
             half _SteepEnd;
             half _CutDarken;
             half _Occlusion;
+            half _SlopeTint;
+            half4 _SlopeColour;
+            half _SlopeFullAt;
+            half _ContourStrength;
+            float _MajorContour;
+            float _MinorContour;
             float4 _MapSize;
             float4 _TerrainOrigin;
         CBUFFER_END
@@ -248,6 +262,28 @@ Shader "TinyDiggers/Terrain Triplanar"
                 albedo *= 1.0 + mottle * _MottleStrength;
                 albedo *= _Tint.rgb;
                 albedo *= 1.0 - cutAmount * _CutDarken;
+
+                // Slope tint: steep ground cools and darkens a little whatever the light is doing,
+                // so a face reads as steep even on the shadowed side of a hill.
+                float slopeAmount = saturate(slope / max(1.0, _SlopeFullAt));
+                albedo = lerp(albedo, _SlopeColour.rgb * 0.85, slopeAmount * _SlopeTint);
+
+                // Contours, drawn from world height rather than from geometry: a strong line every
+                // _MajorContour metres and a faint one every _MinorContour.
+                if (_ContourStrength > 0.001)
+                {
+                    float height = positionWS.y;
+                    // fwidth keeps a line one pixel wide at every distance instead of aliasing
+                    // into a moire when the camera pulls back.
+                    float thickness = max(fwidth(height), 1e-4) * 1.2;
+                    float major = abs(frac(height / _MajorContour + 0.5) - 0.5) * _MajorContour;
+                    float minor = abs(frac(height / _MinorContour + 0.5) - 0.5) * _MinorContour;
+                    float majorLine = 1.0 - smoothstep(0.0, thickness, major);
+                    float minorLine = (1.0 - smoothstep(0.0, thickness, minor)) * 0.4;
+                    // Not called "line": that is a reserved word in HLSL.
+                    float contour = saturate(max(majorLine, minorLine)) * _ContourStrength;
+                    albedo *= 1.0 - contour * 0.75;
+                }
 
                 // The detail normal bends the mesh's smooth normal rather than replacing it.
                 float3 detail = normalize(float3(normalTS.x, normalTS.y, max(normalTS.z, 0.05)));
