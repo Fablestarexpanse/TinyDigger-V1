@@ -1841,3 +1841,36 @@ with no error before it. The cause is not identified. Nothing in the game is hea
 4 ms frames, 1.6 M triangles on an RTX 4090), and nothing else was holding GPU memory just after
 the restart. If it recurs, note what else was running (ComfyUI, Blender, a capture) and the time,
 and profile a play session.
+
+**Approved** ("go forward", 2026-09-21). Build order: (1) the Blender kit, shown as renders;
+(2) layout and ring in Unity, plain concrete; (3) concrete textures and shader; (4) spillway
+water. Stop after each step.
+
+Kit convention: pieces are modelled straight. X runs along the wall, Y points outward
+(downstream), Z is up, and the origin is on the inner face at sea level, centred on the piece.
+Unity bends each piece onto the circle (angle from x over the inner radius, radius = inner + y),
+so every piece's outer end meets its neighbour's exactly. Placed as straight chords, the
+downstream face opened gaps of 0.5–1 m between bays, because the outer face is longer than the
+inner.
+
+**Step 1 done: the Blender kit** (`Art/Tools/td_dam.py`; `dam_preview.py` renders an arc of it
+headless; source `Art/Blender~/dam_kit.blend`; FBX in `Art/Props/Dam/`).
+- `dam_bay` (12 m, 360 triangles): a vertical inner wall; a 6 m crest walkway with parapets; a
+  battered downstream face from the crest down to −18 m, with a shallow cast panel; one
+  triangular buttress on its +x joint with a capped post; a stepped footing to −21.5 m.
+- `dam_spillway` (36 m, ~2.6 k triangles):
+  - four piers with rounded noses, rising to an 8 m gantry with a railed service bridge and a
+    hoist house on each pier;
+  - three radial gates between them, raised, with ribs and arms;
+  - an ogee weir at −2.5 m (below the sea, so the spillways always run) into a chute with
+    training walls and a flip-bucket lip.
+- `dam_spillway_water` (300 triangles): a sheet under the gates and down the chute, then a curtain
+  thrown off the lip. Its vertex alpha fades out 22 m below the footing.
+- `dam_tower` (~300 triangles): an intake tower standing 8 m off the wall, 18 m above the sea,
+  with slit windows and a railed bridge to the crest.
+
+Found along the way:
+1. The first gates sat entirely under the sea and read as a yellow log. The piers now rise to a
+   gantry (the reference photos) so the gates stand clear.
+2. Bevelling the zero-thickness gate skins and the thin rails threw long spikes across the scene.
+   A piece is now a bevelled body plus trim added after the bevel.
