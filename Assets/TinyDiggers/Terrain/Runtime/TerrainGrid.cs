@@ -147,7 +147,27 @@ namespace TinyDiggers.Terrain
                 throw new ArgumentException("Needs one surface per cell.", nameof(surfaces));
             _waterSurfaces ??= new float[_surfaceHeights.Length];
             surfaces.CopyTo(_waterSurfaces);
-            return RefreshBlocked();
+            return RefreshBlocked(0, _blocked.Length);
+        }
+
+        /// <summary>
+        /// As <see cref="SetWaterSurfaces"/>, for a band of whole rows starting at
+        /// <paramref name="firstRow"/>, so a big map's water can be taken a slice a frame. Needs
+        /// live water already (one full <see cref="SetWaterSurfaces"/> first): a map half fed
+        /// would read the unfed half as dry. Returns how many cells turned water or stopped being it.
+        /// </summary>
+        public int SetWaterRows(int firstRow, ReadOnlySpan<float> rows)
+        {
+            if (_waterSurfaces == null)
+                throw new InvalidOperationException("Feed the whole map with SetWaterSurfaces before feeding it by rows.");
+            if (rows.Length % Width != 0)
+                throw new ArgumentException("Needs whole rows.", nameof(rows));
+            var count = rows.Length / Width;
+            if (firstRow < 0 || firstRow + count > Height)
+                throw new ArgumentOutOfRangeException(nameof(firstRow));
+            var start = firstRow * Width;
+            rows.CopyTo(new Span<float>(_waterSurfaces, start, rows.Length));
+            return RefreshBlocked(start, start + rows.Length);
         }
 
         /// <summary>Goes back to the sea-level rule. Returns how many cells changed.</summary>
@@ -156,13 +176,13 @@ namespace TinyDiggers.Terrain
             if (_waterSurfaces == null)
                 return 0;
             _waterSurfaces = null;
-            return RefreshBlocked();
+            return RefreshBlocked(0, _blocked.Length);
         }
 
-        int RefreshBlocked()
+        int RefreshBlocked(int from, int to)
         {
             var changed = 0;
-            for (var cell = 0; cell < _blocked.Length; cell++)
+            for (var cell = from; cell < to; cell++)
             {
                 var blocked = _void[cell] || IsDeep(cell);
                 if (blocked == _blocked[cell])

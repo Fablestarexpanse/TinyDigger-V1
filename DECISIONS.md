@@ -7,7 +7,6 @@ this records why.
 
 **NEXT:** PromptWaffle Dynamic Water has a simulation, a URP surface, a TinyDiggers bridge and a
 swell, spillway overflows (a safety valve at sea level) and game logic reading it; waiting on Ronan's look. Open:
-- the grid feed's 4.7 ms spike every 0.2 s (could be spread over frames or moved to a job);
 - a package sample scene.
 
 Design intent lives in `TERRAIN_REFERENCE.md`; read it before changing terrain code.
@@ -2205,3 +2204,18 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
     designations there are refused, and dry land beside it can still be dug.
   - The climb-out has been verified only in tests (`LiveWaterTests`, 8), not with a real flood
     in play.
+
+## Grid water feed spread over frames (2026-09-21)
+- The first snapshot still goes into the grid whole: 5.4 ms, once, at start. A half-fed map
+  would read its unfed half as dry, and `TerrainGrid.SetWaterRows` refuses to run before one
+  whole `SetWaterSurfaces`.
+- After that `GridWaterFeed` feeds 128 rows a frame (`_rowsPerFrame`). A 1024-row sweep takes
+  8 frames. A sweep starts only when a snapshot newer than the one the last sweep ended on has
+  arrived, and each band reads whichever snapshot is newest.
+- **Measured in play** (24 s, including the flood-trench capture):
+  - worst frame 1.18 ms (the flood's cell flips firing region and crew updates), typical 0.56 ms,
+    down from a single 4.7 ms spike every 0.2 s;
+  - 114 sweeps, about 4.8 a second, keeping up with the readback;
+  - the trench still reads 0.94–1.46 m deep and blocked.
+- Tests: `LiveWaterTests` +2. A band changes only its rows, and rows are refused before the
+  whole map, as are partial rows and rows past the end.

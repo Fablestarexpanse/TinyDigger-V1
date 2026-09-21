@@ -92,6 +92,38 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
+        public void ABandOfRowsChangesOnlyThoseRows()
+        {
+            _grid.SetWaterSurfaces(_surfaces);
+            var changed = new List<Vector2Int>();
+            _grid.WaterChanged += (x, z) => changed.Add(new Vector2Int(x, z));
+
+            // Rows 4 and 5, flooded deep across the land half.
+            var band = new float[2 * Size];
+            System.Array.Fill(band, Dry);
+            for (var x = 0; x < Size / 2; x++)
+            {
+                band[x] = 2f;
+                band[Size + x] = 2f;
+            }
+
+            Assert.That(_grid.SetWaterRows(4, band), Is.EqualTo(Size));
+            Assert.That(changed.TrueForAll(c => c.y == 4 || c.y == 5), Is.True, "only the band's rows");
+            Assert.That(_grid.IsWater(0, 4) && _grid.IsWater(7, 5), Is.True);
+            Assert.That(_grid.IsWater(0, 3) || _grid.IsWater(0, 6), Is.False, "rows either side untouched");
+        }
+
+        [Test]
+        public void RowsCannotBeFedBeforeTheWholeMap()
+        {
+            Assert.Throws<System.InvalidOperationException>(() => _grid.SetWaterRows(0, new float[Size]),
+                "a half-fed map would read its unfed half as dry");
+            _grid.SetWaterSurfaces(_surfaces);
+            Assert.Throws<System.ArgumentException>(() => _grid.SetWaterRows(0, new float[Size + 1]), "whole rows only");
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => _grid.SetWaterRows(Size - 1, new float[2 * Size]), "past the last row");
+        }
+
+        [Test]
         public void FillingAboveTheWaterDriesTheCellAtOnce()
         {
             Water(4, 4, 2f);
