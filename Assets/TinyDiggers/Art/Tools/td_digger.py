@@ -642,7 +642,8 @@ def name_parts(mesh, rig):
 # This is how an excavator is actually dug, from Cat's and SANY's operator guides rather than
 # invented: the stick works between about 40 degrees out and vertical, the bucket floor goes in
 # at about 45 degrees to grade, and the bucket is full by the time the stick stands upright.
-#   reach out   — stick out, bucket open, teeth presented to grade
+#   reach out   — stick out as far as it goes, bucket open, teeth presented to grade
+#                 (Ronan, 2026-09-22: "the arm can reach out farther in its scoop")
 #   penetrate   — boom down so the bucket floor sits about 45 degrees into the surface
 #   drag / fill — the long phase: the stick crowds back to vertical while the bucket curls
 #                 through the cut, the boom easing up to hold grade rather than drag the teeth
@@ -654,8 +655,8 @@ def name_parts(mesh, rig):
 # The bucket never opens between the fill and the dump: that is what spills the load.
 DIG = (
     (1,  {"boom":   0.0, "stick":   0.0, "bucket":   0.0, "turret":   0.0}),
-    (14, {"boom":  20.0, "stick":  40.0, "bucket": -25.0, "turret":   0.0}),
-    (26, {"boom":  34.0, "stick":  38.0, "bucket": -10.0, "turret":   0.0}),
+    (14, {"boom":  26.0, "stick":  58.0, "bucket": -30.0, "turret":   0.0}),
+    (26, {"boom":  40.0, "stick":  54.0, "bucket": -12.0, "turret":   0.0}),
     (50, {"boom":  22.0, "stick":   0.0, "bucket":  55.0, "turret":   0.0}),
     (62, {"boom": -18.0, "stick":  -8.0, "bucket":  75.0, "turret":   0.0}),
     (70, {"boom": -18.0, "stick":  -8.0, "bucket":  75.0, "turret": 110.0}),
@@ -820,6 +821,54 @@ def slew(rig, legs, signs, name="slew"):
     return action
 
 
+def clear_the_swing(mesh, rig, margin=0.015):
+    """
+    Drops the machine's own fittings below the arm's swing.
+
+    The turret turns a full circle, and the aerial masts and boxes stood in its path: the boom's
+    underside passes about 56 mm above the hull's shoulder and they reached 68 mm higher than
+    that, so the arm swept straight through them. They cannot turn with the arm (Ronan,
+    2026-09-22), so they go down instead, whole pieces at a time, until they clear it. A machine
+    that slews does not carry masts in its own swing.
+    """
+    boom = rig.data.bones.get("boom")
+    turret = rig.data.bones.get("turret")
+    if boom is None or turret is None:
+        return 0
+
+    axis = turret.head_local
+    root, tip = boom.head_local, boom.tail_local
+    rise = (tip.z - root.z) / max(math.hypot(tip.x - axis.x, tip.y - axis.y), 1e-6)
+
+    def underside(point):
+        """How high the boom passes over a point, whatever way round the turret is."""
+        return root.z + rise * math.hypot(point.x - axis.x, point.y - axis.y)
+
+    names = {group.index: group.name for group in mesh.vertex_groups}
+    owner = {}
+    for vertex in mesh.data.vertices:
+        best = max(vertex.groups, key=lambda g: g.weight, default=None)
+        owner[vertex.index] = names.get(best.group, "") if best else ""
+
+    reach = (tip - root).length
+    dropped = 0
+    for shell in _shells_of(mesh):
+        if any(owner.get(index, "").startswith(("boom", "stick", "bucket", "leg_"))
+               for index, _ in shell):
+            continue
+        over = max(((co.z - underside(co)) for _, co in shell
+                    if math.hypot(co.x - axis.x, co.y - axis.y) <= reach), default=None)
+        if over is None or over <= 0.0:
+            continue
+        for index, _ in shell:
+            mesh.data.vertices[index].co.z -= over + margin
+        dropped += 1
+
+    mesh.data.update()
+    _log(f"{dropped} fittings dropped clear of the arm's swing")
+    return dropped
+
+
 def clips(rig, legs, scale=1.0):
     """The walker's clip set, plus the dig and the slew. No tip: this one carries nothing."""
     made = td_walker.clips(rig, legs, mesh=None, scale=scale)
@@ -855,6 +904,7 @@ def build(height=HEIGHT, crew=False):
     if height:
         scale = td_walker.set_height(height) or 1.0
 
+    clear_the_swing(mesh, rig)
     td_walker.settle_weights(mesh, rig)
     td_walker.paint(mesh, rig)
     legs = td_walker._rest(rig)

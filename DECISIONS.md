@@ -3632,3 +3632,21 @@ New `slew` clip: a full turn, feet planted, arm carried. Keyed a quarter at a ti
 nought to three hundred and sixty is no rotation at all to an interpolator, and anything past half
 a turn goes back the short way. The dig uses the turret for its own swing as well: cut, lift,
 swing 110 degrees, dump there, swing back.
+
+## 2026-09-22 — Digger: the fittings had to come down, and the cut reaches farther
+
+The turret turns a full circle and the machine's own aerial masts and boxes stood in its path: the
+boom's underside passes about 56 mm above the hull's shoulder at their radius and they reached
+68 mm higher, so the arm swept straight through them. They cannot turn with the arm (Ronan), so
+`clear_the_swing` drops them instead — whole welded pieces, 2 to 7 cm, until nothing sits above
+the boom's sweep. Six pieces moved; the worst overlap afterwards is nought. A machine that slews
+does not carry masts in its own swing. **Ronan's ruling: keep them dropped.**
+
+Also his: "the arm can reach out farther in its scoop". The cut now starts with the stick out
+58 degrees rather than 40, and the boom 6 degrees lower, which is about a third more reach in
+front of the machine.
+
+On the box he thought was turning with the arm: in this rig it is not. Measured through the whole
+slew, every vertex of it is on the body bone and moves nought millimetres. What he was looking at
+was the stale FBX in Unity, from the first delivery, when the arm's weights were quite different.
+Unity has the current one now: 8 clips, walk/idle/turn/stuck/slew looping, prefab rebuilt.
