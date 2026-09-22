@@ -20,6 +20,12 @@ namespace TinyDiggers.Terrain
         /// <summary>The mix of plains, hills and mountains this island was drawn with (phase 2).</summary>
         public LandMix Mix;
 
+        /// <summary>Land cells raised to fill hollows (phase 3).</summary>
+        public int PitsFilled;
+
+        /// <summary>Metres the erosion moved the land on average, over the land it ran on (phase 3).</summary>
+        public float ErosionMeanChange;
+
         /// <summary>The highest cell of the land.</summary>
         public Vector2Int Peak;
 
@@ -257,7 +263,14 @@ namespace TinyDiggers.Terrain
 
             // --- 5: valleys where the water would run ---------------------------------------
             var accumulation = FlowAccumulation(heights, land, width, depth);
-            CutValleys(heights, land, accumulation, settings, upland);
+            // With erosion on, the rain carves the valleys. The old cut lowered every cell by the
+            // water through it along D8 flow lines, which only run in eight directions, so it
+            // scored the land with dead-straight one-cell grooves (and starbursts into ponds).
+            // The accumulation is still kept: it decides where valley clay lies.
+            if (!settings.Erosion)
+                CutValleys(heights, land, accumulation, settings, upland);
+            if (settings.Erosion)
+                map.ErosionMeanChange = ErodeIsland(heights, land, highGround, width, depth, settings, random.Next(), step);
 
             map.Mark("valleys", stopwatch, ref lastMark);
 
@@ -270,6 +283,12 @@ namespace TinyDiggers.Terrain
             map.Mark("coast", stopwatch, ref lastMark);
 
             // --- 7: quantise and relax -------------------------------------------------------
+            // Settle first, at full resolution and in all eight directions, to just under the step
+            // the relaxation enforces. Otherwise the relaxation does the settling itself, a row or
+            // a column at a time, and a steep hillside comes out combed into straight grooves.
+            if (settings.Erosion && settings.SettleIterations > 0)
+                SettleSlopes(heights, land, highGround, width, depth, step, settings.MaxCliffStep, settings.SettleIterations);
+
             var isLand = new bool[cells];
             for (var cell = 0; cell < cells; cell++)
             {
@@ -301,6 +320,21 @@ namespace TinyDiggers.Terrain
             // Once more, dropping specks only: relaxing lowers cells, which can cut a corner of
             // land off from the rest, and a one-cell island is not somewhere to play.
             CleanUpShores(heights, inDisc, width, depth, settings, map.Shape, step, fillPockets: false);
+            if (settings.FillPits)
+            {
+                // Every hollow on land is filled to where it spills, working up from the water
+                // (the sea and any lake) and the edge of the disc.
+                var fillLand = new bool[cells];
+                var outlets = new bool[cells];
+                for (var cell = 0; cell < cells; cell++)
+                {
+                    fillLand[cell] = inDisc[cell] && heights[cell] >= World.SeaLevel;
+                    outlets[cell] = inDisc[cell] && heights[cell] < World.SeaLevel;
+                }
+
+                map.PitsFilled = TerrainErosion.FillDepressions(heights, width, depth, fillLand, outlets, step);
+            }
+
             ReadRiverFloors(map, heights, width);
 
             map.Mark("rivers+shores", stopwatch, ref lastMark);
@@ -494,6 +528,173 @@ namespace TinyDiggers.Terrain
                 }
             });
             return upland;
+        }
+
+        /// <summary>
+        /// Natural terrain, phase 3: weathers the land on a coarser grid of
+        /// <see cref="TerrainGenSettings.ErosionCellSize"/> and adds the change back. Rain first,
+        /// then the slopes settle, soil to <see cref="TerrainGenSettings.TalusSoil"/> and the
+        /// mountains to <see cref="TerrainGenSettings.TalusRock"/>. Only the change is scaled back
+        /// up, so the fine shape of the land underneath is kept. The sea does not move, and land
+        /// is never eroded below one height step above the sea, where land starts, so it stays land
+        /// whatever the step (a fixed 0.3 m rounded to the sea with 1 m steps and drowned the lowlands). Returns the mean change in metres over the
+        /// land it ran on.
+        /// </summary>
+        static float ErodeIsland(float[] heights, bool[] land, float[] highGround, int width, int depth,
+            TerrainGenSettings settings, int seed, float step)
+        {
+            var f = Mathf.Max(1, Mathf.RoundToInt(settings.ErosionCellSize));
+            int minX = width, minZ = depth, maxX = -1, maxZ = -1;
+            for (var z = 0; z < depth; z++)
+                for (var x = 0; x < width; x++)
+                    if (land[z * width + x])
+                    {
+                        minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
+                        minZ = Math.Min(minZ, z); maxZ = Math.Max(maxZ, z);
+                    }
+
+            if (maxX < 0)
+                return 0f;
+            minX = Math.Max(0, minX - 2 * f); minZ = Math.Max(0, minZ - 2 * f);
+            maxX = Math.Min(width - 1, maxX + 2 * f); maxZ = Math.Min(depth - 1, maxZ + 2 * f);
+            var cw = (maxX - minX) / f + 1;
+            var cd = (maxZ - minZ) / f + 1;
+            var coarse = new float[cw * cd];
+            var fixedCells = new bool[cw * cd];
+            var rock = new float[cw * cd];
+            var landCoarse = 0;
+            Parallel.For(0, cd, cz =>
+            {
+                for (var cx = 0; cx < cw; cx++)
+                {
+                    float sum = 0f, high = 0f;
+                    int count = 0, landCount = 0;
+                    for (var dz = 0; dz < f; dz++)
+                        for (var dx = 0; dx < f; dx++)
+                        {
+                            var x = minX + cx * f + dx;
+                            var z = minZ + cz * f + dz;
+                            if (x > maxX || z > maxZ)
+                                continue;
+                            var cell = z * width + x;
+                            sum += heights[cell];
+                            count++;
+                            if (land[cell])
+                            {
+                                landCount++;
+                                high += highGround[cell];
+                            }
+                        }
+
+                    var c = cz * cw + cx;
+                    coarse[c] = count > 0 ? sum / count : World.SeaLevel - 1f;
+                    // Mostly sea is sea: fixed, so the coastline is not eroded away.
+                    fixedCells[c] = landCount * 2 < count || cx == 0 || cz == 0 || cx == cw - 1 || cz == cd - 1;
+                    rock[c] = landCount > 0 ? high / landCount : 0f;
+                }
+            });
+            for (var c = 0; c < coarse.Length; c++)
+                if (!fixedCells[c])
+                    landCoarse++;
+
+            var before = (float[])coarse.Clone();
+            var metres = settings.ErosionCellSize * settings.GenerationCellSize;
+            var km2 = landCoarse * metres * metres / 1e6f;
+            var drops = Mathf.RoundToInt(settings.ErosionDropletsPerKm2 * km2);
+            // The droplet maths wants heights per erosion cell, not per metre: scale in and out.
+            for (var c = 0; c < coarse.Length; c++)
+                coarse[c] /= metres;
+            TerrainErosion.Droplets(coarse, cw, cd, fixedCells, drops, seed, settings.Droplets);
+            for (var c = 0; c < coarse.Length; c++)
+                coarse[c] *= metres;
+
+            var talus = new float[coarse.Length];
+            var soil = Mathf.Tan(settings.TalusSoil * Mathf.Deg2Rad) * metres;
+            var stone = Mathf.Tan(settings.TalusRock * Mathf.Deg2Rad) * metres;
+            for (var c = 0; c < coarse.Length; c++)
+                talus[c] = Mathf.Lerp(soil, stone, Mathf.Clamp01(rock[c] * 3f));
+            TerrainErosion.Thermal(coarse, cw, cd, fixedCells, talus, settings.ThermalIterations);
+
+            var change = new float[coarse.Length];
+            var moved = 0.0;
+            for (var c = 0; c < coarse.Length; c++)
+            {
+                change[c] = coarse[c] - before[c];
+                if (!fixedCells[c])
+                    moved += Math.Abs(change[c]);
+            }
+
+
+            // Back up to the grid: the change, sampled bilinearly at each cell's centre.
+            Parallel.For(minZ, maxZ + 1, z =>
+            {
+                for (var x = minX; x <= maxX; x++)
+                {
+                    var cell = z * width + x;
+                    if (!land[cell])
+                        continue;
+                    var gx = Mathf.Clamp((x - minX + 0.5f) / f - 0.5f, 0f, cw - 1.001f);
+                    var gz = Mathf.Clamp((z - minZ + 0.5f) / f - 0.5f, 0f, cd - 1.001f);
+                    var ix = (int)gx;
+                    var iz = (int)gz;
+                    var tx = gx - ix;
+                    var tz = gz - iz;
+                    var ix1 = Math.Min(cw - 1, ix + 1);
+                    var iz1 = Math.Min(cd - 1, iz + 1);
+                    var d = change[iz * cw + ix] * (1 - tx) * (1 - tz) + change[iz * cw + ix1] * tx * (1 - tz)
+                          + change[iz1 * cw + ix] * (1 - tx) * tz + change[iz1 * cw + ix1] * tx * tz;
+                    heights[cell] = Mathf.Max(World.SeaLevel + step, heights[cell] + d);
+                }
+            });
+            return landCoarse > 0 ? (float)(moved / landCoarse) : 0f;
+        }
+
+        /// <summary>
+        /// Settles the land's slopes, at full resolution, to 0.9 of a height step a cell (soil) or
+        /// of a cliff step (the mountains), on a window round the land. The sea is fixed.
+        /// </summary>
+        static void SettleSlopes(float[] heights, bool[] land, float[] highGround, int width, int depth,
+            float step, float cliffStep, int iterations)
+        {
+            int minX = width, minZ = depth, maxX = -1, maxZ = -1;
+            for (var z = 0; z < depth; z++)
+                for (var x = 0; x < width; x++)
+                    if (land[z * width + x])
+                    {
+                        minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
+                        minZ = Math.Min(minZ, z); maxZ = Math.Max(maxZ, z);
+                    }
+
+            if (maxX < 0)
+                return;
+            minX = Math.Max(0, minX - 1); minZ = Math.Max(0, minZ - 1);
+            maxX = Math.Min(width - 1, maxX + 1); maxZ = Math.Min(depth - 1, maxZ + 1);
+            var w = maxX - minX + 1;
+            var d = maxZ - minZ + 1;
+            var window = new float[w * d];
+            var fixedCells = new bool[w * d];
+            var talus = new float[w * d];
+            Parallel.For(0, d, z =>
+            {
+                for (var x = 0; x < w; x++)
+                {
+                    var cell = (minZ + z) * width + minX + x;
+                    var i = z * w + x;
+                    window[i] = heights[cell];
+                    fixedCells[i] = !land[cell];
+                    talus[i] = 0.9f * Mathf.Lerp(step, cliffStep, Mathf.Clamp01(highGround[cell] * 3f));
+                }
+            });
+            TerrainErosion.Thermal(window, w, d, fixedCells, talus, iterations);
+            Parallel.For(0, d, z =>
+            {
+                for (var x = 0; x < w; x++)
+                {
+                    var cell = (minZ + z) * width + minX + x;
+                    if (land[cell])
+                        heights[cell] = Mathf.Max(World.SeaLevel + step, window[z * w + x]);
+                }
+            });
         }
 
         static Vector2 Offset(System.Random random) =>
@@ -924,16 +1125,16 @@ namespace TinyDiggers.Terrain
             return toLand;
         }
 
-        /// <summary>Cells to the nearest cell whose land flag is <paramref name="from"/>, by flood.</summary>
-        /// <remarks>
-        /// Only seeds on the edge of their region start the flood: a seed with nothing but seeds
-        /// round it can never lower anything, and on the 3104² disc queueing all seven million sea
-        /// cells as seeds was most of the cost. <paramref name="reach"/> stops the flood that far
-        /// out; cells beyond keep float.MaxValue, which every caller already reads as "far".
-        /// </remarks>
+        /// <summary>
+        /// Cells, in a straight line, to the nearest cell whose land flag is <paramref name="from"/>.
+        /// Cells further than <paramref name="reach"/> get float.MaxValue, which every caller reads
+        /// as "far".
+        /// </summary>
         static float[] Distance(bool[] land, bool[] inDisc, int width, int depth, bool from, float reach = float.MaxValue)
         {
-            var distance = new float[land.Length];
+            // Straight-line distance (phase 3). This was a four-way flood, which measures
+            // city-block distance: its equal-distance lines are diamonds, and the beaches, the
+            // shelf and the inland rise built on it came out in straight lines and chevrons.
             var seed = new bool[land.Length];
             Parallel.For(0, depth, z =>
             {
@@ -941,52 +1142,9 @@ namespace TinyDiggers.Terrain
                 {
                     var cell = z * width + x;
                     seed[cell] = inDisc[cell] && land[cell] == from;
-                    distance[cell] = seed[cell] ? 0f : float.MaxValue;
                 }
             });
-
-            var queue = new Queue<int>();
-            for (var cell = 0; cell < land.Length; cell++)
-            {
-                if (!seed[cell])
-                    continue;
-                var x = cell % width;
-                var z = cell / width;
-                for (var n = 0; n < 4; n++)
-                {
-                    var nx = x + StepX[n];
-                    var nz = z + StepZ[n];
-                    if (nx >= 0 && nz >= 0 && nx < width && nz < depth && !seed[nz * width + nx])
-                    {
-                        queue.Enqueue(cell);
-                        break;
-                    }
-                }
-            }
-
-            while (queue.Count > 0)
-            {
-                var cell = queue.Dequeue();
-                var further = distance[cell] + 1f;
-                if (further > reach)
-                    continue;
-                var x = cell % width;
-                var z = cell / width;
-                for (var n = 0; n < 4; n++)
-                {
-                    var nx = x + StepX[n];
-                    var nz = z + StepZ[n];
-                    if (nx < 0 || nz < 0 || nx >= width || nz >= depth)
-                        continue;
-                    var next = nz * width + nx;
-                    if (distance[next] <= further)
-                        continue;
-                    distance[next] = further;
-                    queue.Enqueue(next);
-                }
-            }
-
-            return distance;
+            return TerrainErosion.EuclideanDistance(seed, width, depth, reach);
         }
 
         // --- 7: relaxation ---------------------------------------------------------------------

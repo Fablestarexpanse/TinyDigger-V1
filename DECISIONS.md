@@ -2781,3 +2781,56 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   - The sea looks olive in the in-game shots. It may be the shallow shelf showing through;
     to check in phase 4.
 - **Tests:** 409/409.
+
+### Natural terrain, phase 3: straight-line distance, erosion, settling, filled hollows (2026-09-21)
+- **Ronan:** move to phase 3, and look at the vertical banding stripes. Full-resolution crops
+  showed three separate causes:
+  1. **Diamonds, straight lines and chevrons** on the beaches, the plains and the shelf. The
+     distance-to-shore was a four-way flood, which measures city-block distance, and its
+     equal-distance lines are diamonds. Replaced by an exact Euclidean distance transform
+     (`TerrainErosion.EuclideanDistance`, Felzenszwalb–Huttenlocher, parallel over rows and
+     columns).
+  2. **Straight one-cell grooves**, and starbursts into ponds. The D8 valley cut lowered every
+     cell along flow lines that only run in eight directions. It is skipped when erosion is on;
+     the accumulation is still computed for valley clay.
+  3. **Vertical curtains** on steep hillsides. The fine roughness was steeper than one step a
+     cell, and the relaxation cut it back a row or a column at a time.
+     `IslandGenerator.SettleSlopes` now settles the land first: 16 passes at full resolution in
+     eight directions, to 0.9 of a height step a cell (soil) or of a cliff step (the mountains),
+     so the relaxation has little left to cut.
+- **Erosion** (`TerrainErosion`, tested; `ErodeIsland`):
+  - droplet erosion on a 2 m grid over the land's bounding box: 400,000 drops per km², 40 steps
+    each, a brush of radius 3;
+  - then 40 passes of thermal settling: soil to 38°, the mountains to 75°;
+  - only the change is scaled back up (bilinear), so the fine shape underneath is kept. The sea
+    is fixed, and land never goes below one height step above the sea.
+- **Hollows:** `TerrainErosion.FillDepressions`, a priority flood over height-level buckets from
+  the water. It fills every land hollow to its spill level on the levels, and lakes are kept.
+- **Bugs found on the way:**
+  - **Runaway drops.** With speed uncapped, and the sign turned so drops sped up going downhill,
+    capacity grew without bound and drops drilled the land to −50 km: a 30 m cone came out as
+    ±50 km. Fixed with the standard speed form (`speed² + fall·gravity`), a cap of 4, and no
+    brush cell dug below the drop's new height. The test now asserts no cell moves 4 m or more.
+  - **Lowlands drowned at 1 m steps.** Eroded land was floored at 0.3 m, which rounds to the sea
+    with 1 m steps. It is floored at one height step now (land starts one step up), and the
+    cell-size test passes again.
+  - **Cliffs worn down.** A rock talus of 62° wore them away, and the cliff and rocky-shore
+    tests fell just short. It is 75° now.
+- **Scorecard** (same four seeds):
+
+  | Measure | Baseline | Phase 2 | Phase 3 |
+  |---|---|---|---|
+  | Flat | 5–7% | 22–32% | 44–53% |
+  | Gentle | 12–15% | 17–21% | 17–18% |
+  | Steep | 43–49% | 22–36% | 11–18% |
+  | Pits | 4,089–4,427 | 364–905 | 4–7 |
+  | Beach coast | 20–25% | 61–71% | 66–80% |
+  | Cliff steps | 6.6–8.1% | 2.9–6.1% | 0.8–1.7% |
+
+  Erosion moves 0.43–0.66 m on average. Generation takes about 6 s a seed (it was 5.5–6).
+- **Evidence:** `Screenshots/Terrain/Phase3/stripes_before_after.png` (left before, right
+  after), plus `phase3_*` preview maps and in-game shots.
+- **Left for phase 4 (coasts):** the lake beds still show straight-edged underwater contours;
+  small round ponds read as sandy craters; the sea looks olive in game; there are few cliffs on
+  the coasts.
+- **Tests:** 414/414.

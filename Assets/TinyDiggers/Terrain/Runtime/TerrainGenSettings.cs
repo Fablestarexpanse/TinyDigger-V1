@@ -118,6 +118,33 @@ namespace TinyDiggers.Terrain
         [Tooltip("Metres the hills stand above the plain under them, at most.")]
         [Min(0f)] public float HillsRelief = 8f;
 
+        [Header("Erosion (natural terrain, phase 3)")]
+        [Tooltip("Weather the land: raindrops carve valleys, then slopes settle to their resting angle. Runs on a coarser grid and is added back as a change.")]
+        public bool Erosion = true;
+
+        [Tooltip("Metres a cell of the erosion grid is across.")]
+        [Min(0.5f)] public float ErosionCellSize = 2f;
+
+        [Tooltip("Raindrops per square kilometre of land.")]
+        [Min(0f)] public float ErosionDropletsPerKm2 = 400000f;
+
+        public TerrainErosion.DropletSettings Droplets = TerrainErosion.DropletSettings.Default;
+
+        [Tooltip("Passes of slope settling after the rain.")]
+        [Range(0, 200)] public int ThermalIterations = 40;
+
+        [Tooltip("Degrees soil settles to.")]
+        [Range(10f, 80f)] public float TalusSoil = 38f;
+
+        [Tooltip("Degrees rock (the mountains) settles to. Steep, so the cliffs the generator lets rock stand in survive the settling.")]
+        [Range(10f, 89f)] public float TalusRock = 75f;
+
+        [Tooltip("Passes of full-resolution slope settling just before heights go onto the height steps, so the step limit has little left to cut (and no grooves to comb in).")]
+        [Range(0, 60)] public int SettleIterations = 16;
+
+        [Tooltip("Fill every hollow on land to the level it spills over at, so water always drains. Lakes (water below sea level) are kept.")]
+        public bool FillPits = true;
+
         [Header("Land mask")]
         [Tooltip("The shape of land to make. Any lets the seed choose.")]
         public LandShape Shape = LandShape.Any;
@@ -386,6 +413,7 @@ namespace TinyDiggers.Terrain
             s.MaterialNoiseSize *= k; s.SandMaxDistance *= k; s.RiverWander *= k;
             s.TypeFeatureSize *= k; s.CoastLowlandDistance *= k; s.InlandRiseDistance *= k;
             s.PlainsFeatureSize *= k; s.HillsFeatureSize *= k;
+            s.ErosionCellSize *= k;
 
             s.RimWaterCells = Count(RimWaterCells); s.BeachCells = BeachCells == 0 ? 0 : Count(BeachCells);
             s.ShallowCells = Count(ShallowCells); s.ShelfCells = Count(ShelfCells); s.ChannelCells = Count(ChannelCells);
