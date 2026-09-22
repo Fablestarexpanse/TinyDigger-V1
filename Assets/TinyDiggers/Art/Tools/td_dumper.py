@@ -998,6 +998,118 @@ def clips(rig, legs, mesh=None, scale=1.0):
             for name, action in made.items()}
 
 
+# --- painting it ---------------------------------------------------------------------------------
+
+# The crew robot's palette, so the machine reads as the same family: cream shell, sunny band,
+# near-black trim, a cyan lens. Taken from crew_unit.blend rather than guessed at.
+PALETTE = {
+    "shell": ((0.93, 0.89, 0.80, 1.0), 0.75, 0.0, None),
+    "band": ((0.98, 0.70, 0.12, 1.0), 0.70, 0.0, None),
+    "trim": ((0.10, 0.10, 0.12, 1.0), 0.65, 0.2, None),
+    "bed": ((0.80, 0.77, 0.70, 1.0), 0.80, 0.0, None),
+    "ram": ((0.55, 0.57, 0.60, 1.0), 0.30, 0.85, None),
+    "lens": ((0.04, 0.42, 0.48, 1.0), 0.40, 0.0, ((0.30, 1.0, 0.95, 1.0), 2.0)),
+}
+
+
+def _material(name, colour, roughness, metallic, glow):
+    material = bpy.data.materials.get(name)
+    if material is None:
+        material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    shader = next(n for n in material.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+    shader.inputs["Base Color"].default_value = colour
+    shader.inputs["Roughness"].default_value = roughness
+    shader.inputs["Metallic"].default_value = metallic
+    if glow is not None and "Emission Color" in shader.inputs:
+        shader.inputs["Emission Color"].default_value = glow[0]
+        shader.inputs["Emission Strength"].default_value = glow[1]
+    elif "Emission Strength" in shader.inputs:
+        shader.inputs["Emission Strength"].default_value = 0.0
+    return material
+
+
+def paint(mesh, rig):
+    """
+    Gives the machine flat materials in the crew robot's colours.
+
+    The scan has no UVs and no maps, so there is nothing to texture with; flat materials per part
+    are what the crew robot uses anyway, and they keep the family look.
+
+    Decided per welded piece rather than per polygon, the same way the bed was found: a piece is
+    one part of the machine and wears one colour. Per polygon, the band smeared across the hips
+    and the eye never got found.
+    """
+    order = ["shell", "band", "trim", "bed", "ram", "lens"]
+    mesh.data.materials.clear()
+    for name in order:
+        colour, roughness, metallic, glow = PALETTE[name]
+        mesh.data.materials.append(_material(f"Dumper{name.title()}", colour, roughness, metallic, glow))
+    slot = {name: index for index, name in enumerate(order)}
+
+    owner = {v.index: max(((g.weight, g.group) for g in v.groups), default=(0.0, -1))[1]
+             for v in mesh.data.vertices}
+    name_of = {g.index: g.name for g in mesh.vertex_groups}
+
+    ball = [v.co for v in mesh.data.vertices if name_of.get(owner[v.index]) == "body"]
+    low = min(c.z for c in ball)
+    high = max(c.z for c in ball)
+    middle = (low + high) * 0.5
+    band = (high - low) * 0.13
+    centre = mathutils.Vector((sum(c.x for c in ball) / len(ball),
+                               sum(c.y for c in ball) / len(ball), middle))
+
+    # The eye: the barrel on the front of the ball. Everything within reach of the furthest
+    # forward point at the band's height belongs to it, because the scan models it as a handful
+    # of rings rather than one piece.
+    shells = _shells_of(mesh)
+    nose = max((co for _, co in (item for shell in shells for item in shell)
+                if abs(co.z - middle) < band * 1.6
+                and abs(co.x - centre.x) < band * 2.2), key=lambda co: co.y, default=None)
+    eye_indices = set()
+    if nose is not None:
+        reach = band * 1.9
+        for shell in shells:
+            points = [co for _, co in shell]
+            mid = sum(points, mathutils.Vector()) / len(points)
+            if (mid - nose).length < reach:
+                eye_indices.update(index for index, _ in shell)
+
+    choice = {}
+    for shell in shells:
+        indices = [index for index, _ in shell]
+        points = [co for _, co in shell]
+        mid = sum(points, mathutils.Vector()) / len(points)
+        bone = name_of.get(owner[indices[0]], "")
+
+        if indices[0] in eye_indices:
+            pick = "lens"
+        elif bone == "tray":
+            pick = "bed"
+        elif bone == "ram":
+            pick = "ram"
+        elif bone.startswith("leg_"):
+            # The knuckles are the small pieces at the joints; the limb panels are the big ones.
+            pick = "trim" if (len(shell) < 60 or bone.endswith(("foot", "toe", "claw"))) else "shell"
+        elif abs(mid.z - middle) < band and (mid - centre).length > (high - low) * 0.3:
+            pick = "band"
+        else:
+            pick = "shell"
+
+        for index in indices:
+            choice[index] = pick
+
+    counts = {name: 0 for name in order}
+    for polygon in mesh.data.polygons:
+        pick = choice.get(polygon.vertices[0], "shell")
+        polygon.material_index = slot[pick]
+        counts[pick] += 1
+
+    mesh.data.update()
+    _log("painted: " + ", ".join(f"{name} {count}" for name, count in counts.items() if count))
+    return counts
+
+
 # --- sizing it against the crew ------------------------------------------------------------------
 
 CREW_BLEND = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -1237,6 +1349,7 @@ def build(height=None, crew=False):
     if height:
         scale = set_height(height) or 1.0
 
+    paint(mesh, rig)
     legs = _rest(rig)
     made = clips(rig, legs, mesh=mesh, scale=scale)
     if crew:
