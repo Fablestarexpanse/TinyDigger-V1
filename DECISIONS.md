@@ -3297,3 +3297,20 @@ settle until steady with a budget of 1.0 s.
   never kept their beds full (the flow-speed note of 2026-09-21 says as much). Tuning them is its
   own step.
 
+## 2026-09-22 — Why the quarry stopped after one cut (open)
+
+Two capture runs ended the same way: the crew took one step off the quarry, then stood idle with
+"Idle: nothing it can do yet", 0.8 m³ moved and the pad untouched. Ronan read it as depth
+("it appears they took top leevel off then stopped"), and he was right about where to look.
+
+The ground under the quarry sites reads: topsoil 0.3 m, dirt 2.2 m, then stone. A robot Worker
+cannot dig stone, and both captures set the quarry floor 2 m down — at or below the rock line. So
+the crew dug what it could and then had nothing it was allowed to dig, with nothing on screen to
+say so. Everything else checked out: the cells were dry, unclaimed, reachable, above their floor,
+and the barrow had room.
+
+Proposed to Ronan, not yet built:
+- `QuarryLeft` counts only diggable ground — down to the floor or the rock, whichever comes first.
+- Marking a quarry warns when its floor is in rock, with the volume that is actually available.
+- A unit with a Fill waiting and a quarry dug out to rock says so instead of going idle.
+
