@@ -3847,3 +3847,17 @@ That turned up a quiet mismatch. The ground only takes material a **whole step a
 0.015 m³ for ever, then reported nowhere to tip. The loads are whole steps now — the barrow is a
 step and a half (0.1875 m³) rather than a round 0.19, which keeps Ronan's ratios exactly (scoop
 two barrows, bed six) and makes them three steps and nine. Nothing is left in the bed.
+
+## 2026-09-22 — A road, built
+
+`TinyDiggers/Road Capture` lays a road between two points near the crew, gives them somewhere to
+tip and something to fill with, and watches them build it.
+
+Twenty cells at width 3 came to **24 designations**, all of them cleared in 18 seconds of work at
+twenty times: 2.5 m of height moved along the line and **62 cells of road surface** laid. The
+dumper mech was driving on the finished road at the end of it.
+
+The first run was the more interesting one. With no quarry the crew stopped dead and the banner
+said "5 units have nothing to fill with: mark a Quarry" — a road across a dip is mostly *fill*,
+and fill has to come from somewhere. That is the Slice 17 loop doing exactly what it was built to
+do, and the capture marks a quarry now so the road actually goes in.
