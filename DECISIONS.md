@@ -3432,3 +3432,32 @@ The digger and hauler assets are deleted. `Art/Tools/td_dumper.py` does this one
   - **Spotted in passing:** the crew robot's own shell material is missing on its importer, so it
     renders magenta in the sandbox scene. Raised as its own task.
 
+## 2026-09-22 — The digger, and a shared tool for the machines
+
+Ronan brought the excavator: "same size as the dumper ... the bucket arm does not have the correct
+rigging to work like a real excavator, it will walk and move like the dumptruck but you may have
+to fix its legs as well". The scans now live in `Art/Blender~/Scans` under their own names.
+
+- **`td_dumper.py` became `td_walker.py`**, which knows nothing about which machine it is working
+  on: `load(name)` sets that, and everything else reads it. `td_digger.py` holds only what is
+  different about the digger.
+- **The arm is rebuilt from scratch.** The auto-rigger gave the whole arm one bone and some stubs
+  at the bucket. An excavator needs four joints, so the arm's **spine** is measured — a graph over
+  its own vertices walked out from the shoulder, since the arm is sixty-odd separate pieces — and
+  turret, boom, stick and bucket are fitted to where that spine bends hardest.
+- **Which way each joint digs is worked out, not typed in.** The bones are fitted to whatever the
+  scan's geometry happened to be, so each joint is tried both ways and judged on what it does to
+  the bucket: the boom must lower it, the stick push it out, the bucket curl it in.
+- **Facing:** the digger is turned a quarter the other way from the dumper (-90 degrees), because
+  an excavator faces the way it digs and this scan carries its arm along -X.
+- **The legs were re-found**: the generic naming had the arm down as a fourth leg and folded a
+  real leg into it. A chain counts as the arm when its *geometry* climbs above the shell — the arm
+  bones themselves sit low.
+- **Two traps worth remembering:** renaming a bone renames its vertex group, but deleting one
+  leaves the group behind holding weights, and Unity then calls those vertices unweighted and pins
+  them to the first bone (1347 of the digger's rode a leg). `settle_weights` folds any group with
+  no bone into the nearest one. And reloading the tool resets which machine it thinks it is on, so
+  video and export take the name from the rig in hand.
+- Seven clips (walk, idle, turn, start, stop, stuck, dig), 11 315 triangles, 0.37 x 0.68 x 0.70 m —
+  the same 0.7 m shell as the dumper — with the crew palette and a prefab.
+

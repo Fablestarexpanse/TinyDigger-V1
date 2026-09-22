@@ -1,4 +1,4 @@
-"""Finishes the dumper: the four-legged tipper Ronan brought already rigged.
+"""Finishes the four-legged machines: the tipper, the digger, and whatever comes next.
 
 Ronan, 2026-09-22: "lets remove them and do one at a time the animations are poor i have a dumper
 thats mostly rigged already lets check it and i also want to see a video clip of it moving".
@@ -29,7 +29,17 @@ import bmesh
 import bpy
 import mathutils
 
-SCAN = os.path.join(os.path.expanduser("~"), "Downloads", "Meshy_AI_Character_output.glb")
+# The scans live in the project, named for what they are, rather than in Downloads under
+# whatever Meshy called them that day.
+SCANS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Blender~", "Scans")
+
+# Which machine the tool is working on. `load` sets it; everything else reads it, so the same
+# code builds the dumper and the digger without either one's name being written into it.
+MACHINE = "dumper"
+
+
+def scan_for(name):
+    return os.path.join(SCANS, f"{name}.glb")
 
 # Ronan's scale ruling for the machines: 1.8 m to the top of the shell, the crew robot being
 # 0.43 m. The shell here is the body ball, not the tray standing over it.
@@ -66,8 +76,11 @@ def _window_override():
     return override
 
 
-def load(path=SCAN):
-    """Stage 1. Brings the scan in on its own, and returns the mesh and the rig."""
+def load(name="dumper", path=None):
+    """Stage 1. Brings one machine's scan in on its own, and returns the mesh and the rig."""
+    global MACHINE
+    MACHINE = name
+    path = path or scan_for(name)
     bpy.ops.wm.read_homefile(use_empty=True)
     with bpy.context.temp_override(**_window_override()):
         bpy.ops.import_scene.gltf(filepath=path)
@@ -77,10 +90,10 @@ def load(path=SCAN):
     for spare in [o for o in bpy.data.objects if o not in (mesh, rig)]:
         bpy.data.objects.remove(spare, do_unlink=True)
 
-    mesh.name = "dumper"
-    mesh.data.name = "dumper_mesh"
-    rig.name = "dumper_rig"
-    rig.data.name = "dumper_rig"
+    mesh.name = MACHINE
+    mesh.data.name = f"{MACHINE}_mesh"
+    rig.name = f"{MACHINE}_rig"
+    rig.data.name = f"{MACHINE}_rig"
     _log(f"loaded {len(mesh.data.vertices)} vertices, "
          f"{sum(len(p.vertices) - 2 for p in mesh.data.polygons)} triangles, "
          f"{len(rig.data.bones)} bones")
@@ -465,9 +478,53 @@ def harden(mesh):
                 changed += 1
         mesh.vertex_groups[best].add([vertex.index], 1.0, 'REPLACE')
 
+    # Anything left holding no weight at all goes to the body. Unity pins unweighted vertices to
+    # the first bone, which on the digger meant 1347 of them riding a leg.
+    body = mesh.vertex_groups.get("body") or mesh.vertex_groups.new(name="body")
+    orphans = [v.index for v in mesh.data.vertices if not v.groups]
+    if orphans:
+        body.add(orphans, 1.0, 'REPLACE')
+
     mesh.data.update()
-    _log(f"hardened weights: {changed} shared weights dropped, one bone a vertex")
+    _log(f"hardened weights: {changed} shared weights dropped, one bone a vertex"
+         + (f"; {len(orphans)} orphans given to the body" if orphans else ""))
     return changed
+
+
+def settle_weights(mesh, rig):
+    """
+    Makes sure every vertex is on a bone that still exists.
+
+    Renaming a bone renames its vertex group with it, but **deleting** one leaves the group behind
+    holding weights. Unity then calls those vertices unweighted and pins them to the first bone —
+    1347 of the digger's rode a leg that way. Any such group is folded into the nearest bone it
+    sits by, and anything left bare goes to the body.
+    """
+    bones = {b.name: b.head_local.copy() for b in rig.data.bones}
+    stale = [g.name for g in mesh.vertex_groups if g.name not in bones]
+
+    moved = 0
+    for name in stale:
+        group = mesh.vertex_groups.get(name)
+        held = [v.co for v in mesh.data.vertices
+                if any(g.group == group.index and g.weight > 0.0 for g in v.groups)]
+        if held:
+            middle = sum(held, mathutils.Vector()) / len(held)
+            target = min(bones, key=lambda b: (bones[b] - middle).length)
+        else:
+            target = "body"
+        moved += _fold(mesh, name, target)
+
+    body = mesh.vertex_groups.get("body") or mesh.vertex_groups.new(name="body")
+    bare = [v.index for v in mesh.data.vertices if not v.groups]
+    if bare:
+        body.add(bare, 1.0, 'REPLACE')
+
+    mesh.data.update()
+    if stale or bare:
+        _log(f"weights settled: {len(stale)} groups with no bone folded in ({moved} weights), "
+             f"{len(bare)} bare vertices given to the body")
+    return {"stale": len(stale), "bare": len(bare)}
 
 
 def hinge_tray(mesh, rig):
@@ -669,7 +726,7 @@ def _ease(share):
 def _new_action(rig, name):
     if rig.animation_data is None:
         rig.animation_data_create()
-    action = bpy.data.actions.new(f"dumper|{name}")
+    action = bpy.data.actions.new(f"{MACHINE}|{name}")
     action.use_fake_user = True
     return _play(rig, action)
 
@@ -983,7 +1040,7 @@ def clips(rig, legs, mesh=None, scale=1.0):
         # a crab shuffle reads the same either way.
         "turn": walk(rig, legs, name="turn", stride=0.0, lift=lift * 0.8, turn=TURN,
                      bob=bob, sway=sway),
-        "tip": tip(rig, legs, mesh=mesh),
+
         "walk_loaded": walk(rig, legs, name="walk_loaded", length=40, stride=LOADED_STRIDE * scale,
                             lift=lift * 0.85, sink=sink, sway=LOADED_SWAY * scale, bob=bob),
         "idle_loaded": idle(rig, legs, name="idle_loaded", sink=sink, breath=bob * 0.6),
@@ -992,6 +1049,16 @@ def clips(rig, legs, mesh=None, scale=1.0):
         "stop": lean(rig, legs, name="stop", into=False, scale=scale),
         "stuck": stuck(rig, legs, scale=scale),
     }
+    if "tray" in rig.pose.bones:
+        made["tip"] = tip(rig, legs, mesh=mesh)
+    else:
+        # No tray, nothing to tip, and nothing to carry either: the loaded pair and the load
+        # itself belong to a machine with a bed.
+        for gone in ("walk_loaded", "idle_loaded", "take_load"):
+            action = made.pop(gone, None)
+            if action is not None and action.name in bpy.data.actions:
+                bpy.data.actions.remove(bpy.data.actions[action.name])
+
     rig.animation_data.action = None
     _rest_pose(rig)
     return {name: {"action": action.name, "frames": int(action.frame_range[1])}
@@ -1044,7 +1111,7 @@ def paint(mesh, rig):
     mesh.data.materials.clear()
     for name in order:
         colour, roughness, metallic, glow = PALETTE[name]
-        mesh.data.materials.append(_material(f"Dumper{name.title()}", colour, roughness, metallic, glow))
+        mesh.data.materials.append(_material(f"{MACHINE.title()}{name.title()}", colour, roughness, metallic, glow))
     slot = {name: index for index, name in enumerate(order)}
 
     owner = {v.index: max(((g.weight, g.group) for g in v.groups), default=(0.0, -1))[1]
@@ -1157,8 +1224,8 @@ def bring_crew(beside=True, gap=0.9):
 
     roots = [o for o in brought if o.parent is None]
     if beside:
-        dumper = bpy.data.objects.get("dumper")
-        offset = (dumper.dimensions.x * 0.5 + gap) if dumper else 1.5
+        machine = bpy.data.objects.get(MACHINE)
+        offset = (machine.dimensions.x * 0.5 + gap) if machine else 1.5
         for obj in roots:
             obj.location.x += offset
 
@@ -1176,8 +1243,8 @@ def set_height(metres, shell_only=True):
     measured to the top of the body shell rather than to the raised bed, which is how the
     machines were sized before.
     """
-    mesh = bpy.data.objects["dumper"]
-    rig = bpy.data.objects["dumper_rig"]
+    mesh = bpy.data.objects[MACHINE]
+    rig = bpy.data.objects[f"{MACHINE}_rig"]
 
     tray = mesh.vertex_groups.get("tray")
     tray_indices = {v.index for v in mesh.data.vertices
@@ -1215,7 +1282,7 @@ def set_height(metres, shell_only=True):
 UNITY_UNITS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Units")
 
 
-def export(folder=None, name="dumper"):
+def export(folder=None, name=None):
     """
     Writes <name>.fbx with the rig and every clip.
 
@@ -1224,12 +1291,16 @@ def export(folder=None, name="dumper"):
     undone on the way in. Scale goes out as FBX_SCALE_UNITS — FBX_SCALE_NONE arrived in Unity a
     hundredth of its size — and the crew reference is left behind.
     """
+    name = name or MACHINE
+    if name not in bpy.data.objects:
+        name = next((o.name for o in bpy.data.objects
+                     if o.type == 'MESH' and f"{o.name}_rig" in bpy.data.objects), name)
     folder = folder or UNITY_UNITS
     os.makedirs(folder, exist_ok=True)
     path = os.path.join(folder, f"{name}.fbx")
 
-    mesh = bpy.data.objects["dumper"]
-    rig = bpy.data.objects["dumper_rig"]
+    mesh = bpy.data.objects[name]
+    rig = bpy.data.objects[f"{name}_rig"]
     _play(rig, None)
     _rest_pose(rig)
 
@@ -1261,15 +1332,16 @@ def export(folder=None, name="dumper"):
     for obj in bpy.data.objects:
         obj.select_set(False)
 
-    clips = sorted(a.name.split("|", 1)[1] for a in bpy.data.actions if a.name.startswith("dumper|"))
+    clips = sorted(a.name.split("|", 1)[1] for a in bpy.data.actions
+                   if a.name.startswith(f"{name}|"))
     size = os.path.getsize(path)
     _log(f"exported {path} ({size / 1e6:.1f} MB), clips: {', '.join(clips)}")
     return {"path": path, "bytes": size, "clips": clips}
 
 
-def deliver(height=0.7):
-    """Build it at the agreed size, with no crew reference in the file, and export."""
-    report = build(height=height, crew=False)
+def deliver(name="dumper", height=0.7):
+    """Build one machine at the agreed size, with no crew reference in the file, and export."""
+    report = build(name, height=height, crew=False)
     report["export"] = export()
     return report
 
@@ -1353,7 +1425,10 @@ def video(rig, mesh, clip="walk", folder=None, repeats=4, size=(960, 540), turni
     os.makedirs(folder, exist_ok=True)
 
     scene = bpy.context.scene
-    action = _play(rig, bpy.data.actions[f"dumper|{clip}"])
+    # Which machine this is comes from the rig in hand, not from module state: reloading the
+    # module resets that, and the rig on the desk is the truth.
+    machine = rig.name[:-4] if rig.name.endswith("_rig") else MACHINE
+    action = _play(rig, bpy.data.actions[f"{machine}|{clip}"])
 
     start, end = (int(v) for v in action.frame_range)
     scene.frame_start = start
@@ -1383,7 +1458,7 @@ def video(rig, mesh, clip="walk", folder=None, repeats=4, size=(960, 540), turni
     scene.render.ffmpeg.ffmpeg_preset = 'REALTIME'
     # Ending the path with .mp4 stops Blender appending the frame range, so the file lands under
     # the name it will be talked about by.
-    scene.render.filepath = os.path.join(folder, f"dumper_{clip}.mp4")
+    scene.render.filepath = os.path.join(folder, f"{machine}_{clip}.mp4")
 
     with bpy.context.temp_override(**_window_override()):
         bpy.ops.render.render(animation=True)
@@ -1405,7 +1480,7 @@ def _fcurves(action):
     return curves
 
 
-def build(height=None, crew=False):
+def build(name="dumper", height=None, crew=False):
     """
     Everything: load the scan, tidy the rig, size the machine, lay the clips.
 
@@ -1413,7 +1488,7 @@ def build(height=None, crew=False):
     with the same factor applied to every distance in them, so a smaller machine takes smaller
     steps instead of striding like a big one.
     """
-    mesh, rig = load()
+    mesh, rig = load(name)
     weld(mesh)
     face_forward(mesh, rig)
     tidied = tidy(mesh, rig)
@@ -1427,6 +1502,7 @@ def build(height=None, crew=False):
     if height:
         scale = set_height(height) or 1.0
 
+    settle_weights(mesh, rig)
     paint(mesh, rig)
     legs = _rest(rig)
     made = clips(rig, legs, mesh=mesh, scale=scale)
