@@ -38,6 +38,12 @@ namespace PromptWaffle.DynamicWater
         [Tooltip("Speed limit, m/s, so a numerical spike can never run away.")]
         [Min(0.1f)] public float MaxSpeed;
 
+        [Tooltip("Water shallower than this soaks away, where the soak mask allows it. 0 turns soaking off.")]
+        [Min(0f)] public float SoakDepth;
+
+        [Tooltip("Metres a second a film soaks away at. 0 turns soaking off.")]
+        [Min(0f)] public float SoakRate;
+
         public static WaterSimulationDesc Default(int width, int height, float cellSize, Vector2 origin) => new WaterSimulationDesc
         {
             Width = width,
@@ -50,6 +56,8 @@ namespace PromptWaffle.DynamicWater
             FlowRetention = 0.995f,
             DryDepth = 0.001f,
             MaxSpeed = 20f,
+            SoakDepth = 0f,
+            SoakRate = 0f,
         };
 
         public float CellArea => CellSize * CellSize;

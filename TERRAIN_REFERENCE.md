@@ -226,6 +226,12 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
 - **A road's cut needs a Dump Zone, and its fill needs material from somewhere.** The crew only
   moves what exists. Laying a road that makes spoil with no Dump Zone on the map is reported
   straight away.
+- **A Quarry is where fill material comes from** (slice 17). It is a marked area, like a Dump
+  Zone, with a floor height the crew never digs below. It is not work of its own: the crew digs a
+  quarry only while a Fill is waiting for material, and stops as soon as nothing needs filling.
+  With a Fill outstanding, nothing in the barrow and no quarry marked, a unit goes to
+  `NeedsMaterial` and the crew panel says "mark a Quarry"; a Fill the marked quarries cannot cover
+  shows "needs N m³ from a quarry" on the volume readout. Ground cannot appear out of thin air.
 - **Known limit:** a road cut deep into a steep hillside can outrun the crew's dig reach. In the
   slice 17 run the crew built the lower stretch and reported the deep cuts unreachable.
 

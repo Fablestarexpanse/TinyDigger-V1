@@ -3230,3 +3230,70 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   fill low spots … you cant make it appear out of thin air it has to come from someplace". A fill
   can only be met with spoil from somewhere. Today that is only another Dig designation, so a
   road that is mostly fill would leave the crew idle. A Quarry zone is proposed to Ronan below.
+
+## 2026-09-22 — Slice 17: the Quarry zone
+
+Ronan approved the design ("Yes let's test it"): material for a Fill has to be dug from somewhere.
+
+- **`DesignationMap` gained a quarry layer**, like Dump Zones and separate from designations:
+  `SetQuarry(x, z, on, floor)`, `IsQuarry`, `QuarryFloor`, `QuarryCells`, `QuarryCount`,
+  `QuarryLeft` (m3 still above the floor). A quarry is not work of its own, so it does not count
+  towards `Count` and never clears itself. `Cancel` and `ClearAll` take it off with everything
+  else, and it is carried in `DesignationCellState`, so undo/redo covers it.
+- **`FillCount`** tracks outstanding Fill designations: what a quarry would be dug for.
+- **The crew digs a quarry only on demand.** `CrewUnit` plans `CrewJobKind.Quarry` after Dig and
+  only while `FillCount > 0`; `CanQuarryStep` refuses a cut below the cell's floor, under water,
+  or out of dig reach. When a Fill is waiting, the unit has nothing in the barrow and no quarry is
+  marked, it goes to the new `CrewUnitState.NeedsMaterial`: "Nothing to fill with: mark a Quarry
+  to dig from". The crew panel shows that as a yellow banner.
+- **The tool** is hotkey 8, dragged out as a rectangle like a Dump Zone, with H as the floor it is
+  never dug past. Its panel shows H, "H follows cursor", the eyedropper and how much the marked
+  quarries still hold. Clear has a "Quarries" checkbox. A Fill's volume readout turns yellow and
+  says "needs N m3 from a quarry" when the marked quarries cannot cover it.
+- **Tests** (`QuarryTests`): the layer is its own and survives clear; `FillCount` tracks Fills; a
+  Fill with no source idles with the message and moves no ground; with a quarry the fill completes
+  and the quarry goes down; the floor is never cut past; nothing is quarried while nothing needs
+  filling.
+- **Caught in play, not in test:** a unit that had gone to `NeedsMaterial` never re-planned, so
+  marking a quarry beside it changed nothing. `CrewUnit.Tick` only rearmed its rethink timer for
+  Idle, Unreachable and NeedsSomewhereToTip. NeedsMaterial joins them, and `QuarryTests` has a
+  case for it.
+- **Note to self:** the first capture run died because I edited a .cs file while it was playing.
+  That forced a domain reload mid-run; the NullReferenceExceptions from `TerrainView.Update` and
+  `CrewView.Update` were mine, not the game's.
+
+## 2026-09-22 — Water settles while the island loads
+
+**Ronan:** "still having water issue … i realize you get flooding thats part of game but not at
+start, maybe the game should have a section of load that waits for the streams to run to normal
+then any surface water gets zapped". His rulings: zap once at load *and* dry films for ever;
+settle until steady with a budget of 1.0 s.
+
+- **The package gained a generic soak term** (it stays game-agnostic): `WaterSimulationDesc`
+  carries `SoakDepth` and `SoakRate`, `WaterSimulation.SetSoakMask` takes one flag a cell, and the
+  Depth kernel drains water shallower than `SoakDepth` at `SoakRate` where the mask allows it.
+  Both default to 0, so a zone that says nothing behaves exactly as before.
+- **`WaterSettle`** (TinyDiggers, pure and tested) builds the keep mask — the sea's basin and the
+  channel beds — counts the stray water standing anywhere else, judges steadiness and zaps.
+- **`ChannelSprings.Settle`** runs after the pre-fill: batches of 60 steps until the stray count
+  stops changing or the budget runs out, then one zap, then the soak mask (soak where the water is
+  not kept). The scene's zone soaks films under 0.15 m at 0.05 m/s: gone in about 3 seconds.
+  Anything the player floods is deeper than that and stays.
+- **Steadiness is stray cells, not volume.** The first version watched total volume and never
+  steadied: the springs feed the sea for as long as the island exists, so the volume climbs for
+  ever. The play run of 2026-09-22 showed it — 840 steps, whole budget spent, "(budget)" — while
+  the zap itself worked: 65.9 m³ of standing water off 2005 cells.
+- 473 tests green.
+- **The keep mask gained a one-cell margin.** A stream wanders a little outside the band the
+  island marked its bed in, and with no margin the soak took that water. It did not, in the end,
+  explain the creeks (below), but it is right on its own terms.
+- **Play evidence (seed of the day):** the settle steadied in 180 steps over 0.35 s and took
+  94.4 m³ of standing water off 3988 cells. A minute in, the water standing off the beds was 192
+  cells / 22.9 m³ and still shrinking (161 cells / 20.3 m³ half a minute later) instead of
+  spreading. The beds held: 46% of bed cells wet at t = 116 s, 44% at t = 154 s.
+- **Open, for Ronan:** creeks run thin on this island — rivers are 66% of their bed cells wet
+  (830 m³), creeks 27% (82 m³), and three short creeks read 0% in the River Capture. Turning the
+  bed margin on changed none of those numbers, so this is not the soak: the creek springs have
+  never kept their beds full (the flow-speed note of 2026-09-21 says as much). Tuning them is its
+  own step.
+

@@ -106,15 +106,22 @@ namespace TinyDiggers.Interaction
             for (var i = units.Count; i < _rows.Count; i++)
                 _rows[i].Rect.gameObject.SetActive(false);
 
-            var stuck = 0;
+            int stuck = 0, needMaterial = 0;
             foreach (var unit in units)
+            {
                 if (unit.State == CrewUnitState.NeedsSomewhereToTip)
                     stuck++;
-            _banner.gameObject.SetActive(stuck > 0);
+                else if (unit.State == CrewUnitState.NeedsMaterial)
+                    needMaterial++;
+            }
+
+            _banner.gameObject.SetActive(stuck > 0 || needMaterial > 0);
             if (stuck > 0)
                 _bannerText.text = stuck == 1 ? "1 unit needs a Dump Zone or a Fill to tip into" : $"{stuck} units need a Dump Zone or a Fill to tip into";
+            else if (needMaterial > 0)
+                _bannerText.text = needMaterial == 1 ? "1 unit has nothing to fill with: mark a Quarry" : $"{needMaterial} units have nothing to fill with: mark a Quarry";
 
-            var y = stuck > 0 ? 28f + BannerHeight + 4f : 28f;
+            var y = stuck > 0 || needMaterial > 0 ? 28f + BannerHeight + 4f : 28f;
             var counts = new Dictionary<UnitRole, int>();
             for (var i = 0; i < units.Count; i++)
             {
@@ -128,7 +135,8 @@ namespace TinyDiggers.Interaction
                 counts[unit.Role] = ++n;
                 row.Name.text = $"{unit.Role} {n}";
                 row.State.text = Short(unit);
-                row.State.color = unit.State == CrewUnitState.NeedsSomewhereToTip ? UiKit.Warning : new Color(0.8f, 0.82f, 0.85f);
+                row.State.color = unit.State == CrewUnitState.NeedsSomewhereToTip || unit.State == CrewUnitState.NeedsMaterial
+                    ? UiKit.Warning : new Color(0.8f, 0.82f, 0.85f);
                 var full = unit.Inventory.Capacity > 0f ? Mathf.Clamp01(unit.Inventory.Total / unit.Inventory.Capacity) : 0f;
                 row.Load.anchorMax = new Vector2(full, 1f);
                 row.Background.color = _crew.IsSelected(i) ? new Color(0.3f, 0.27f, 0.12f, 0.95f) : UiKit.ButtonColor;

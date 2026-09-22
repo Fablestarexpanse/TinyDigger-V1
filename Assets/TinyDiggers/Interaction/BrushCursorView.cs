@@ -50,7 +50,8 @@ namespace TinyDiggers.Interaction
 
             var grid = _terrain.Grid;
             var mode = _tools.Mode;
-            var heightTool = mode == ToolMode.Dig || mode == ToolMode.Fill || mode == ToolMode.Level || mode == ToolMode.DumpZone;
+            var heightTool = mode == ToolMode.Dig || mode == ToolMode.Fill || mode == ToolMode.Level
+                || mode == ToolMode.DumpZone || mode == ToolMode.Quarry;
             if (grid != null && _tools.HasHover && heightTool)
             {
                 var cell = grid.CellSize;

@@ -956,6 +956,8 @@ MonoBehaviour:
     FlowRetention: 0.995
     DryDepth: 0.001
     MaxSpeed: 20
+    SoakDepth: 0.15
+    SoakRate: 0.05
   _waves: {fileID: 11400000, guid: 07769a59f57d79641b1b0b021fb43577, type: 2}
 --- !u!114 &1181658048
 MonoBehaviour:
@@ -1036,6 +1038,8 @@ MonoBehaviour:
   _creekFill: 0.25
   _flowSpeed: 0.8
   _referenceCatchment: 100
+  _settleBudget: 1
+  _settleBatch: 60
 --- !u!1 &1212779770
 GameObject:
   m_ObjectHideFlags: 0
@@ -1169,8 +1173,6 @@ MonoBehaviour:
   _tools: {fileID: 1679163891}
   _crew: {fileID: 170383080}
   _terrain: {fileID: 551060599}
-  _idleColor: {r: 0.16, g: 0.17, b: 0.19, a: 0.9}
-  _activeColor: {r: 0.95, g: 0.78, b: 0.25, a: 0.95}
   _warningColor: {r: 1, g: 0.55, b: 0.2, a: 1}
 --- !u!114 &1679163891
 MonoBehaviour:
@@ -1195,14 +1197,13 @@ MonoBehaviour:
   _rectColor:
     serializedVersion: 2
     rgba: 1526717580
-  _roadColor:
-    serializedVersion: 2
-    rgba: 1856038520
-  _roadSteepColor:
-    serializedVersion: 2
-    rgba: 2351470335
   BrushRadius: 2
-  RoadWidth: 3
+  ClearDig: 1
+  ClearFill: 1
+  ClearZones: 1
+  ClearQuarries: 1
+  LevelRamp: 0
+  LevelHeightB: 0
   ZoneCapAbove: 3
 --- !u!4 &1679163892
 Transform:

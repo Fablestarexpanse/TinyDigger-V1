@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Stopwatch = System.Diagnostics.Stopwatch;
 using PromptWaffle.DynamicWater;
 using TinyDiggers.Terrain;
 using UnityEngine;
@@ -16,6 +17,12 @@ namespace TinyDiggers.Presentation
     /// of <see cref="TerrainGrid.DeepWater"/>. Where the water goes after that is the
     /// simulation's business: down the channels to the sea, and over the dam's spillways once
     /// the sea stands above its level.
+    ///
+    /// A fresh fill is then settled before the game is handed over: see
+    /// <see cref="WaterSettle"/>. The springs run against the beds until the streams stop
+    /// changing, water standing anywhere else is taken off in one go, and from then on a film off
+    /// the beds soaks away by itself (Ronan, 2026-09-22: flooding is the player's doing, not the
+    /// island's opening move).
     ///
     /// The arithmetic is in <see cref="SpringRate"/> and <see cref="Prefill"/>, so it is tested
     /// without a scene.
@@ -56,8 +63,27 @@ namespace TinyDiggers.Presentation
         /// <summary>The springs, one per channel, in the island's channel order.</summary>
         public IReadOnlyList<WaterEffectorComponent> Springs => _springs;
 
+        [Tooltip("Seconds of load the water may take to settle before play starts.")]
+        [SerializeField, Min(0f)] float _settleBudget = WaterSettle.DefaultBudgetSeconds;
+
+        [Tooltip("Simulation steps run between two checks for whether the streams have settled.")]
+        [SerializeField, Min(1)] int _settleBatch = WaterSettle.DefaultBatch;
+
         /// <summary>Bed cells the last pre-fill put water in.</summary>
         public int LastFilledCells { get; private set; }
+
+        /// <summary>Steps the last settle ran, and whether it reached a steady state before its budget ran out.</summary>
+        public int LastSettleSteps { get; private set; }
+
+        public bool LastSettleSteadied { get; private set; }
+
+        /// <summary>Cells still holding standing water off the beds when the settle stopped.</summary>
+        public int LastStrayCells { get; private set; }
+
+        /// <summary>Cells the last settle took standing water off, and the cubic metres it took.</summary>
+        public int LastZappedCells { get; private set; }
+
+        public float LastZappedVolume { get; private set; }
 
         /// <summary>
         /// Cubic metres a second for a channel's spring: its bed's width times the depth it runs
@@ -193,6 +219,54 @@ namespace TinyDiggers.Presentation
             LastFilledCells = Prefill(depths, grid.Width, grid.Height, grid.CellSize, island.Channels,
                 _riverFill, _creekFill);
             simulation.SetDepths(depths);
+            Settle(simulation, island, grid);
+        }
+
+        /// <summary>
+        /// Runs the springs against the beds until the streams stop changing (or the budget runs
+        /// out), then takes off every drop standing outside the sea and the channel beds, and
+        /// hands the simulation the mask that lets a stray film soak away from then on.
+        /// </summary>
+        void Settle(WaterSimulation simulation, IslandMap island, TerrainGrid grid)
+        {
+            var cells = grid.Width * grid.Height;
+            var keep = new bool[cells];
+            WaterSettle.BuildKeepMask(keep, grid, island, World.SeaLevel);
+
+            // The soak mask goes on before the settle, not after it: the springs spill for as long
+            // as they run, so water settles only once spilling and soaking balance. Without it the
+            // stray count climbed for the whole budget (play runs of 2026-09-22).
+            var soaks = new bool[cells];
+            WaterSettle.SoakMask(keep, soaks);
+            simulation.SetSoakMask(soaks);
+
+            var clock = Stopwatch.StartNew();
+            var previous = -1;
+            var settled = simulation.ReadDepthsImmediate();
+            LastSettleSteps = 0;
+            LastSettleSteadied = false;
+            while (clock.Elapsed.TotalSeconds < _settleBudget)
+            {
+                simulation.StepExactly(_settleBatch);
+                LastSettleSteps += _settleBatch;
+                settled = simulation.ReadDepthsImmediate();
+                LastStrayCells = WaterSettle.CountStray(settled, keep, WaterSettle.DefaultSoakDepth);
+                if (WaterSettle.Steady(LastStrayCells, previous, WaterSettle.DefaultTolerance))
+                {
+                    LastSettleSteadied = true;
+                    break;
+                }
+
+                previous = LastStrayCells;
+            }
+
+            LastZappedCells = WaterSettle.Zap(settled, keep, out var cleared);
+            LastZappedVolume = cleared * grid.CellArea;
+            simulation.SetDepths(settled);
+
+            UnityEngine.Debug.Log($"ChannelSprings: settled in {LastSettleSteps} steps over {clock.Elapsed.TotalSeconds:0.00} s"
+                + (LastSettleSteadied ? $" (steady at {LastStrayCells} stray cells)" : $" (budget, {LastStrayCells} stray cells)")
+                + $"; took {LastZappedVolume:0.#} m³ of standing water off {LastZappedCells} cells", this);
         }
 
         void Clear()

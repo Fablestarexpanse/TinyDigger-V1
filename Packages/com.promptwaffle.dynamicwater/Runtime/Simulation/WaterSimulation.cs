@@ -33,6 +33,10 @@ namespace PromptWaffle.DynamicWater
         static readonly int DryDepthId = Shader.PropertyToID("_DryDepth");
         static readonly int MaxSpeedId = Shader.PropertyToID("_MaxSpeed");
         static readonly int LevelId = Shader.PropertyToID("_Level");
+        static readonly int SoakId = Shader.PropertyToID("_Soak");
+        static readonly int SoakDepthId = Shader.PropertyToID("_SoakDepth");
+        static readonly int SoakRateId = Shader.PropertyToID("_SoakRate");
+        static readonly int HasSoakId = Shader.PropertyToID("_HasSoak");
 
         const string KernelPath = "PromptWaffle/ShallowWater";
         const int MaxEffectors = 256;
@@ -47,6 +51,7 @@ namespace PromptWaffle.DynamicWater
         readonly ComputeBuffer _depthBuffer;
         readonly ComputeBuffer _fluxBuffer;
         readonly ComputeBuffer _effectorBuffer;
+        ComputeBuffer _soakBuffer;
         readonly float[] _groundRow;
         readonly WaterEffector[] _effectors = new WaterEffector[MaxEffectors];
         readonly List<Rect> _pendingGround = new List<Rect>();
@@ -81,6 +86,8 @@ namespace PromptWaffle.DynamicWater
             _depthBuffer = new ComputeBuffer(cells, sizeof(float));
             _fluxBuffer = new ComputeBuffer(cells, sizeof(float) * 4);
             _effectorBuffer = new ComputeBuffer(MaxEffectors, WaterEffector.Stride);
+            // Bound but unread until a mask is set: a compute shader needs every buffer it names.
+            _soakBuffer = new ComputeBuffer(1, sizeof(float));
             _depthBuffer.SetData(new float[cells]);
             _fluxBuffer.SetData(new Vector4[cells]);
             _groundRow = new float[desc.Width];
@@ -133,6 +140,36 @@ namespace PromptWaffle.DynamicWater
             _depthBuffer.SetData(depths);
             _fluxBuffer.SetData(new Vector4[_desc.CellCount]);
             Publish();
+        }
+
+        /// <summary>
+        /// Where a film may soak away, one flag per cell, row by row: true lets water shallower
+        /// than <see cref="WaterSimulationDesc.SoakDepth"/> drain at
+        /// <see cref="WaterSimulationDesc.SoakRate"/>, false keeps it whatever its depth. An empty
+        /// span lets every cell soak, which is the default.
+        /// </summary>
+        public void SetSoakMask(ReadOnlySpan<bool> mask)
+        {
+            if (mask.Length == 0)
+            {
+                _shader.SetInt(HasSoakId, 0);
+                return;
+            }
+
+            if (mask.Length != _desc.CellCount)
+                throw new ArgumentException("One flag per cell.", nameof(mask));
+            if (_soakBuffer == null || _soakBuffer.count != _desc.CellCount)
+            {
+                _soakBuffer?.Release();
+                _soakBuffer = new ComputeBuffer(_desc.CellCount, sizeof(float));
+            }
+
+            var values = new float[mask.Length];
+            for (var i = 0; i < mask.Length; i++)
+                values[i] = mask[i] ? 1f : 0f;
+            _soakBuffer.SetData(values);
+            BindSoak();
+            _shader.SetInt(HasSoakId, 1);
         }
 
         public void SetEffectors(ReadOnlySpan<WaterEffector> effectors)
@@ -215,6 +252,8 @@ namespace PromptWaffle.DynamicWater
                 _shader.SetTexture(kernel, StateId, State);
             }
 
+            BindSoak();
+
             _shader.SetInt(WidthId, _desc.Width);
             _shader.SetInt(HeightId, _desc.Height);
             _shader.SetInt(EffectorCountId, 0);
@@ -225,6 +264,15 @@ namespace PromptWaffle.DynamicWater
             _shader.SetFloat(RetentionId, _desc.FlowRetention);
             _shader.SetFloat(DryDepthId, _desc.DryDepth);
             _shader.SetFloat(MaxSpeedId, _desc.MaxSpeed);
+            _shader.SetFloat(SoakDepthId, _desc.SoakDepth);
+            _shader.SetFloat(SoakRateId, _desc.SoakRate);
+            _shader.SetInt(HasSoakId, 0);
+        }
+
+        void BindSoak()
+        {
+            foreach (var kernel in new[] { _fluxKernel, _depthKernel, _velocityKernel, _fillKernel })
+                _shader.SetBuffer(kernel, SoakId, _soakBuffer);
         }
 
         void OnGroundChanged(Rect world) => _pendingGround.Add(world);
@@ -270,6 +318,7 @@ namespace PromptWaffle.DynamicWater
             _depthBuffer.Release();
             _fluxBuffer.Release();
             _effectorBuffer.Release();
+            _soakBuffer?.Release();
             State.Release();
             DestroyObject(State);
             DestroyObject(_shader);

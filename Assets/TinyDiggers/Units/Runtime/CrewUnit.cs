@@ -40,6 +40,9 @@ namespace TinyDiggers.Units
         /// <summary>There is work designated, but none of it can be reached and worked from.</summary>
         Unreachable,
 
+        /// <summary>Something is waiting to be filled and there is nothing to fill it with, and no quarry to dig.</summary>
+        NeedsMaterial,
+
         /// <summary>Held up by another unit on the next cell of its path.</summary>
         Waiting,
 
@@ -52,6 +55,9 @@ namespace TinyDiggers.Units
         None,
         Dig,
         Fill,
+
+        /// <summary>Digging a player-marked quarry for material a Fill is waiting for.</summary>
+        Quarry,
 
         /// <summary>Tipping a load on a player-marked Dump Zone.</summary>
         DumpZone,
@@ -418,7 +424,8 @@ namespace TinyDiggers.Units
                 if (_rethinkTimer <= 0f)
                     _rethink = true;
             }
-            else if (State == CrewUnitState.Idle || State == CrewUnitState.Unreachable || State == CrewUnitState.NeedsSomewhereToTip)
+            else if (State == CrewUnitState.Idle || State == CrewUnitState.Unreachable
+                || State == CrewUnitState.NeedsSomewhereToTip || State == CrewUnitState.NeedsMaterial)
             {
                 _rethinkTimer -= deltaTime;
                 if (_rethinkTimer <= 0f)
@@ -576,6 +583,11 @@ namespace TinyDiggers.Units
             if (!full && TryPlan(CrewJobKind.Dig, start))
                 return;
 
+            // Nothing left to dig, but something waiting to be filled: quarry for it. Material has
+            // to come from somewhere (Ronan, 2026-09-22).
+            if (!full && _designations.FillCount > 0 && TryPlan(CrewJobKind.Quarry, start))
+                return;
+
             // Cutting a ramp is digging, so it only happens with room in the scoop.
             if (!full && _unreachableDigs.Count > 0 && _dispatcher.RequestRamp(this, _unreachableDigs) && TryPlan(CrewJobKind.Dig, start))
                 return;
@@ -661,6 +673,8 @@ namespace TinyDiggers.Units
                     + (UnreachableCount > 1 ? $" (+{UnreachableCount - 1} more)" : "") + note);
             else if (Role == UnitRole.Hauler)
                 SetState(CrewUnitState.Idle, Inventory.Total > Epsilon ? "Idle: nothing to serve, nowhere to tip" : "Idle: no digger to serve");
+            else if (_designations.FillCount > 0 && Inventory.Total < StepVolume && _designations.QuarryCount == 0)
+                SetState(CrewUnitState.NeedsMaterial, "Nothing to fill with: mark a Quarry to dig from" + note);
             else
                 SetState(CrewUnitState.Idle, _designations.Count == 0 ? "Idle: nothing designated" : "Idle: nothing it can do yet");
         }
@@ -703,7 +717,7 @@ namespace TinyDiggers.Units
                     if (!_grid.InBounds(x, z) || !IsJobCell(kind, standX, standZ, standHeight, x, z))
                         continue;
                     // Tipping fills the lowest cell in reach first.
-                    var height = kind == CrewJobKind.Dig ? 0f : _grid.GetSurfaceHeight(x, z);
+                    var height = kind == CrewJobKind.Dig || kind == CrewJobKind.Quarry ? 0f : _grid.GetSurfaceHeight(x, z);
                     if (height >= bestHeight)
                         continue;
                     bestHeight = height;
@@ -718,7 +732,9 @@ namespace TinyDiggers.Units
             Job = kind;
             JobTarget = target;
             JobStand = _path[_path.Count - 1];
-            _jobHeight = _designations.GetTarget(target.x, target.y);
+            _jobHeight = kind == CrewJobKind.Quarry
+                ? _designations.QuarryFloor(target.x, target.y)
+                : _designations.GetTarget(target.x, target.y);
             _pathIndex = 0;
             _waitTimer = 0f;
             _dispatcher.Claim(target.x, target.y, Id);
@@ -857,7 +873,9 @@ namespace TinyDiggers.Units
         /// </summary>
         bool AnyCandidate(CrewJobKind kind)
         {
-            var cells = kind == CrewJobKind.DumpZone ? _designations.DumpZoneCells : _designations.ActiveCells;
+            var cells = kind == CrewJobKind.DumpZone ? _designations.DumpZoneCells
+                : kind == CrewJobKind.Quarry ? _designations.QuarryCells
+                : _designations.ActiveCells;
             var width = _grid.Width;
             var me = Cell;
             for (var i = 0; i < cells.Count; i++)
@@ -888,6 +906,11 @@ namespace TinyDiggers.Units
                         && WithinDigReach(standHeight, x, z)
                         && !_dispatcher.IsClaimedByOther(x, z, Id)
                         && CanDigStep(standHeight, x, z);
+                case CrewJobKind.Quarry:
+                    return Digs
+                        && WithinDigReach(standHeight, x, z)
+                        && !_dispatcher.IsClaimedByOther(x, z, Id)
+                        && CanQuarryStep(standHeight, x, z);
                 case CrewJobKind.Fill:
                     return _designations.GetKind(x, z) == DesignationKind.Fill
                         && !_dispatcher.IsClaimedByOther(x, z, Id)
@@ -951,6 +974,21 @@ namespace TinyDiggers.Units
         /// <summary>No tipping where another unit stands, or on a cell it is about to drive over.</summary>
         bool CanTipHere(int x, int z) =>
             !_dispatcher.IsOccupiedByOther(x, z, Id) && !_dispatcher.IsOnAnotherPath(x, z, Id);
+
+        /// <summary>
+        /// Whether one more step can be quarried from (x, z): it is a quarry cell with ground above
+        /// its floor, dry, diggable, and the cut stays within reach of where the unit stands.
+        /// </summary>
+        bool CanQuarryStep(float standHeight, int x, int z)
+        {
+            if (!_designations.IsQuarry(x, z) || _grid.IsWater(x, z))
+                return false;
+            var after = _grid.GetSurfaceHeight(x, z) - Step;
+            if (after < _designations.QuarryFloor(x, z) - Epsilon || after < standHeight - DigReachLevels * Step - Epsilon)
+                return false;
+            Span<Layer> diggable = stackalloc Layer[1];
+            return _grid.PeekRemove(x, z, Step, diggable) > 0;
+        }
 
         /// <summary>
         /// Whether one more step can be dug from (x, z) by a unit standing at
@@ -1309,6 +1347,9 @@ namespace TinyDiggers.Units
                 case CrewJobKind.Dig:
                     SetState(CrewUnitState.Digging, "Digging " + DescribeJob());
                     break;
+                case CrewJobKind.Quarry:
+                    SetState(CrewUnitState.Digging, "Quarrying " + DescribeJob());
+                    break;
                 case CrewJobKind.Transfer:
                     SetState(CrewUnitState.Transferring, "Loading " + DescribeJob());
                     break;
@@ -1348,7 +1389,9 @@ namespace TinyDiggers.Units
         {
             var target = JobTarget;
             var standHeight = _grid.GetSurfaceHeight(JobStand.x, JobStand.y);
-            if (!WithinDigReach(standHeight, target.x, target.y) || !CanDigStep(standHeight, target.x, target.y))
+            var quarrying = Job == CrewJobKind.Quarry;
+            var canCut = quarrying ? CanQuarryStep(standHeight, target.x, target.y) : CanDigStep(standHeight, target.x, target.y);
+            if (!WithinDigReach(standHeight, target.x, target.y) || !canCut)
             {
                 if (_designations.GetKind(target.x, target.y) == DesignationKind.Dig && !HasDiggableTop(target.x, target.y))
                 {
@@ -1370,7 +1413,10 @@ namespace TinyDiggers.Units
             }
 
             Version++;
-            if (_designations.GetKind(target.x, target.y) != DesignationKind.Dig)
+            var done = quarrying
+                ? !CanQuarryStep(standHeight, target.x, target.y) || _designations.FillCount == 0
+                : _designations.GetKind(target.x, target.y) != DesignationKind.Dig;
+            if (done)
                 _rethink = true;
         }
 
@@ -1568,6 +1614,8 @@ namespace TinyDiggers.Units
                     return $"dig ({JobTarget.x}, {JobTarget.y}) to {_jobHeight:0.#} m";
                 case CrewJobKind.Fill:
                     return $"fill ({JobTarget.x}, {JobTarget.y}) to {_jobHeight:0.#} m";
+                case CrewJobKind.Quarry:
+                    return $"quarry ({JobTarget.x}, {JobTarget.y}) down to {_jobHeight:0.#} m";
                 case CrewJobKind.DumpZone:
                     return $"spoil at ({JobTarget.x}, {JobTarget.y}) (dump zone)";
                 case CrewJobKind.Transfer:

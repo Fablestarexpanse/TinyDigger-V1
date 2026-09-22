@@ -23,6 +23,7 @@ namespace TinyDiggers.Interaction
         Digger,
         Hauler,
         Worker,
+        Quarry,
     }
 
     /// <summary>

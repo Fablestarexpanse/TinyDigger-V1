@@ -12,6 +12,7 @@ namespace TinyDiggers.Interaction
     /// - Level: H, the eyedropper, and the cut / fill of the pad being dragged.
     /// - Dump Zone: H and the cap above it, − / + and a field.
     /// - Road: H, the width, and the cut / fill of the road drawn so far.
+    /// - Quarry: H (the floor), the eyedropper, and what the marked quarries still hold.
     /// - Clear: which kinds of designation it takes off.
     /// Select has no panel. Built once; each tool shows the rows it uses, stacked.
     /// </summary>
@@ -27,7 +28,8 @@ namespace TinyDiggers.Interaction
         ToolMode _builtFor = (ToolMode)(-1);
 
         RectTransform _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow;
-        RectTransform _rampRow, _roadGradeRow, _roadOptionsRow, _roadHintRow;
+        RectTransform _rampRow, _roadGradeRow, _roadOptionsRow, _roadHintRow, _quarryRow;
+        Text _quarryNote;
         Toggle _ramp;
         InputField _rampField;
         Text _grades;
@@ -44,6 +46,8 @@ namespace TinyDiggers.Interaction
         Text _capNote;
         Text _width;
         readonly List<RectTransform> _shown = new List<RectTransform>();
+        float _stockAt = -1f;
+        float _quarryStock;
 
         public void Build(Canvas canvas, PlayerTools tools, Vector2 position)
         {
@@ -148,6 +152,27 @@ namespace TinyDiggers.Interaction
             UiKit.Place((RectTransform)clearFill.transform, 100f, 4f, 90f, RowHeight - 8f);
             var clearZones = UiKit.NewToggle(_clearRow, "Dump Zones", _tools.ClearZones, on => _tools.ClearZones = on);
             UiKit.Place((RectTransform)clearZones.transform, 200f, 4f, 140f, RowHeight - 8f);
+            var clearQuarries = UiKit.NewToggle(_clearRow, "Quarries", _tools.ClearQuarries, on => _tools.ClearQuarries = on);
+            UiKit.Place((RectTransform)clearQuarries.transform, 346f, 4f, 120f, RowHeight - 8f);
+
+            _quarryRow = Row("Quarry");
+            _quarryNote = UiKit.NewLabel(_quarryRow, "", 0f, 0f, Width - 2 * Pad, RowHeight, 14);
+        }
+
+        /// <summary>Cubic metres the marked quarries still hold above their floors, recounted four times a second.</summary>
+        float QuarryStock()
+        {
+            var map = _tools.Map;
+            if (map == null)
+                return 0f;
+            if (Time.unscaledTime - _stockAt < 0.25f)
+                return _quarryStock;
+            _stockAt = Time.unscaledTime;
+            _quarryStock = 0f;
+            var cells = map.QuarryCells;
+            for (var i = 0; i < cells.Count; i++)
+                _quarryStock += map.QuarryLeft(cells[i] % map.Grid.Width, cells[i] / map.Grid.Width);
+            return _quarryStock;
         }
 
         RectTransform Row(string name)
@@ -159,7 +184,7 @@ namespace TinyDiggers.Interaction
 
         void Show(params RectTransform[] rows)
         {
-            foreach (var row in new[] { _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow, _rampRow, _roadGradeRow, _roadOptionsRow, _roadHintRow })
+            foreach (var row in new[] { _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow, _rampRow, _roadGradeRow, _roadOptionsRow, _roadHintRow, _quarryRow })
                 row.gameObject.SetActive(false);
             _shown.Clear();
             var y = 30f;
@@ -199,6 +224,9 @@ namespace TinyDiggers.Interaction
                     case ToolMode.Road:
                         Show(_widthRow, _roadOptionsRow, _roadGradeRow, _volumeRow, _roadHintRow);
                         break;
+                    case ToolMode.Quarry:
+                        Show(_heightRow, _followRow, _pickRow, _quarryRow);
+                        break;
                     case ToolMode.Clear:
                         Show(_clearRow);
                         break;
@@ -214,6 +242,7 @@ namespace TinyDiggers.Interaction
                     ToolMode.Level => "Level  —  drag a pad to H, or a ramp from H to the far edge",
                     ToolMode.DumpZone => "Dump Zone  —  drag where spoil may be tipped",
                     ToolMode.Road => "Road  —  a spline the crew builds; click a road to edit it",
+                    ToolMode.Quarry => "Quarry  —  drag where the crew may dig for fill material, down to H",
                     ToolMode.Clear => "Clear  —  drag over designations to take them off",
                     _ => "",
                 };
@@ -246,6 +275,11 @@ namespace TinyDiggers.Interaction
                     ? $"{what}: nothing to move at H"
                     : $"{what}:  cut {cut:0.#} m³   fill {fill:0.#} m³   net {cut - fill:+0.#;-0.#;0} m³";
                 _volume.color = Color.white;
+                if (fill > 0.05f && QuarryStock() < fill - 0.05f)
+                {
+                    _volume.text += $"   —   needs {fill - QuarryStock():0.#} m³ from a quarry";
+                    _volume.color = UiKit.Warning;
+                }
             }
 
             if (_capRow.gameObject.activeSelf)
@@ -253,6 +287,16 @@ namespace TinyDiggers.Interaction
                 if (!_capField.isFocused)
                     _capField.SetTextWithoutNotify(_tools.ZoneCapAbove.ToString("0.##", CultureInfo.InvariantCulture));
                 _capNote.text = $"m   (cap {_tools.TargetHeight + _tools.ZoneCapAbove:0.#} m)";
+            }
+
+            if (_quarryRow.gameObject.activeSelf)
+            {
+                var map = _tools.Map;
+                var cells = map != null ? map.QuarryCount : 0;
+                _quarryNote.text = cells == 0
+                    ? "Nothing marked yet: drag out a quarry. The crew digs it only to fill something."
+                    : $"{cells} cells marked, {QuarryStock():0.#} m³ above their floors — dug only when a Fill needs material";
+                _quarryNote.color = cells == 0 ? UiKit.Warning : Color.white;
             }
 
             if (_widthRow.gameObject.activeSelf)

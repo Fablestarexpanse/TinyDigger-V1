@@ -197,8 +197,16 @@ def worker(d):
     rect(d, 22, 52, 42, 58, radius=3)
 
 
+def quarry(d):
+    # A pickaxe over a stepped bench: the crew digs here for material.
+    line(d, [(12, 18), (52, 18)], width=12)
+    d.arc([p(10, 10)[0], p(10, 10)[1], p(54, 34)[0], p(54, 34)[1]], start=180, end=360, fill=W, width=14)
+    line(d, [(32, 18), (32, 34)], width=10)
+    poly(d, [(4, 58), (4, 50), (22, 50), (22, 44), (40, 44), (40, 38), (60, 38), (60, 58)])
+
+
 GLYPHS = [select, dig, fill, level, road, dump_zone, clear_tool, seed, settings, debug,
-          undo, redo, eyedropper, warning, digger, hauler, worker]
+          undo, redo, eyedropper, warning, digger, hauler, worker, quarry]
 
 
 def main(out):

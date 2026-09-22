@@ -10,7 +10,7 @@ using UnityEngine.UI;
 
 namespace TinyDiggers.Interaction
 {
-    /// <summary>What the left mouse button does. Hotkeys 1-7, Escape goes back to Select.</summary>
+    /// <summary>What the left mouse button does. Hotkeys 1-8, Escape goes back to Select.</summary>
     public enum ToolMode
     {
         Select,
@@ -20,6 +20,9 @@ namespace TinyDiggers.Interaction
         Level,
         Road,
         Clear,
+
+        /// <summary>An area the crew may dig for material when something needs filling.</summary>
+        Quarry,
     }
 
     /// <summary>
@@ -34,6 +37,8 @@ namespace TinyDiggers.Interaction
     ///   cell needs (or, with <see cref="LevelRamp"/>, a ramp from H at the edge the drag started
     ///   from to <see cref="LevelHeightB"/> at the far edge), and a rubber that takes designations
     ///   and zones off the cells it covers.
+    /// - **Quarry** is dragged out too: an area the crew may dig down to H for material, but only
+    ///   while something is waiting to be filled (Ronan: it has to come from someplace).
     /// - **Road** is a spline tool (Slice 17 Part B): see <see cref="RoadsHost"/>.
     ///
     /// H follows the hovered cell until PageUp or PageDown moves it, which locks it; the toolbar
@@ -60,6 +65,7 @@ namespace TinyDiggers.Interaction
         public bool ClearDig = true;
         public bool ClearFill = true;
         public bool ClearZones = true;
+        public bool ClearQuarries = true;
 
         /// <summary>Cells across the road being drawn: 3, 5 or 7.</summary>
         public int RoadWidth
@@ -163,7 +169,7 @@ namespace TinyDiggers.Interaction
 
         /// <summary>Whether the tool uses the target height H.</summary>
         public bool UsesHeight => Mode == ToolMode.Dig || Mode == ToolMode.Fill || Mode == ToolMode.Level
-            || Mode == ToolMode.DumpZone || Mode == ToolMode.Road;
+            || Mode == ToolMode.DumpZone || Mode == ToolMode.Road || Mode == ToolMode.Quarry;
 
         /// <summary>Whether H follows the hovered cell (the panel's toggle); false once H is set.</summary>
         public bool HeightFollowsCursor
@@ -309,6 +315,8 @@ namespace TinyDiggers.Interaction
                 SetMode(ToolMode.Road);
             if (keyboard.digit7Key.wasPressedThisFrame)
                 SetMode(ToolMode.Clear);
+            if (keyboard.digit8Key.wasPressedThisFrame)
+                SetMode(ToolMode.Quarry);
 
             if (keyboard.escapeKey.wasPressedThisFrame)
             {
@@ -518,6 +526,7 @@ namespace TinyDiggers.Interaction
                 case ToolMode.DumpZone:
                 case ToolMode.Level:
                 case ToolMode.Clear:
+                case ToolMode.Quarry:
                     DragRectangle(leftDown, leftUp, grid);
                     break;
                 case ToolMode.Road:
@@ -576,7 +585,8 @@ namespace TinyDiggers.Interaction
                 return;
 
             var area = Rectangle(_dragFrom, new Vector2Int(HoverX, HoverZ));
-            History?.Begin(Mode == ToolMode.DumpZone ? "dump zone" : Mode == ToolMode.Level ? "level" : "clear");
+            History?.Begin(Mode == ToolMode.DumpZone ? "dump zone" : Mode == ToolMode.Level ? "level"
+                : Mode == ToolMode.Quarry ? "quarry" : "clear");
             try
             {
                 ApplyRectangle(area, grid);
@@ -615,6 +625,22 @@ namespace TinyDiggers.Interaction
                     break;
                 }
 
+                case ToolMode.Quarry:
+                {
+                    var marked = 0;
+                    var held = 0f;
+                    for (var z = area.yMin; z < area.yMax; z++)
+                        for (var x = area.xMin; x < area.xMax; x++)
+                            if (Map.SetQuarry(x, z, true, _strokeHeight))
+                            {
+                                marked++;
+                                held += Map.QuarryLeft(x, z);
+                            }
+
+                    LastAction = $"Quarry: {marked} cells down to {_strokeHeight:0.#} m, {held:0} m³ to dig";
+                    break;
+                }
+
                 case ToolMode.Clear:
                 {
                     var cleared = 0;
@@ -645,6 +671,8 @@ namespace TinyDiggers.Interaction
             if (kind == DesignationKind.Dig && ClearDig || kind == DesignationKind.Fill && ClearFill)
                 changed = Map.CancelDesignation(x, z);
             if (ClearZones && Map.SetDumpZone(x, z, false))
+                changed = true;
+            if (ClearQuarries && Map.SetQuarry(x, z, false))
                 changed = true;
             return changed;
         }
@@ -699,6 +727,7 @@ namespace TinyDiggers.Interaction
                 case ToolMode.DumpZone:
                 case ToolMode.Level:
                 case ToolMode.Clear:
+                case ToolMode.Quarry:
                     PreviewRectangle(grid);
                     break;
                 case ToolMode.Road:
@@ -744,7 +773,7 @@ namespace TinyDiggers.Interaction
                     if (!grid.IsGround(x, z))
                         continue;
                     var color = ToolColor(Mode, 90);
-                    if (Mode == ToolMode.Level || Mode == ToolMode.DumpZone)
+                    if (Mode == ToolMode.Level || Mode == ToolMode.DumpZone || Mode == ToolMode.Quarry)
                         DesignationsView.AddTile(x, z, height, height, height, height, color, _vertices, _colors, _triangles, _terrain.Grid.CellSize);
                     else
                         DesignationsView.AddSurfaceTile(grid, x, z, color, _vertices, _colors, _triangles, 0.08f);
@@ -761,6 +790,7 @@ namespace TinyDiggers.Interaction
                 case ToolMode.Fill: return new Color32(70, 140, 245, alpha);
                 case ToolMode.Level: return new Color32(170, 90, 230, alpha);
                 case ToolMode.DumpZone: return new Color32(80, 205, 95, alpha);
+                case ToolMode.Quarry: return new Color32(220, 160, 70, alpha);
                 case ToolMode.Road: return new Color32(120, 230, 160, alpha);
                 default: return new Color32(140, 220, 255, alpha);
             }

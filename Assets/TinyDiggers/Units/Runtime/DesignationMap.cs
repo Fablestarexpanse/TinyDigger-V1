@@ -23,23 +23,29 @@ namespace TinyDiggers.Units
         public readonly bool Auto;
         public readonly bool DumpZone;
         public readonly float DumpZoneCap;
+        public readonly bool Quarry;
+        public readonly float QuarryFloor;
 
-        public DesignationCellState(DesignationKind kind, float target, bool auto, bool dumpZone, float dumpZoneCap)
+        public DesignationCellState(DesignationKind kind, float target, bool auto, bool dumpZone, float dumpZoneCap,
+            bool quarry, float quarryFloor)
         {
             Kind = kind;
             Target = target;
             Auto = auto;
             DumpZone = dumpZone;
             DumpZoneCap = dumpZoneCap;
+            Quarry = quarry;
+            QuarryFloor = quarryFloor;
         }
 
         public bool Equals(DesignationCellState other) =>
             Kind == other.Kind && Target.Equals(other.Target) && Auto == other.Auto
-            && DumpZone == other.DumpZone && DumpZoneCap.Equals(other.DumpZoneCap);
+            && DumpZone == other.DumpZone && DumpZoneCap.Equals(other.DumpZoneCap)
+            && Quarry == other.Quarry && QuarryFloor.Equals(other.QuarryFloor);
 
         public override bool Equals(object obj) => obj is DesignationCellState other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(Kind, Target, Auto, DumpZone, DumpZoneCap);
+        public override int GetHashCode() => HashCode.Combine(Kind, Target, Auto, DumpZone, DumpZoneCap, Quarry, QuarryFloor);
     }
 
     /// <summary>
@@ -54,6 +60,10 @@ namespace TinyDiggers.Units
     ///
     /// Dump Zones are a separate layer: cells where the player wants spoil tipped, each with a
     /// cap height nothing is heaped above. They never clear themselves and do not count as work.
+    ///
+    /// Quarries are another layer (Slice 17, Ronan: material "has to come from someplace"): cells
+    /// the crew may dig for material, down to a floor and no further. Nothing is quarried unless a
+    /// Fill is waiting for material, so a quarry is a standing offer rather than a job.
     /// </summary>
     public sealed class DesignationMap : IDisposable
     {
@@ -71,6 +81,9 @@ namespace TinyDiggers.Units
         readonly int[] _dumpSlot;
         readonly float[] _dumpCap;
         readonly List<int> _dumpCells = new List<int>();
+        readonly int[] _quarrySlot;
+        readonly float[] _quarryFloor;
+        readonly List<int> _quarryCells = new List<int>();
         bool _disposed;
 
         public DesignationMap(TerrainGrid grid)
@@ -84,11 +97,14 @@ namespace TinyDiggers.Units
             _pending = new bool[cells];
             _dumpSlot = new int[cells];
             _dumpCap = new float[cells];
+            _quarrySlot = new int[cells];
+            _quarryFloor = new float[cells];
             for (var i = 0; i < cells; i++)
             {
                 _slot[i] = -1;
                 _dumpSlot[i] = -1;
                 _dumpCap[i] = float.PositiveInfinity;
+                _quarrySlot[i] = -1;
             }
 
             _grid.CellChanged += OnCellChanged;
@@ -123,6 +139,64 @@ namespace TinyDiggers.Units
 
         public int DumpZoneCount => _dumpCells.Count;
 
+        /// <summary>Fill designations outstanding: what a quarry would be dug for.</summary>
+        public int FillCount { get; private set; }
+
+        public int QuarryCount => _quarryCells.Count;
+
+        /// <summary>Quarry cells as grid indices, in no particular order.</summary>
+        public IReadOnlyList<int> QuarryCells => _quarryCells;
+
+        public bool IsQuarry(int x, int z) => _quarrySlot[Index(x, z)] >= 0;
+
+        /// <summary>The height a quarry cell is never dug below.</summary>
+        public float QuarryFloor(int x, int z) => _quarryFloor[Index(x, z)];
+
+        /// <summary>
+        /// Marks or unmarks a quarry cell, with the floor the crew digs down to. Returns whether
+        /// anything changed; re-marking a cell with a new floor counts as a change.
+        /// </summary>
+        public bool SetQuarry(int x, int z, bool on, float floor = 0f)
+        {
+            var cell = Index(x, z);
+            if (on && _grid.IsVoid(x, z))
+                return false;
+            if ((_quarrySlot[cell] >= 0) == on)
+            {
+                if (!on || _quarryFloor[cell] == floor)
+                    return false;
+                Changing?.Invoke(x, z);
+                _quarryFloor[cell] = floor;
+                Raise(x, z);
+                return true;
+            }
+
+            Changing?.Invoke(x, z);
+            if (on)
+            {
+                _quarryFloor[cell] = floor;
+                _quarrySlot[cell] = _quarryCells.Count;
+                _quarryCells.Add(cell);
+            }
+            else
+            {
+                var slot = _quarrySlot[cell];
+                var last = _quarryCells[_quarryCells.Count - 1];
+                _quarryCells[slot] = last;
+                _quarrySlot[last] = slot;
+                _quarryCells.RemoveAt(_quarryCells.Count - 1);
+                _quarrySlot[cell] = -1;
+                _quarryFloor[cell] = 0f;
+            }
+
+            Raise(x, z);
+            return true;
+        }
+
+        /// <summary>Cubic metres a quarry cell still holds above its floor, or 0.</summary>
+        public float QuarryLeft(int x, int z) =>
+            IsQuarry(x, z) ? Math.Max(0f, _grid.GetSurfaceHeight(x, z) - _quarryFloor[x + z * _grid.Width]) * _grid.CellArea : 0f;
+
         /// <summary>Dump Zone cells as grid indices, in no particular order.</summary>
         public IReadOnlyList<int> DumpZoneCells => _dumpCells;
 
@@ -144,7 +218,8 @@ namespace TinyDiggers.Units
         public DesignationCellState Snapshot(int x, int z)
         {
             var cell = Index(x, z);
-            return new DesignationCellState(_kinds[cell], _targets[cell], _auto[cell], _dumpSlot[cell] >= 0, _dumpCap[cell]);
+            return new DesignationCellState(_kinds[cell], _targets[cell], _auto[cell], _dumpSlot[cell] >= 0, _dumpCap[cell],
+                _quarrySlot[cell] >= 0, _quarryFloor[cell]);
         }
 
         /// <summary>
@@ -158,6 +233,7 @@ namespace TinyDiggers.Units
             else
                 Designate(x, z, state.Kind, state.Target, state.Auto);
             SetDumpZone(x, z, state.DumpZone, state.DumpZoneCap);
+            SetQuarry(x, z, state.Quarry, state.QuarryFloor);
         }
 
         /// <summary>Whether the cell's surface already satisfies a designation of this kind and height.</summary>
@@ -201,6 +277,10 @@ namespace TinyDiggers.Units
                 return true;
 
             Changing?.Invoke(x, z);
+            if (_kinds[cell] == DesignationKind.Fill)
+                FillCount--;
+            if (kind == DesignationKind.Fill)
+                FillCount++;
             _kinds[cell] = kind;
             _targets[cell] = height;
             SetAuto(cell, auto);
@@ -228,9 +308,10 @@ namespace TinyDiggers.Units
             var wasAuto = _auto[cell];
             Clear(x, z);
             var hadZone = SetDumpZone(x, z, false);
+            var hadQuarry = SetQuarry(x, z, false);
             if (hadDesignation && wasAuto)
                 AutoCancelled?.Invoke(x, z);
-            return hadDesignation || hadZone;
+            return hadDesignation || hadZone || hadQuarry;
         }
 
         /// <summary>
@@ -257,6 +338,8 @@ namespace TinyDiggers.Units
                 return;
 
             Changing?.Invoke(x, z);
+            if (_kinds[cell] == DesignationKind.Fill)
+                FillCount--;
             _kinds[cell] = DesignationKind.None;
             _targets[cell] = 0f;
             SetAuto(cell, false);
@@ -282,6 +365,12 @@ namespace TinyDiggers.Units
             {
                 var cell = _dumpCells[i];
                 SetDumpZone(cell % _grid.Width, cell / _grid.Width, false);
+            }
+
+            for (var i = _quarryCells.Count - 1; i >= 0; i--)
+            {
+                var cell = _quarryCells[i];
+                SetQuarry(cell % _grid.Width, cell / _grid.Width, false);
             }
         }
 

@@ -39,6 +39,12 @@ float _Retention;
 float _DryDepth;
 float _MaxSpeed;
 float _Level;
+// Soaking: a film shallower than _SoakDepth drains at _SoakRate where _Soak allows it. The mask
+// is optional (_HasSoak), so a zone that wants it everywhere needs no buffer.
+StructuredBuffer<float> _Soak;
+float _SoakDepth;
+float _SoakRate;
+int _HasSoak;
 
 bool Inside(int x, int z) { return x >= 0 && z >= 0 && x < _Width && z < _Height; }
 int Index(int x, int z) { return z * _Width + x; }
@@ -163,7 +169,15 @@ void Depth(uint3 id : SV_DispatchThreadID)
         }
     }
 
-    _Depth[i] = max(0.0, depth);
+    depth = max(0.0, depth);
+    if (_SoakRate > 0.0 && depth > 0.0 && depth < _SoakDepth)
+    {
+        float soaks = _HasSoak != 0 ? _Soak[i] : 1.0;
+        if (soaks > 0.0)
+            depth = max(0.0, depth - _SoakRate * soaks * _Dt);
+    }
+
+    _Depth[i] = depth;
 }
 
 [numthreads(8, 8, 1)]

@@ -52,8 +52,13 @@ namespace TinyDiggers.Interaction
             },
             new[] { new ToolButton { Mode = ToolMode.Road, Icon = ToolIcon.Road, Name = "Road", Key = "6",
                 Help = "click points, double-click or Enter to lay it" } },
-            new[] { new ToolButton { Mode = ToolMode.DumpZone, Icon = ToolIcon.DumpZone, Name = "Dump Zone", Key = "4",
-                Help = "drag where spoil may be tipped" } },
+            new[]
+            {
+                new ToolButton { Mode = ToolMode.DumpZone, Icon = ToolIcon.DumpZone, Name = "Dump Zone", Key = "4",
+                    Help = "drag where spoil may be tipped" },
+                new ToolButton { Mode = ToolMode.Quarry, Icon = ToolIcon.Quarry, Name = "Quarry", Key = "8",
+                    Help = "drag where the crew may dig for material to fill with" },
+            },
             new[] { new ToolButton { Mode = ToolMode.Clear, Icon = ToolIcon.Clear, Name = "Clear", Key = "7",
                 Help = "drag to take designations off" } },
         };
