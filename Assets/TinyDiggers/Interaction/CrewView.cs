@@ -61,6 +61,14 @@ namespace TinyDiggers.Interaction
         /// <summary>Largest height change a unit can drive across between neighbouring cells, in metres.</summary>
         [Min(0f)] public float maxStepHeight = 1f;
 
+        /// <summary>
+        /// The steepest ground the crew drives, in degrees, or nought to use
+        /// <see cref="maxStepHeight"/> as it stands. The ground decides, not the machine: steeper
+        /// than this and everything wants a ramp or a road, which is what makes the topography
+        /// worth anything (Ronan, 2026-09-22).
+        /// </summary>
+        [Min(0f)] public float maxSlopeDegrees = 45f;
+
         /// <summary>Take designated ground down in drivable layers, so upper cells stay workable.</summary>
         public bool benching = true;
 
@@ -149,6 +157,8 @@ namespace TinyDiggers.Interaction
         {
             var grid = _terrain.Grid;
             _pathfinder = new GridPathfinder(grid) { MaxStepHeight = maxStepHeight };
+            if (maxSlopeDegrees > 0f)
+                _pathfinder.MaxSlopeDegrees = maxSlopeDegrees;
             Dispatcher = new JobDispatcher(grid, _designations.Map, _pathfinder);
 
             var wish = (_terrain.DiscCentre + _spawnOffset) / grid.CellSize;
@@ -340,6 +350,8 @@ namespace TinyDiggers.Interaction
             Dispatcher.Benching = benching;
             Dispatcher.AutoRamp = autoRamp;
             _pathfinder.MaxStepHeight = maxStepHeight;
+            if (maxSlopeDegrees > 0f)
+                _pathfinder.MaxSlopeDegrees = maxSlopeDegrees;
             Dispatcher.Tick(Time.deltaTime);
             foreach (var unit in _units)
             {

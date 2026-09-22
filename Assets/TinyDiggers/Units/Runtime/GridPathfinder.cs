@@ -33,6 +33,26 @@ namespace TinyDiggers.Units
         /// </summary>
         public float MaxStepHeight;
 
+        /// <summary>
+        /// The steepest ground anything drives, as rise over run — the same for every unit,
+        /// because it is the ground that decides and not the machine (Ronan, 2026-09-22). It is
+        /// <see cref="MaxStepHeight"/> said in a way that does not depend on how big a cell is:
+        /// half a metre of rise across a half-metre cell is forty-five degrees whatever the map's
+        /// resolution. Steeper than this wants a ramp or a road cut into it.
+        /// </summary>
+        public float MaxSlope
+        {
+            get => _grid.CellSize > 0f ? MaxStepHeight / _grid.CellSize : MaxStepHeight;
+            set => MaxStepHeight = value * (_grid.CellSize > 0f ? _grid.CellSize : 1f);
+        }
+
+        /// <summary>The same limit as an angle from the horizontal, in degrees.</summary>
+        public float MaxSlopeDegrees
+        {
+            get => (float)(Math.Atan(MaxSlope) * 180.0 / Math.PI);
+            set => MaxSlope = (float)Math.Tan(value * Math.PI / 180.0);
+        }
+
         /// <summary>Extra cost per metre of height change, as a fraction of the step's length.</summary>
         public float SlopeCostFactor = 1f;
 

@@ -3809,3 +3809,27 @@ old patience test still holds, because a digger with nothing to dig is stopped.
 
 Also seen in that run, and worth recording: with the part-load deadlock fixed, **the four starter
 robots were digging** rather than standing about.
+
+## 2026-09-22 — Topography: the ground sets the limit, said as an angle
+
+Ronan chose the slope reading (2026-09-22): no per-unit climbing, **the ground decides and it
+decides the same for everyone**, and anything steeper wants a ramp or a road.
+
+`GridPathfinder.MaxSlope` and `MaxSlopeDegrees` are the knob now. They are the old
+`MaxStepHeight` said in a way that does not depend on the map's resolution: half a metre of rise
+across a half-metre cell is forty-five degrees whatever size the cells are, and the same angle on a
+coarser grid allows a proportionally bigger step. `CrewView.maxSlopeDegrees` sets it, and nought
+leaves the old metre-based field alone.
+
+**Set to 45 degrees**, which is exactly what the sandbox was already doing (0.5 m over 0.5 m
+cells) — the number was simply never expressed as an angle. Checked in play: the crew works as
+before, robots digging, mech loading, dumper tipping.
+
+**35 degrees strands this island.** Every unit, including the digger mech, reports UNREACHABLE and
+the ramp planner finds no route: the spawn itself lands somewhere boxed in, and the crew never
+reaches a site at all. Steeper ground can be made to matter, but the roads and ramps have to be
+able to answer it first, and today's auto-ramp cannot. The knob is there for when they can.
+
+Worth knowing for whoever tunes it: `JobDispatcher.Climb` — how deep a bench may be cut — is
+derived from the same limit and is floored at one height step, so below 45 degrees a crew can cut
+a bench it then cannot walk onto.
