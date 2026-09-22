@@ -20,6 +20,10 @@ namespace TinyDiggers.Terrain
         /// <summary>The mix of plains, hills and mountains this island was drawn with (phase 2).</summary>
         public LandMix Mix;
 
+        /// <summary>Share of the coast drawn to be cliff, and how high those cliffs stand (phase 4).</summary>
+        public float CliffCoastShare;
+        public float CliffCoastHeight;
+
         /// <summary>Land cells raised to fill hollows (phase 3).</summary>
         public int PitsFilled;
 
@@ -199,10 +203,11 @@ namespace TinyDiggers.Terrain
             var heights = new float[cells];
             var highGround = new float[cells];
             float[] upland = null;
+            float[] cliffCoast = null;
             if (settings.UseLandTypes)
             {
                 upland = BuildTypedHeights(random, map, heights, highGround, land, inDisc, width, depth, shift, ridge, benches,
-                    baseOffset, mediumOffset, warpOffset, ridgeOffset, ridgeWarp, settings);
+                    baseOffset, mediumOffset, warpOffset, ridgeOffset, ridgeWarp, settings, out cliffCoast);
             }
             else Parallel.For(0, depth, z =>
             {
@@ -275,7 +280,7 @@ namespace TinyDiggers.Terrain
             map.Mark("valleys", stopwatch, ref lastMark);
 
             // --- 6: the coast and the shelf --------------------------------------------------
-            var toLandForSea = ShapeCoast(heights, land, inDisc, width, depth, radius, centre, settings);
+            var toLandForSea = ShapeCoast(heights, land, inDisc, width, depth, radius, centre, settings, cliffCoast);
             var reef = settings.OpenSeaFloor
                 ? SeabedShaper.Shape(heights, land, inDisc, toLandForSea, width, depth, radius, centre, settings)
                 : null;
@@ -286,6 +291,8 @@ namespace TinyDiggers.Terrain
             // Settle first, at full resolution and in all eight directions, to just under the step
             // the relaxation enforces. Otherwise the relaxation does the settling itself, a row or
             // a column at a time, and a steep hillside comes out combed into straight grooves.
+            if (cliffCoast != null)
+                ShapeCliffFaces(heights, land, inDisc, cliffCoast, width, depth, settings.MaxCliffStep, settings.ShelfNearDepth * 0.7f);
             if (settings.Erosion && settings.SettleIterations > 0)
                 SettleSlopes(heights, land, highGround, width, depth, step, settings.MaxCliffStep, settings.SettleIterations);
 
@@ -300,6 +307,8 @@ namespace TinyDiggers.Terrain
             // the field before it is relaxed, so the relaxation knows which faces are rock before
             // there are any materials to ask.
             var cliff = CliffMask(heights, inDisc, width, depth, settings);
+            if (cliffCoast != null)
+                MarkCliffCoast(cliff, cliffCoast, land, width, depth, Mathf.CeilToInt(4f / Mathf.Max(0.1f, settings.GenerationCellSize)));
             var sweeps = Relax(heights, isLand, cliff, width, depth, step, settings.MaxCliffStep);
 
             map.Mark("relax", stopwatch, ref lastMark);
@@ -436,12 +445,17 @@ namespace TinyDiggers.Terrain
         static float[] BuildTypedHeights(System.Random random, IslandMap map, float[] heights, float[] highGround,
             bool[] land, bool[] inDisc, int width, int depth, Vector2Int shift, Vector2[] ridge, Vector3[] benches,
             Vector2 baseOffset, Vector2 mediumOffset, Vector2 warpOffset, Vector2 ridgeOffset, Vector2 ridgeWarp,
-            TerrainGenSettings settings)
+            TerrainGenSettings settings, out float[] cliffCoast)
         {
             var cells = width * depth;
+            var cliffWeights = new float[cells];
+            cliffCoast = cliffWeights;
             var typeOffset = Offset(random);
             var hillsOffset = Offset(random);
+            var cliffOffset = Offset(random);
             map.Mix = LandTypes.Draw(random, settings);
+            map.CliffCoastShare = Mathf.Lerp(settings.CliffCoastShareMin, settings.CliffCoastShareMax, (float)random.NextDouble());
+            map.CliffCoastHeight = Mathf.Lerp(settings.CliffCoastHeightMin, settings.CliffCoastHeightMax, (float)random.NextDouble());
             var toSea = Distance(land, inDisc, width, depth, from: false);
 
             // The type field over the land.
@@ -471,6 +485,30 @@ namespace TinyDiggers.Terrain
                 if (land[cell])
                     sample[count++] = type[cell];
             var (plainsBelow, mountainsAbove) = LandTypes.Thresholds(sample, count, map.Mix);
+
+            // Cliff coasts (phase 4): a slow field along the coast, pulled up where hills and
+            // mountains are, cut so the drawn share of the shore is cliff. Only the open sea's
+            // coast: a cliff round a lake stood up as a rampart round it.
+            var toOcean = Distance(OpenSea(land, inDisc, width, depth), inDisc, width, depth, from: true);
+            var cliffField = new float[cells];
+            var reachInland = settings.CliffCoastInland * 3f;
+            Parallel.For(0, depth, z =>
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var cell = z * width + x;
+                    if (!land[cell] || toOcean[cell] > reachInland)
+                        continue;
+                    var at = new Vector2(x - shift.x, z - shift.y);
+                    var (plainsHere, _, _) = LandTypes.Weights(type[cell], plainsBelow, mountainsAbove, settings.TypeBlend);
+                    cliffField[cell] = Fbm(at, cliffOffset, settings.CliffCoastSize, 2) + 0.5f + settings.CliffUplandBias * (1f - plainsHere);
+                }
+            });
+            var shoreCount = 0;
+            for (var cell = 0; cell < cells && shoreCount < sample.Length; cell += Math.Max(1, stride / 8))
+                if (land[cell] && toOcean[cell] <= 2f)
+                    sample[shoreCount++] = cliffField[cell];
+            var (_, cliffAbove) = LandTypes.Thresholds(sample, shoreCount, new LandMix(0f, 1f - map.CliffCoastShare, map.CliffCoastShare));
 
             Parallel.For(0, depth, z =>
             {
@@ -510,6 +548,25 @@ namespace TinyDiggers.Terrain
 
                     var height = plains * plain + hills * hill + mountains * mountain;
                     highGround[cell] = mountains * peak;
+
+                    // A cliff coast: the land stands at the cliff's height right to the sea, and
+                    // eases back to what is behind it over as far again inland. The top is rock,
+                    // so erosion and settling leave the face standing.
+                    if (toOcean[cell] <= reachInland)
+                    {
+                        // Blended wide: a narrow blend switched a stretch of cliff on within a few
+                        // metres along the coast and left a wall running inland from its end.
+                        var cliff = Smooth((cliffField[cell] - cliffAbove) / settings.CliffCoastBlend + 0.5f);
+                        cliffWeights[cell] = cliff;
+                        if (cliff > 0f)
+                        {
+                            var inland = toOcean[cell] / Mathf.Max(1f, settings.CliffCoastInland);
+                            var top = map.CliffCoastHeight * (1f - Smooth(inland - 1f)) + settings.ShoreHeight;
+                            var lifted = Mathf.Max(height, top);
+                            height = Mathf.Lerp(height, lifted, cliff);
+                            highGround[cell] = Mathf.Max(highGround[cell], 0.5f * cliff * (1f - Smooth(inland - 0.5f)));
+                        }
+                    }
                     upland[cell] = 1f - plains;
 
                     foreach (var bench in benches)
@@ -695,6 +752,126 @@ namespace TinyDiggers.Terrain
                         heights[cell] = Mathf.Max(World.SeaLevel + step, window[z * w + x]);
                 }
             });
+        }
+
+        /// <summary>
+        /// Lets a cliff coast stand: its land and the sea in front of it, up to
+        /// <paramref name="reach"/> cells out, count as cliff for the relaxation. It then steps the
+        /// face down a cliff's worth a cell into the sea, instead of a soil step. A soil step
+        /// dragged the coast down to the shelf and left a bank no higher than a beach.
+        /// </summary>
+        static void MarkCliffCoast(bool[] cliff, float[] cliffCoast, bool[] land, int width, int depth, int reach)
+        {
+            var zone = new bool[cliff.Length];
+            for (var z = 0; z < depth; z++)
+                for (var x = 0; x < width; x++)
+                {
+                    var cell = z * width + x;
+                    if (!land[cell] || cliffCoast[cell] <= 0.5f)
+                        continue;
+                    zone[cell] = true;
+                    // Only the land at the shore spreads out to sea.
+                    var atShore = false;
+                    for (var n = 0; n < 4 && !atShore; n++)
+                    {
+                        var nx = x + StepX[n];
+                        var nz = z + StepZ[n];
+                        atShore = nx >= 0 && nz >= 0 && nx < width && nz < depth && !land[nz * width + nx];
+                    }
+
+                    if (!atShore)
+                        continue;
+                    for (var dz = -reach; dz <= reach; dz++)
+                        for (var dx = -reach; dx <= reach; dx++)
+                        {
+                            var ax = x + dx;
+                            var az = z + dz;
+                            if (ax < 0 || az < 0 || ax >= width || az >= depth || dx * dx + dz * dz > reach * reach)
+                                continue;
+                            if (!land[az * width + ax])
+                                zone[az * width + ax] = true;
+                        }
+                }
+
+            for (var cell = 0; cell < cliff.Length; cell++)
+                cliff[cell] |= zone[cell];
+        }
+
+        /// <summary>
+        /// Gives a cliff coast its face: land may stand no higher than the shelf at its foot plus
+        /// 0.9 of a cliff step for every cell (in a straight line) from the open sea. The face
+        /// then comes down evenly in every direction. Left to the relaxation, a ten-metre drop
+        /// straight onto the shelf was cut back a row or a column at a time and came out combed
+        /// into teeth.
+        /// </summary>
+        static void ShapeCliffFaces(float[] heights, bool[] land, bool[] inDisc, float[] cliffCoast, int width, int depth,
+            float cliffStep, float shelfTop)
+        {
+            var toOcean = Distance(OpenSea(land, inDisc, width, depth), inDisc, width, depth, from: true, reach: 64f);
+            var rise = 0.9f * cliffStep;
+            Parallel.For(0, depth, z =>
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var cell = z * width + x;
+                    if (!land[cell] || cliffCoast[cell] <= 0f || toOcean[cell] >= float.MaxValue)
+                        continue;
+                    var face = shelfTop + toOcean[cell] * rise;
+                    if (heights[cell] > face)
+                        heights[cell] = Mathf.Lerp(heights[cell], face, Mathf.Clamp01(cliffCoast[cell] * 2f));
+                }
+            });
+        }
+
+        /// <summary>
+        /// Water joined to the rim of the disc, as a land flag array for <see cref="Distance"/>:
+        /// true is open sea. A lake inside the land is not.
+        /// </summary>
+        static bool[] OpenSea(bool[] land, bool[] inDisc, int width, int depth)
+        {
+            var sea = new bool[land.Length];
+            var queue = new Queue<int>();
+            for (var cell = 0; cell < land.Length; cell++)
+            {
+                if (!inDisc[cell] || land[cell])
+                    continue;
+                var x = cell % width;
+                var z = cell / width;
+                var edge = false;
+                for (var n = 0; n < 4 && !edge; n++)
+                {
+                    var nx = x + StepX[n];
+                    var nz = z + StepZ[n];
+                    edge = nx < 0 || nz < 0 || nx >= width || nz >= depth || !inDisc[nz * width + nx];
+                }
+
+                if (edge)
+                {
+                    sea[cell] = true;
+                    queue.Enqueue(cell);
+                }
+            }
+
+            while (queue.Count > 0)
+            {
+                var cell = queue.Dequeue();
+                var x = cell % width;
+                var z = cell / width;
+                for (var n = 0; n < 4; n++)
+                {
+                    var nx = x + StepX[n];
+                    var nz = z + StepZ[n];
+                    if (nx < 0 || nz < 0 || nx >= width || nz >= depth)
+                        continue;
+                    var next = nz * width + nx;
+                    if (sea[next] || !inDisc[next] || land[next])
+                        continue;
+                    sea[next] = true;
+                    queue.Enqueue(next);
+                }
+            }
+
+            return sea;
         }
 
         static Vector2 Offset(System.Random random) =>
@@ -1070,7 +1247,7 @@ namespace TinyDiggers.Terrain
         /// Both are driven by how far a cell is from the waterline, which is one flood each way.
         /// </summary>
         static float[] ShapeCoast(float[] heights, bool[] land, bool[] inDisc, int width, int depth,
-            float radius, Vector2 centre, TerrainGenSettings settings)
+            float radius, Vector2 centre, TerrainGenSettings settings, float[] cliffCoast = null)
         {
             // Each flood only as far as anything reads it: the beach, and the shelf plus the sea
             // floor's fade from the shore. Past that a cell reads as "far" either way.
@@ -1094,8 +1271,11 @@ namespace TinyDiggers.Terrain
                             continue;
 
                         // Steep ground keeps its height and meets the water as rock; gentle ground
-                        // is pulled down onto a beach that rises from the waterline.
+                        // is pulled down onto a beach that rises from the waterline. A cliff coast
+                        // keeps its height too, though its top is flat: pulled onto a beach, it was.
                         if (Steepness(heights, width, depth, x, z) > settings.BeachMaxSlope)
+                            continue;
+                        if (cliffCoast != null && cliffCoast[cell] > 0.5f)
                             continue;
                         var t = Mathf.Clamp01((from - 1f) / beach);
                         heights[cell] = Mathf.Min(heights[cell], Mathf.Lerp(0.2f, settings.BeachHeight, t));

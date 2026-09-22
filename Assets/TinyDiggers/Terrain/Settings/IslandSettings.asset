@@ -47,7 +47,7 @@ MonoBehaviour:
   LandWarpStrength: 34
   RimWaterCells: 25
   MinLandBlob: 40
-  MinWaterPocket: 12
+  MinWaterPocket: 800
   BeachCells: 5
   BeachHeight: 2
   BeachMaxSlope: 0.55

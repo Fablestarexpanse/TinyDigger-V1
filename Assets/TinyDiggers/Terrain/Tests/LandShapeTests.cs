@@ -41,6 +41,51 @@ namespace TinyDiggers.Terrain.Tests
         static bool IsLand(TerrainGrid grid, int x, int z) =>
             grid.IsGround(x, z) && !grid.IsWater(x, z);
 
+        /// <summary>Land cells beside the sea standing more than 2 m above it: a cliff, not a beach.</summary>
+        static int SteepCoast(TerrainGrid grid)
+        {
+            var steep = 0;
+            for (var z = 1; z < Size - 1; z++)
+                for (var x = 1; x < Size - 1; x++)
+                {
+                    if (!IsLand(grid, x, z))
+                        continue;
+                    var bySea = false;
+                    for (var dz = -1; dz <= 1; dz++)
+                        for (var dx = -1; dx <= 1; dx++)
+                        {
+                            if (dx == 0 && dz == 0 || !grid.IsGround(x + dx, z + dz))
+                                continue;
+                            if (!IsLand(grid, x + dx, z + dz))
+                                bySea = true;
+                        }
+
+                    if (bySea && grid.GetSurfaceHeight(x, z) > World.SeaLevel + 2f)
+                        steep++;
+                }
+
+            return steep;
+        }
+
+        [Test]
+        public void CliffCoastsStandWhereTheSeedDrawsThem()
+        {
+            // Natural terrain, phase 4: part of every coast is cliff, drawn per seed.
+            _settings.Shape = LandShape.Continent;
+            _settings.CliffCoastShareMin = _settings.CliffCoastShareMax = 0f;
+            var none = NewGrid();
+            var noneMap = Generate(none);
+            _settings.CliffCoastShareMin = _settings.CliffCoastShareMax = 0.5f;
+            var half = NewGrid();
+            var halfMap = Generate(half);
+
+            Assert.That(noneMap.CliffCoastShare, Is.Zero);
+            Assert.That(halfMap.CliffCoastShare, Is.EqualTo(0.5f));
+            Assert.That(halfMap.CliffCoastHeight, Is.InRange(_settings.CliffCoastHeightMin, _settings.CliffCoastHeightMax));
+            Assert.That(SteepCoast(half), Is.GreaterThan(SteepCoast(none) * 3 / 2 + 20),
+                $"half the coast drawn as cliff stands high at the sea: {SteepCoast(half)} cells against {SteepCoast(none)}");
+        }
+
         [Test]
         public void EveryShapeGeneratesForFiveSeeds()
         {

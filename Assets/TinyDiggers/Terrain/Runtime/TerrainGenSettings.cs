@@ -118,6 +118,27 @@ namespace TinyDiggers.Terrain
         [Tooltip("Metres the hills stand above the plain under them, at most.")]
         [Min(0f)] public float HillsRelief = 8f;
 
+        [Header("Cliff coasts (natural terrain, phase 4)")]
+        [Tooltip("Share of the coast that is cliff: each seed draws its own share between these. The rest is beach or low shore.")]
+        [Range(0f, 1f)] public float CliffCoastShareMin = 0.15f;
+        [Range(0f, 1f)] public float CliffCoastShareMax = 0.35f;
+
+        [Tooltip("Metres a cliff stands above the sea: each seed draws between these.")]
+        [Min(0f)] public float CliffCoastHeightMin = 5f;
+        [Min(0f)] public float CliffCoastHeightMax = 10f;
+
+        [Tooltip("Metres along the coast a stretch of cliff or beach tends to run.")]
+        [Min(10f)] public float CliffCoastSize = 180f;
+
+        [Tooltip("Metres inland the cliff top runs before it eases back down to the land behind it.")]
+        [Min(1f)] public float CliffCoastInland = 35f;
+
+        [Tooltip("How gradually a stretch of cliff rises out of the beach beside it, in cliff-field units. Too narrow and the end of a cliff is a wall running inland.")]
+        [Range(0.02f, 1f)] public float CliffCoastBlend = 0.3f;
+
+        [Tooltip("How strongly hills and mountains near the sea pull cliffs toward themselves.")]
+        [Range(0f, 1f)] public float CliffUplandBias = 0.4f;
+
         [Header("Erosion (natural terrain, phase 3)")]
         [Tooltip("Weather the land: raindrops carve valleys, then slopes settle to their resting angle. Runs on a coarser grid and is added back as a change.")]
         public bool Erosion = true;
@@ -167,8 +188,8 @@ namespace TinyDiggers.Terrain
         [Tooltip("Cells a patch of land must cover to be kept. Archipelagos keep their islets.")]
         [Min(1)] public int MinLandBlob = 40;
 
-        [Tooltip("Cells a pocket of water inside the land must cover to be kept as a lake.")]
-        [Min(1)] public int MinWaterPocket = 12;
+        [Tooltip("Square metres a pocket of water inside the land must cover to be kept as a lake. Smaller ones become land: a pond a few metres across sits in the land like a crater.")]
+        [Min(1)] public int MinWaterPocket = 800;
 
         [Header("Coast")]
         [Tooltip("Cells of beach shelf on a coast gentle enough to hold one.")]
@@ -414,6 +435,7 @@ namespace TinyDiggers.Terrain
             s.TypeFeatureSize *= k; s.CoastLowlandDistance *= k; s.InlandRiseDistance *= k;
             s.PlainsFeatureSize *= k; s.HillsFeatureSize *= k;
             s.ErosionCellSize *= k;
+            s.CliffCoastSize *= k; s.CliffCoastInland *= k;
 
             s.RimWaterCells = Count(RimWaterCells); s.BeachCells = BeachCells == 0 ? 0 : Count(BeachCells);
             s.ShallowCells = Count(ShallowCells); s.ShelfCells = Count(ShelfCells); s.ChannelCells = Count(ChannelCells);

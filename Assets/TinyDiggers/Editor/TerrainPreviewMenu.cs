@@ -66,7 +66,7 @@ namespace TinyDiggers.EditorTools
                 var seconds = Time.realtimeSinceStartupAsDouble - started;
 
                 var card = TerrainScorecard.Measure(grid);
-                var line = $"{label} seed {seeds[i]} ({island.Shape}; {island.Mix}; erosion moved {island.ErosionMeanChange:0.00} m on average, {island.PitsFilled} cells filled), {seconds:0.00} s: {card}";
+                var line = $"{label} seed {seeds[i]} ({island.Shape}; {island.Mix}; cliff coast {island.CliffCoastShare:P0} at {island.CliffCoastHeight:0.0} m; erosion moved {island.ErosionMeanChange:0.00} m on average, {island.PitsFilled} cells filled), {seconds:0.00} s: {card}";
                 report.AppendLine(line);
                 Debug.Log("Terrain preview: " + line);
 

@@ -2834,3 +2834,45 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   small round ponds read as sandy craters; the sea looks olive in game; there are few cliffs on
   the coasts.
 - **Tests:** 414/414.
+
+### Natural terrain, phase 4: coasts (2026-09-21)
+- **The olive sea was a false alarm.** The in-game shots were taken the moment play began, before
+  the water had spun up. Rendered a few seconds in, with or without MSAA, the sea is blue. Any
+  capture should wait about 6 s into play.
+- **Cliff coasts:**
+  - Each seed draws a share of 15–35% and a height of 5–10 m (`IslandMap.CliffCoastShare` and
+    `CliffCoastHeight`).
+  - A 180 m field along the coast, plus 0.4 × upland, is cut at quantiles so the drawn share
+    of the shore is cliff, and blended wide (`CliffCoastBlend` 0.3).
+  - There the land stands at the cliff's height to the sea, and eases back over 35 m inland.
+- **Four fixes before the cliffs looked right:**
+  1. **The flat cliff top was pulled onto a beach.** The coast pass took its gentle top for a
+     beach; it now skips cliff coasts.
+  2. **The coast was dragged down to the shelf.** The relaxation pulled land toward the water a
+     soil step a cell. `MarkCliffCoast` now marks the cliff land, and the sea 4 m in front of
+     it, as cliff for the relaxation.
+  3. **A rampart round the lake, and walls inland.** Cliffs are now measured from the open sea
+     only (`OpenSea`: water joined to the disc's rim). Before, a narrow blend switched a cliff
+     stretch on within metres and left a wall running inland from its end.
+  4. **A face combed into teeth.** `ShapeCliffFaces` now sets the face first: at most the shelf
+     plus 0.9 of a cliff step a cell, by straight-line distance to the open sea. Before, the
+     relaxation cut the 10 m drop back a row at a time.
+- **Crater ponds are gone.** `MinWaterPocket` went from 12 to 800 (m² at 1 m cells), so ponds a
+  few metres across become land. Real lakes stay.
+- **Scorecard**, same four seeds:
+
+  | Measure | Phase 3 | Phase 4 |
+  |---|---|---|
+  | Beach coast | 66–80% | 48–61%; the rest is cliff and rocky shore |
+  | Cliff steps | 0.8–1.7% | 3.2–4.8% |
+  | Pits | 4–7 | 4–9 |
+  | Flat | 44–53% | 46–55% |
+
+  The land within 2 m of the sea that stands 4 m or higher went from 0% to about 8–10%. About
+  6.9 s a seed.
+- **New test:** `LandShapeTests.CliffCoastsStandWhereTheSeedDrawsThem`. Half the coast drawn as
+  cliff stands high by the sea: 147 cells against 69 with none. The bar is at least 1.5× plus 20.
+- **Ronan asked whether the mountains had got smaller.** Their height hasn't changed: the peak
+  is 32–36 m, against 30.5–34.5 m at the start. They cover only the drawn 13–20% of the land now,
+  and erosion rounds them. Taller peaks are offered as an option.
+- **Tests:** 415/415.
