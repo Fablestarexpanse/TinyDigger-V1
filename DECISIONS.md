@@ -3684,3 +3684,26 @@ and no second table of numbers: the hardness was already on every material and u
 
 A test grid has to use the sandbox's half-metre cells. At a metre, one cut is 1 m³ — more than any
 unit in the game can lift — and a unit digs once, fills, and stalls with nowhere to tip.
+
+## 2026-09-22 — The machines are in the game
+
+`CrewView` had one body prefab for every unit, so a digger and a hauler were both drawn as the
+crew robot. It takes one per role now — `_diggerPrefab`, `_haulerPrefab` — falling back to the
+robot, and to a box when there is no model at all.
+
+Each machine has an `AnimatorController` beside its FBX mapping the four state names the crew
+logic asks for onto its own clips, because `CrewAnimation` crossfades by state name:
+
+| | Idle | Move | Work | Carry |
+| --- | --- | --- | --- | --- |
+| digger | idle | walk | dig | walk |
+| dumper | idle | walk | tip | walk_loaded |
+
+Two things this pass taught. Materials must not be set by slot: the importer already maps each
+machine's own materials onto the palette, and assigning them in order put the band colour over the
+whole digger. And the machines start further apart than the crew does (`MachineSpacing`), because
+every unit is one cell to the crew logic while a machine is over a metre long on half-metre cells,
+so two a cell apart start inside one another.
+
+`TinyDiggers/Units Capture` takes the picture from play:
+`Screenshots/Units/units_in_game.png`.

@@ -78,6 +78,12 @@ namespace TinyDiggers.Interaction
         [Tooltip("The crew robot (crew_unit.prefab), with an Animator holding Idle, Move, Work and Carry. Empty: placeholder boxes.")]
         [SerializeField] GameObject _bodyPrefab;
 
+        [Tooltip("The digger machine (digger.prefab). Empty: the crew robot's body, or a box.")]
+        [SerializeField] GameObject _diggerPrefab;
+
+        [Tooltip("The dumper machine (dumper.prefab), for haulers. Empty: the crew robot's body, or a box.")]
+        [SerializeField] GameObject _haulerPrefab;
+
         [Tooltip("Tint on the selected robot.")]
         [SerializeField] Color _selectedTint = new Color(1f, 0.95f, 0.55f);
 
@@ -95,6 +101,13 @@ namespace TinyDiggers.Interaction
         /// 0.125 m up. Read every frame.
         /// </summary>
         [Min(0.05f)] public float bodyScale = 1f;
+
+        /// <summary>
+        /// Cells between machines where they start. The crew logic gives every unit one cell, but
+        /// a machine is over a metre long on half-metre cells, so two of them a cell apart start
+        /// inside one another.
+        /// </summary>
+        const int MachineSpacing = 4;
 
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
@@ -151,16 +164,20 @@ namespace TinyDiggers.Interaction
             var total = _workerCount + _diggerCount + _haulerCount;
             for (var i = 0; i < total; i++)
             {
-                // Side by side, so no two start on the same cell.
-                var x = Mathf.Clamp(spawnX + i % 2 * 2 - 1, 0, grid.Width - 1);
-                var z = Mathf.Clamp(spawnZ + i / 2 * 2 - 1, 0, grid.Height - 1);
                 var role = i < _workerCount ? UnitRole.Worker
                     : i < _workerCount + _diggerCount ? UnitRole.Digger : UnitRole.Hauler;
+                // Side by side, so no two start on the same cell — and the machines further out
+                // than that, because a machine is over a metre long and two of them a metre apart
+                // stand inside each other.
+                var apart = role == UnitRole.Worker ? 2 : MachineSpacing;
+                var x = Mathf.Clamp(spawnX + i % 2 * apart - apart / 2, 0, grid.Width - 1);
+                var z = Mathf.Clamp(spawnZ + i / 2 * apart - apart / 2, 0, grid.Height - 1);
                 var capacity = role == UnitRole.Worker ? _workerCapacity : role == UnitRole.Digger ? _capacity : _haulerCapacity;
                 _units.Add(new CrewUnit(Dispatcher, x, z, role, capacity));
 
-                if (_bodyPrefab != null)
-                    AddRobot(role, i);
+                var prefab = BodyFor(role);
+                if (prefab != null)
+                    AddRobot(prefab, role, i);
                 else
                     AddBox(role, i, grid.CellSize);
 
@@ -195,9 +212,26 @@ namespace TinyDiggers.Interaction
             _tinted.Add(false);
         }
 
-        void AddRobot(UnitRole role, int i)
+        /// <summary>
+        /// The model for a role: each machine has its own now that the digger and the dumper are
+        /// built (the crew robot stands in for anything not yet modelled, and a box for that).
+        /// </summary>
+        GameObject BodyFor(UnitRole role)
         {
-            var body = Instantiate(_bodyPrefab, transform, false);
+            switch (role)
+            {
+                case UnitRole.Digger:
+                    return _diggerPrefab != null ? _diggerPrefab : _bodyPrefab;
+                case UnitRole.Hauler:
+                    return _haulerPrefab != null ? _haulerPrefab : _bodyPrefab;
+                default:
+                    return _bodyPrefab;
+            }
+        }
+
+        void AddRobot(GameObject prefab, UnitRole role, int i)
+        {
+            var body = Instantiate(prefab, transform, false);
             body.name = $"{role} {i} Body";
             body.hideFlags = HideFlags.DontSave;
             var renderers = body.GetComponentsInChildren<Renderer>();

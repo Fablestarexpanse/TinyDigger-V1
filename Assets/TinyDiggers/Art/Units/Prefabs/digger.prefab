@@ -52,24 +52,38 @@ PrefabInstance:
       propertyPath: m_Name
       value: digger
       objectReference: {fileID: 0}
-    - target: {fileID: 3389692275392372162, guid: a68c2a8759423f042ad129061c4cc740, type: 3}
-      propertyPath: 'm_Materials.Array.data[0]'
-      value: 
-      objectReference: {fileID: 2100000, guid: c6889a6f12a469b4c97a4eed499a0c3d, type: 2}
-    - target: {fileID: 3389692275392372162, guid: a68c2a8759423f042ad129061c4cc740, type: 3}
-      propertyPath: 'm_Materials.Array.data[1]'
-      value: 
-      objectReference: {fileID: 2100000, guid: 7400a2149de1f0b4fa9bd6551b827541, type: 2}
-    - target: {fileID: 3389692275392372162, guid: a68c2a8759423f042ad129061c4cc740, type: 3}
-      propertyPath: 'm_Materials.Array.data[2]'
-      value: 
-      objectReference: {fileID: 2100000, guid: 856aa74fc081bff4384a76f347182b1a, type: 2}
-    - target: {fileID: 3389692275392372162, guid: a68c2a8759423f042ad129061c4cc740, type: 3}
-      propertyPath: 'm_Materials.Array.data[3]'
-      value: 
-      objectReference: {fileID: 2100000, guid: 09babce328cea2149892e169661c6899, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: a68c2a8759423f042ad129061c4cc740, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3332423008560335535}
   m_SourcePrefab: {fileID: 100100000, guid: a68c2a8759423f042ad129061c4cc740, type: 3}
+--- !u!1 &1631219384609639884 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: a68c2a8759423f042ad129061c4cc740, type: 3}
+  m_PrefabInstance: {fileID: 1901126740465332381}
+  m_PrefabAsset: {fileID: 0}
+--- !u!95 &3332423008560335535
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1631219384609639884}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: ca9d790a4569b7a4785f71b5e6ce8910, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
