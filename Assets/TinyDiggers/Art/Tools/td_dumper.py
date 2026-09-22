@@ -25,6 +25,7 @@ re-runs headlessly and gives the same result every time.
 import math
 import os
 
+import bmesh
 import bpy
 import mathutils
 
@@ -84,6 +85,81 @@ def load(path=SCAN):
          f"{sum(len(p.vertices) - 2 for p in mesh.data.polygons)} triangles, "
          f"{len(rig.data.bones)} bones")
     return mesh, rig
+
+
+def weld(mesh, distance=0.0005):
+    """
+    Welds the scan's duplicated vertices. It arrives as 15 000 loose triangles; welded it becomes
+    about 180 real pieces, which is what makes the dump bed findable as one shell.
+    """
+    bm = bmesh.new()
+    bm.from_mesh(mesh.data)
+    before = len(bm.verts)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=distance)
+    bm.to_mesh(mesh.data)
+    bm.free()
+    mesh.data.update()
+    _log(f"welded {before} vertices down to {len(mesh.data.vertices)}")
+    return len(mesh.data.vertices)
+
+
+def _shells_of(mesh):
+    """Connected vertex groups of the welded mesh, biggest first."""
+    bm = bmesh.new()
+    bm.from_mesh(mesh.data)
+    bm.verts.ensure_lookup_table()
+    seen = set()
+    shells = []
+    for vert in bm.verts:
+        if vert.index in seen:
+            continue
+        stack = [vert]
+        seen.add(vert.index)
+        group = []
+        while stack:
+            current = stack.pop()
+            group.append(current)
+            for edge in current.link_edges:
+                other = edge.other_vert(current)
+                if other.index not in seen:
+                    seen.add(other.index)
+                    stack.append(other)
+        shells.append([(v.index, v.co.copy()) for v in group])
+    bm.free()
+    shells.sort(key=len, reverse=True)
+    return shells
+
+
+def bed_to_tray(mesh, rig):
+    """
+    Gives the dump bed itself to the tray bone.
+
+    The auto-rigger weighted the bed to the **body** and left the tray bone driving nothing but
+    the pair of hydraulic rams, so tipping moved two struts and left the bed sitting there
+    (Ronan, 2026-09-22: "the part your moving is not the dump bed"). The bed is the large welded
+    shell standing clear above the body ball.
+    """
+    floor = min(v.co.z for v in mesh.data.vertices)
+    candidates = [shell for shell in _shells_of(mesh)
+                  if len(shell) > 40 and min(co.z for _, co in shell) > floor + 0.85]
+    if not candidates:
+        _log("no bed shell found: the tray keeps whatever it had")
+        return None
+
+    bed = max(candidates, key=lambda shell: (max(co.x for _, co in shell) - min(co.x for _, co in shell))
+              * (max(co.y for _, co in shell) - min(co.y for _, co in shell)))
+
+    tray = mesh.vertex_groups.get("tray") or mesh.vertex_groups.new(name="tray")
+    indices = [index for index, _ in bed]
+    for group in mesh.vertex_groups:
+        if group.name != tray.name:
+            group.remove(indices)
+    tray.add(indices, 1.0, 'REPLACE')
+
+    lo = [round(min(co[i] for _, co in bed), 2) for i in range(3)]
+    hi = [round(max(co[i] for _, co in bed), 2) for i in range(3)]
+    _log(f"dump bed given to the tray bone: {len(bed)} vertices, {lo} to {hi}")
+    return {"verts": len(bed), "lo": lo, "hi": hi}
 
 
 def weighted_centres(mesh, floor=0.4):
@@ -756,9 +832,11 @@ def _fcurves(action):
 def build():
     """Everything: load the scan, tidy the rig, lay the clips, and leave it ready to render."""
     mesh, rig = load()
+    weld(mesh)
     face_forward(mesh, rig)
     tidied = tidy(mesh, rig)
     harden(mesh)
+    bed_to_tray(mesh, rig)
     hinge_tray(mesh, rig)
     legs = _rest(rig)
     made = clips(rig, legs, mesh=mesh)
