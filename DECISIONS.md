@@ -3665,3 +3665,22 @@ they were the tallest thing on it, so sizing first measured masts that were abou
 **Ronan's ruling: the digger is slightly bigger than the dumper.** Its hull stands 0.86 m against
 the dumper's 0.79, it is 0.59 m wide by 1.08 deep, and 1.12 m to the top of its arm when carried.
 The crew robot is 0.41 m. Lineup: `Screenshots/Units/units_scale_lineup.png`.
+
+## 2026-09-22 — Loads, and who cuts stone
+
+Ronan's numbers (2026-09-22): three of the digger's scoops fill the dumper, and the starter robot
+takes six barrow loads to do the same. They live in `UnitLoads` as one set rather than three
+capacities in three places, because it is the ratio that matters and a ratio kept in three places
+drifts: `Barrow = 0.19 m³`, `Scoop = 2 × Barrow`, `Bed = 6 × Barrow`. On the sandbox's half-metre
+cells one cut is 0.125 m³ in place, so a barrow is about a cut and a half. The scene's old numbers
+— a 5 m³ digger and a 20 m³ hauler — were left from when these were full-size machines, and are
+corrected to 0.38 and 1.14.
+
+**Stone.** The digger is built for it and cuts rock at the same rate as soil. The starter robot
+can too, but slowly (Ronan's ruling: "can, but slowly"): `StepSeconds` charges a unit without a
+cutter by the material's own hardness, `WorkInterval × (1 + hardness × StoneEffort)`, so rock
+costs it about three and a half times a soil step and granite four and a half. Nothing hard-stops,
+and no second table of numbers: the hardness was already on every material and unused until now.
+
+A test grid has to use the sandbox's half-metre cells. At a metre, one cut is 1 m³ — more than any
+unit in the game can lift — and a unit digs once, fills, and stalls with nowhere to tip.

@@ -173,8 +173,8 @@ MonoBehaviour:
   _diggerCount: 0
   _haulerCount: 0
   _speed: 3
-  _capacity: 5
-  _haulerCapacity: 20
+  _capacity: 0.38
+  _haulerCapacity: 1.14
   _workInterval: 0.4
   digReach: 2
   cliffReach: 6

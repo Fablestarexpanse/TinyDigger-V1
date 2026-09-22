@@ -28,7 +28,7 @@ namespace TinyDiggers.Interaction
         [SerializeField, Min(0)] int _workerCount = 4;
 
         [Tooltip("Loose m³ a worker's barrow holds. One scoop of any ground is up to 0.19 m³ loose.")]
-        [SerializeField, Min(0.01f)] float _workerCapacity = 0.19f;
+        [SerializeField, Min(0.01f)] float _workerCapacity = UnitLoads.Barrow;
 
         [Tooltip("A worker's speed, metres per second.")]
         [SerializeField, Min(0.1f)] float _workerSpeed = 1.5f;
@@ -43,10 +43,10 @@ namespace TinyDiggers.Interaction
         [SerializeField, Min(0.1f)] float _speed = 3f;
 
         [Tooltip("Loose m³ a digger's scoop holds.")]
-        [SerializeField, Min(0.1f)] float _capacity = MaterialInventory.DefaultCapacity;
+        [SerializeField, Min(0.01f)] float _capacity = UnitLoads.Scoop;
 
         [Tooltip("Loose m³ a hauler's bed holds.")]
-        [SerializeField, Min(0.1f)] float _haulerCapacity = 20f;
+        [SerializeField, Min(0.01f)] float _haulerCapacity = UnitLoads.Bed;
 
         [Tooltip("Seconds per height step dug, or per tip.")]
         [SerializeField, Min(0.01f)] float _workInterval = 0.4f;

@@ -229,6 +229,8 @@ namespace TinyDiggers.Units
                 throw new ArgumentOutOfRangeException(nameof(startX), "The unit must start on the map.");
 
             Role = role;
+            // The digger machine is built for rock; the starter robot takes it slowly.
+            CutsStone = role == UnitRole.Digger;
             Inventory = new MaterialInventory(capacity);
             Position = new Vector2(startX + 0.5f, startZ + 0.5f);
             Height = TerrainSurface.SampleHeight(_grid, Position.x, Position.y);
@@ -319,6 +321,36 @@ namespace TinyDiggers.Units
 
         /// <summary>Whether it digs: diggers and workers do, haulers never touch the ground.</summary>
         public bool Digs => Role != UnitRole.Hauler;
+
+        /// <summary>
+        /// Whether this unit is built to cut stone. The digger machine is; the starter robot is
+        /// not, and pays <see cref="StoneEffort"/> for every step of rock it takes on (Ronan,
+        /// 2026-09-22: it can, but slowly). Set it to make a particular unit an exception.
+        /// </summary>
+        public bool CutsStone;
+
+        /// <summary>
+        /// How much longer a step takes for a unit that is not built for stone, at the hardest
+        /// rock. Four makes a robot about a quarter the speed of the machine in rock, and leaves
+        /// soil untouched: only stone is charged for.
+        /// </summary>
+        public float StoneEffort = 4f;
+
+        /// <summary>
+        /// Seconds for one step of the cell at (<paramref name="x"/>, <paramref name="z"/>): the
+        /// unit's own <see cref="WorkInterval"/>, and for a unit without a stone cutter, longer
+        /// the harder the rock is. The hardness is the material's own, so granite costs more than
+        /// soft rock without a separate table of numbers to keep.
+        /// </summary>
+        public float StepSeconds(int x, int z)
+        {
+            if (CutsStone || !_grid.InBounds(x, z))
+                return WorkInterval;
+            var material = _grid.GetTopMaterial(x, z);
+            if (!MaterialTable.IsStone(material))
+                return WorkInterval;
+            return WorkInterval * (1f + _grid.Materials.Get(material).Hardness * StoneEffort);
+        }
 
         /// <summary>
         /// Holding where the player sent it (or on its way there): it takes no work until
@@ -1369,9 +1401,14 @@ namespace TinyDiggers.Units
         void Work(float deltaTime)
         {
             _workTimer += deltaTime;
-            if (_workTimer < WorkInterval)
+            // Rock is slower for anything without a cutter, so how long a step takes depends on
+            // what is being cut, not only on the unit.
+            var interval = State == CrewUnitState.Digging
+                ? StepSeconds(JobTarget.x, JobTarget.y)
+                : WorkInterval;
+            if (_workTimer < interval)
                 return;
-            _workTimer -= WorkInterval;
+            _workTimer -= interval;
 
             if (Cell != JobStand)
             {
