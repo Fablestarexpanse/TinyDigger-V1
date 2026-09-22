@@ -206,6 +206,14 @@ namespace TinyDiggers.Units
         /// </summary>
         public bool WorksFromInside;
 
+        /// <summary>
+        /// Whether the whole load goes down in one tip. A dumper mech raises its bed once and the
+        /// lot falls out in a heap, which then slumps to its angle of repose like any other spoil
+        /// (Ronan, 2026-09-22: "the dumper mech should dump entire load in one tip"). A robot with
+        /// a barrow puts it down a step at a time, which is all a barrow can do.
+        /// </summary>
+        public bool TipsWholeLoad;
+
         /// <summary>Places to stand to work a cell, nearest first; reused so the scan allocates nothing.</summary>
         readonly List<Vector2Int> _stands = new List<Vector2Int>();
 
@@ -604,6 +612,7 @@ namespace TinyDiggers.Units
         public CrewUnit AsMachine()
         {
             CutsStone = Role == UnitRole.Digger;
+            TipsWholeLoad = Role == UnitRole.Hauler;
             if (Role == UnitRole.Digger)
             {
                 DigDepthLevels = MachineDigDepth;
@@ -1193,6 +1202,11 @@ namespace TinyDiggers.Units
         float TipAmount(float standHeight, int x, int z, float cap)
         {
             var height = _grid.GetSurfaceHeight(x, z);
+            // A bed goes down in one: the load falls where it falls and the heap slumps. What it
+            // may not do is bury a fill past its cap. A barrow is placed rather than dropped, so
+            // it goes a step at a time and never heaps higher than the unit can climb.
+            if (TipsWholeLoad)
+                return Math.Min(cap - height, Inventory.Total / _grid.CellArea);
             return Math.Min(Math.Min(standHeight + _dispatcher.Climb - height, cap - height), WholeStepsHeld());
         }
 

@@ -3833,3 +3833,17 @@ able to answer it first, and today's auto-ramp cannot. The knob is there for whe
 Worth knowing for whoever tunes it: `JobDispatcher.Climb` — how deep a bench may be cut — is
 derived from the same limit and is floored at one height step, so below 45 degrees a crew can cut
 a bench it then cannot walk onto.
+
+## 2026-09-22 — A bed tips in one, and loads are whole steps
+
+Ronan: "the dumper mech should dump entire load in one tip". A tip was capped at what the unit
+could heap within a climb, so a full bed went down nine times over. `TipsWholeLoad` — true for the
+dumper mech, false for a robot with a barrow, which places its load rather than dropping it — puts
+the lot down in one go, held back only by a fill's cap. The heap it makes slumps to its angle of
+repose like any other spoil, which is what a real tipper leaves behind.
+
+That turned up a quiet mismatch. The ground only takes material a **whole step at a time**
+(`Excavation.Tip` floors to steps), so a bed of 1.14 m³ was 9.12 steps: it tipped nine and kept
+0.015 m³ for ever, then reported nowhere to tip. The loads are whole steps now — the barrow is a
+step and a half (0.1875 m³) rather than a round 0.19, which keeps Ronan's ratios exactly (scoop
+two barrows, bed six) and makes them three steps and nine. Nothing is left in the bed.

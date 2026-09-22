@@ -168,13 +168,13 @@ MonoBehaviour:
   _pathMaterial: {fileID: 2100000, guid: 189053e189be60c4eb80f5df95575af8, type: 2}
   _spawnOffset: {x: 0, y: 0}
   _workerCount: 4
-  _workerCapacity: 0.19
+  _workerCapacity: 0.1875
   _workerSpeed: 1.5
   _diggerCount: 1
   _haulerCount: 1
   _speed: 3
-  _capacity: 0.38
-  _haulerCapacity: 1.14
+  _capacity: 0.375
+  _haulerCapacity: 1.125
   _workInterval: 0.4
   digReach: 2
   cliffReach: 6
