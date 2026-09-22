@@ -366,7 +366,18 @@ def rebuild_arm(mesh, rig, parts=None):
         for bone in [b for b in list(bones) if b.name in ("turret", "boom", "stick", "bucket")]:
             bones.remove(bone)
 
-        parent = bones.get("body")
+        # The whole arm stands on a turret at the boom's pivot and turns a full circle on it, so
+        # the machine can dump into a vehicle beside it without walking anywhere (Ronan,
+        # 2026-09-22). The turret holds no geometry of its own: it is what the boom rides on.
+        body_bone = bones.get("body")
+        turret = bones.new("turret")
+        turret.head = heads[0]
+        turret.tail = heads[0] + mathutils.Vector((0.0, 0.0, (heads[1] - heads[0]).length * 0.25))
+        turret.roll = 0.0
+        turret.parent = body_bone
+        turret.use_connect = False
+
+        parent = turret
         for label, bone_head, bone_tail in (("boom", heads[0], heads[1]),
                                             ("stick", heads[1], heads[2]),
                                             ("bucket", heads[2], heads[3])):
@@ -642,19 +653,31 @@ def name_parts(mesh, rig):
 #   return      — back to rest
 # The bucket never opens between the fill and the dump: that is what spills the load.
 DIG = (
-    (1,  {"boom":   0.0, "stick":   0.0, "bucket":   0.0}),
-    (14, {"boom":  20.0, "stick":  40.0, "bucket": -25.0}),
-    (26, {"boom":  34.0, "stick":  38.0, "bucket": -10.0}),
-    (50, {"boom":  22.0, "stick":   0.0, "bucket":  55.0}),
-    (62, {"boom": -18.0, "stick":  -8.0, "bucket":  75.0}),
-    (70, {"boom": -18.0, "stick":  -8.0, "bucket":  75.0}),
-    (80, {"boom": -16.0, "stick":  25.0, "bucket": -35.0}),
-    (90, {"boom":   0.0, "stick":   0.0, "bucket":   0.0}),
+    (1,  {"boom":   0.0, "stick":   0.0, "bucket":   0.0, "turret":   0.0}),
+    (14, {"boom":  20.0, "stick":  40.0, "bucket": -25.0, "turret":   0.0}),
+    (26, {"boom":  34.0, "stick":  38.0, "bucket": -10.0, "turret":   0.0}),
+    (50, {"boom":  22.0, "stick":   0.0, "bucket":  55.0, "turret":   0.0}),
+    (62, {"boom": -18.0, "stick":  -8.0, "bucket":  75.0, "turret":   0.0}),
+    (70, {"boom": -18.0, "stick":  -8.0, "bucket":  75.0, "turret": 110.0}),
+    (80, {"boom": -16.0, "stick":  25.0, "bucket": -35.0, "turret": 110.0}),
+    (90, {"boom":   0.0, "stick":   0.0, "bucket":   0.0, "turret":   0.0}),
 )
+
+# The turret turns about its own length, which stands straight up out of the hull.
+TURRET_AXIS = (0.0, 1.0, 0.0)
 
 # Every joint is a hinge in the arm's own plane. There is no swing: Ronan, 2026-09-22, "it should
 # not move side to side it should move like an excavator". The machine turns its whole body to
 # dump, the way a crab would.
+# Carried while walking: boom up, stick in, bucket shut, the way a machine travels (Ronan,
+# 2026-09-22: "when walking his bucket and boom should be in up position"). In the same units as
+# DIG — how far each joint has turned in its digging direction, so negative is up and in.
+TRAVEL = {"boom": -20.0, "stick": -18.0, "bucket": 62.0}
+
+# The slew: a full circle on the turret, keyed a quarter at a time so it turns the whole way round
+# rather than taking the short path back.
+SLEW_FRAMES = 96
+
 AXES = {"boom": (1.0, 0.0, 0.0), "stick": (1.0, 0.0, 0.0), "bucket": (1.0, 0.0, 0.0)}
 
 
@@ -707,7 +730,7 @@ def _turn_signs(rig):
 def dig(rig, legs, name="dig"):
     """
     The digging cycle: reach, cut, lift, swing, dump, come back. The legs stay planted throughout —
-    an excavator digs with its feet still.
+    an excavator digs with its feet still, and the swing is the turret's, not the machine's.
     """
     action = td_walker._new_action(rig, name)
     td_walker._rest_pose(rig)
@@ -721,8 +744,9 @@ def dig(rig, legs, name="dig"):
             if bone is None:
                 continue
             bone.rotation_mode = 'QUATERNION'
+            axis = TURRET_AXIS if joint == "turret" else AXES[joint]
             bone.rotation_quaternion = mathutils.Quaternion(
-                AXES[joint], math.radians(angle * signs.get(joint, 1.0)))
+                axis, math.radians(angle * signs.get(joint, 1.0)))
         bpy.context.view_layer.update()
         td_walker._key(rig, legs, frame)
         for joint in pose:
@@ -734,11 +758,82 @@ def dig(rig, legs, name="dig"):
     return action
 
 
+def _hold_arm(rig, action, pose, signs):
+    """
+    Holds the arm in one pose for the whole of a clip.
+
+    The walking clips move legs and body only, so the arm sat wherever the rest pose left it —
+    hanging down, dragging along the ground. A machine travels with its arm up.
+    """
+    if action is None:
+        return
+    rig.animation_data.action = action
+    start, end = (int(v) for v in action.frame_range)
+    for joint, angle in pose.items():
+        bone = rig.pose.bones.get(joint)
+        if bone is None:
+            continue
+        bone.rotation_mode = 'QUATERNION'
+        bone.rotation_quaternion = mathutils.Quaternion(
+            AXES[joint], math.radians(angle * signs.get(joint, 1.0)))
+        for frame in (start, end):
+            bone.keyframe_insert("rotation_quaternion", frame=frame)
+
+
+def slew(rig, legs, signs, name="slew"):
+    """
+    The turret turning a full circle, feet planted, arm carried up.
+
+    So the machine can dump into a vehicle or a bot standing anywhere around it without walking
+    there (Ronan, 2026-09-22). Keyed a quarter turn at a time: a single key from nought to three
+    hundred and sixty is no rotation at all as far as an interpolator is concerned, and anything
+    over half a turn goes back the short way.
+    """
+    action = td_walker._new_action(rig, name)
+    td_walker._rest_pose(rig)
+    for leg in legs.values():
+        td_walker._solve_leg(rig, leg, leg["contact"], mathutils.Vector())
+
+    turret = rig.pose.bones.get("turret")
+    for joint, angle in TRAVEL.items():
+        bone = rig.pose.bones.get(joint)
+        if bone is not None:
+            bone.rotation_mode = 'QUATERNION'
+            bone.rotation_quaternion = mathutils.Quaternion(
+                AXES[joint], math.radians(angle * signs.get(joint, 1.0)))
+
+    quarters = 4
+    for step in range(quarters + 1):
+        frame = 1 + round(SLEW_FRAMES * step / quarters)
+        if turret is not None:
+            turret.rotation_mode = 'QUATERNION'
+            turret.rotation_quaternion = mathutils.Quaternion(
+                TURRET_AXIS, math.radians(360.0 * step / quarters))
+            turret.keyframe_insert("rotation_quaternion", frame=frame)
+        td_walker._key(rig, legs, frame)
+        for joint in TRAVEL:
+            bone = rig.pose.bones.get(joint)
+            if bone is not None:
+                bone.keyframe_insert("rotation_quaternion", frame=frame)
+
+    _log(f"{name}: {SLEW_FRAMES} frames, a full turn on the turret")
+    return action
+
+
 def clips(rig, legs, scale=1.0):
-    """The walker's clip set, plus the dig. No tip, no loaded walk: this one carries nothing."""
+    """The walker's clip set, plus the dig and the slew. No tip: this one carries nothing."""
     made = td_walker.clips(rig, legs, mesh=None, scale=scale)
-    action = dig(rig, legs)
-    made["dig"] = {"action": action.name, "frames": int(action.frame_range[1])}
+    signs = _turn_signs(rig)
+
+    # Everything that walks or stands carries the arm up, out of the way.
+    for name in ("walk", "idle", "turn", "start", "stop", "stuck"):
+        entry = made.get(name)
+        if entry:
+            _hold_arm(rig, bpy.data.actions.get(entry["action"]), TRAVEL, signs)
+
+    for name, action in (("dig", dig(rig, legs)), ("slew", slew(rig, legs, signs))):
+        made[name] = {"action": action.name, "frames": int(action.frame_range[1])}
+
     rig.animation_data.action = None
     td_walker._rest_pose(rig)
     return made

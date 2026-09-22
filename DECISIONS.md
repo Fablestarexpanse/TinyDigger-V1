@@ -3612,3 +3612,23 @@ Two smaller rules came out of the same picture. A piece the scan does not call a
 only if it stands **in front of the hull**, where nothing else reaches: the aerial box sits over
 the hull and rode the boom otherwise, swinging about as the machine dug, while the scoop's loose
 panels are well out in front and belong to the bucket.
+
+## 2026-09-22 — Digger: a turret, and the arm carried while walking
+
+Two rulings from Ronan (2026-09-22):
+
+**The arm travels up.** "When walking his bucket and boom should be in up position." Every clip
+that walks or stands — walk, idle, turn, start, stop, stuck — now holds the arm in a `TRAVEL`
+pose: boom up 20 degrees, stick in 18, bucket shut 62. They only ever keyed legs and body before,
+so the arm hung wherever the rest pose left it, dragging along the ground.
+
+**The whole arm turns a full circle.** "The entire boom can turn 360 to dump into a vehicle or bot
+near him without having to move." There is a `turret` bone now at the boom's pivot, standing up
+out of the hull, holding no geometry: body → turret → boom → stick → bucket. This does not undo
+the earlier ruling that the arm must not swing sideways — that is about its three hinges, which
+still work in one plane. The machine slews on its turret, as a real excavator does on its house.
+
+New `slew` clip: a full turn, feet planted, arm carried. Keyed a quarter at a time — one key from
+nought to three hundred and sixty is no rotation at all to an interpolator, and anything past half
+a turn goes back the short way. The dig uses the turret for its own swing as well: cut, lift,
+swing 110 degrees, dump there, swing back.
