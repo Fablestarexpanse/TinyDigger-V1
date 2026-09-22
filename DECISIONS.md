@@ -3760,3 +3760,21 @@ scoop and waits, because one hauler cannot keep up with one digger. That is a ba
 
 The workers are unreachable throughout, which is right: the cut is three steps and their reach is
 two. They need a ramp, and the auto-ramp says "nowhere to stand" on open ground — still to chase.
+
+## 2026-09-22 — Why four workers stood in front of a job doing nothing
+
+Measured in play: a worker could work **27 of the 60** remaining dig cells and still sat in
+Unreachable. Not the ramp, not reach — a deadlock of its own.
+
+A tip raises a cell by a whole step, so **a load smaller than one step cannot be put down
+anywhere**. A unit whose scoop filled, tipped most of it and kept a remnant was left latched full
+with 0.06 m³ against a 0.125 m³ step: too full to dig, too light to tip. It stood there for ever.
+The latch now lets go for exactly that case — a load too small to tip tops itself up — and
+otherwise holds, which is what stops a unit taking part cuts for ever without emptying. Clearing
+it whenever there was simply room for another cut broke seven tests: that is the loop the latch
+exists to prevent.
+
+Standing in a cut is now a **machine's** privilege (`WorksFromInside`). A machine steps down a
+bench at a time and can climb back out; a robot with a barrow keeps to the older rule — work a dig
+area from outside, never from inside — and waits for a way down. Both of Ronan's readings hold,
+and the rule the tests were written to survives.

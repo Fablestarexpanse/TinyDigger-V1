@@ -174,6 +174,14 @@ namespace TinyDiggers.Units
         /// </summary>
         public const int MachineWorkReach = 2;
 
+        /// <summary>
+        /// Whether this unit will step down into a cut and work it from inside, a bench at a time.
+        /// A machine will: it can climb back out, and that is how a cut is worked. A robot with a
+        /// barrow keeps out of the hole and waits for a way down, which is the older rule and the
+        /// one its own tests are written to.
+        /// </summary>
+        public bool WorksFromInside;
+
         /// <summary>Places to stand to work a cell, nearest first; reused so the scan allocates nothing.</summary>
         readonly List<Vector2Int> _stands = new List<Vector2Int>();
 
@@ -554,6 +562,7 @@ namespace TinyDiggers.Units
                 DigDepthLevels = MachineDigDepth;
                 FaceReachLevels = MachineFaceReach;
                 WorkReachCells = MachineWorkReach;
+                WorksFromInside = true;
             }
             Radius = Role == UnitRole.Digger ? DiggerRadius
                 : Role == UnitRole.Hauler ? HaulerRadius : CrewRadius;
@@ -733,6 +742,14 @@ namespace TinyDiggers.Units
         void ChooseDiggerJob(Vector2Int start)
         {
             var step = StepVolume;
+            // A tip raises a cell by a whole step, so a load smaller than that cannot be put down
+            // anywhere. Latched full with such a remnant — a barrow that tipped most of its load
+            // and kept a corner of it — a unit was too full to dig and too light to tip, and
+            // stood in front of a job for ever. It tops up instead. The latch still holds for a
+            // scoop that is full enough to tip, which is what stops a unit taking part cuts for
+            // ever without emptying.
+            if (_loadFull && Inventory.Total + Epsilon < step)
+                _loadFull = false;
             var full = _loadFull || Inventory.Remaining + Epsilon < step;
             if (!full && TryPlan(CrewJobKind.Dig, start))
                 return;
@@ -1214,8 +1231,14 @@ namespace TinyDiggers.Units
                 // ... at a point you can't reach and need to either move down or have a ramp").
                 // Held to the same height, a flat block stalls after its first ring: the rim is
                 // cut one step, nothing can be reached from outside, and nobody may stand in it.
-                if (_grid.InBounds(nx, nz) && _designations.GetKind(nx, nz) != DesignationKind.Dig
-                    && _grid.GetSurfaceHeight(nx, nz) > height + _dispatcher.Climb + Epsilon)
+                if (!_grid.InBounds(nx, nz) || _designations.GetKind(nx, nz) == DesignationKind.Dig)
+                    continue;
+                var outside = _grid.GetSurfaceHeight(nx, nz);
+                // A machine steps down into the cut and works it a bench at a time, as long as it
+                // can climb back out. A robot with a barrow keeps to the older rule and stays out
+                // of the hole altogether, waiting for a way down.
+                var allowed = WorksFromInside ? height + _dispatcher.Climb + Epsilon : height + Epsilon;
+                if (outside > allowed)
                     return false;
             }
 

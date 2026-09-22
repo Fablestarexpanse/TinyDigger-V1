@@ -130,7 +130,8 @@ namespace TinyDiggers.EditorTools
             {
                 var roll = "";
                 foreach (var unit in crew.Units)
-                    roll += $"[{unit.Role} {unit.Id}: {unit.State}, {unit.Inventory.Total:0.##} m3] ";
+                    roll += $"[{unit.Role} {unit.Id}: {unit.State}, {unit.Inventory.Total:0.##} m3, "
+                         + $"{unit.UnreachableCount} out of reach: {unit.NearestUnreachable}] ";
                 return roll;
             }
 
