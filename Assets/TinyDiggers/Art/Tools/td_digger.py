@@ -208,27 +208,73 @@ def _arm_joints(points, shoulder):
     return [shoulder.copy(), top.copy(), wrist, teeth]
 
 
-def rebuild_arm(mesh, rig):
+def _near_segment(point, head, tail):
+    """How far a point lies off a bone's own line."""
+    span = tail - head
+    length = span.length
+    if length < 1e-6:
+        return (point - head).length
+    share = max(0.0, min(1.0, (point - head).dot(span) / (length * length)))
+    return (point - (head + span * share)).length
+
+
+def _set_bone(rig, name, head, tail):
+    """Moves one bone in edit mode, leaving the rig back in object mode."""
+    with bpy.context.temp_override(**_window_override(), active_object=rig, object=rig,
+                                   selected_objects=[rig], selected_editable_objects=[rig]):
+        bpy.context.view_layer.objects.active = rig
+        bpy.ops.object.mode_set(mode='EDIT')
+        bone = rig.data.edit_bones.get(name)
+        if bone is not None:
+            bone.head = head
+            bone.tail = tail
+            bone.roll = 0.0
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def rebuild_arm(mesh, rig, parts=None):
     """
-    Replaces the auto-rig's single arm bone with the three an excavator actually has: a boom off
-    the body, a stick, and a bucket, each a hinge across the machine so the arm works in its own
-    plane and never swings sideways.
+    Replaces the auto-rig's arm bones with the three an excavator actually has: a boom off the
+    body, a stick, and a bucket, each a hinge across the machine so the arm works in its own plane
+    and never swings sideways.
+
+    Two things have to be right, and they come from different places. **Which** geometry is the
+    arm comes from the scan's own rig (`parts`, from `name_parts`): taking "everything standing
+    above the hull" instead swept in the antennae and the boxes on the machine's back, and the
+    boom flung them about. **Where** the joints are has to be measured, because UniRig put the
+    bones themselves low on the body, well below everything they hold.
     """
     ball = _ball(mesh)
     owner = {v.index: max(((g.weight, g.group) for g in v.groups), default=(0.0, -1))[1]
              for v in mesh.data.vertices}
     name_of = {g.index: g.name for g in mesh.vertex_groups}
 
-    arm_indices = [v.index for v in mesh.data.vertices
-                   if v.co.z > ball["top"] - 0.02
-                   and not name_of.get(owner[v.index], "").startswith("leg_")]
+    def not_a_leg(index):
+        return not name_of.get(owner[index], "").startswith("leg_")
+
+    if parts and len(parts.get("main", ())) >= 50:
+        arm_indices = [i for i in parts["main"] + parts["bucket"] if not_a_leg(i)]
+    else:
+        # Fallback only, for a scan whose rig says nothing: whatever stands above the hull.
+        parts = None
+        arm_indices = [v.index for v in mesh.data.vertices
+                       if v.co.z > ball["top"] - 0.02 and not_a_leg(v.index)]
     if len(arm_indices) < 50:
         _log("no arm found")
         return None
 
+    shells = _shells_of(mesh)
     points = [mesh.data.vertices[i].co.copy() for i in arm_indices]
-    shoulder = min(points, key=lambda c: (c - ball["centre"]).length)
+    if parts:
+        # O1 is the mount on the crown of the hull, where this machine carries its arm. The
+        # middle of the hull puts the pivot inside the sphere and the boom then swings its base
+        # out through the shell.
+        crown = max((co for _, co in shells[0]), key=lambda c: c.z) if shells else ball["centre"]
+        shoulder = min(points, key=lambda c: (c - crown).length)
+    else:
+        shoulder = min(points, key=lambda c: (c - ball["centre"]).length)
     heads = _arm_joints(points, shoulder)
+    heads[0] = shoulder.copy()
 
     with bpy.context.temp_override(**_window_override(), active_object=rig, object=rig,
                                    selected_objects=[rig], selected_editable_objects=[rig]):
@@ -240,12 +286,12 @@ def rebuild_arm(mesh, rig):
             bones.remove(bone)
 
         parent = bones.get("body")
-        for label, head, tail in (("boom", heads[0], heads[1]),
-                                  ("stick", heads[1], heads[2]),
-                                  ("bucket", heads[2], heads[3])):
+        for label, bone_head, bone_tail in (("boom", heads[0], heads[1]),
+                                            ("stick", heads[1], heads[2]),
+                                            ("bucket", heads[2], heads[3])):
             bone = bones.new(label)
-            bone.head = head
-            bone.tail = tail
+            bone.head = bone_head
+            bone.tail = bone_tail
             bone.roll = 0.0
             bone.parent = parent
             bone.use_connect = label != "boom"
@@ -253,35 +299,69 @@ def rebuild_arm(mesh, rig):
 
         bpy.ops.object.mode_set(mode='OBJECT')
 
-    # Each vertex goes to the link it lies along, so a panel belongs to the part it is bolted to.
+    # The bucket is cut at the pin, vertex by vertex, and only the bucket is. The scoop is welded
+    # into the same piece as the stick on this scan, so no piece-level rule separates them; and
+    # a real bucket pivot makes exactly this cut, everything past the pin turning with the
+    # bucket. Boom and stick stay piece-level, where welded parts must not be torn apart.
     links = [("boom", heads[0], heads[1]), ("stick", heads[1], heads[2]),
              ("bucket", heads[2], heads[3])]
+    wanted = set(arm_indices)
+    pieces = []
+    for shell in shells:
+        inside = [(index, co) for index, co in shell if index in wanted]
+        if inside:
+            pieces.append(inside)
+
+    down = (heads[2] - heads[1]).normalized()
+    # Past the pin **and** within reach of it. The scan's arm group also holds odd fittings low
+    # down the front of the machine, and "everything below the pin" swept those in, stretching
+    # the bucket a metre down to take them with it. Measured on this scan, the arm below the pin
+    # runs a stick's length and no further; the strays are far beyond that.
+
+    claimed = {"boom": [], "stick": [], "bucket": []}
+    for piece in pieces:
+        bucket_side = {index for index, co in piece
+                       if (co - heads[2]).dot(down) > 0.0
+                       and (co - heads[2]).length <= (heads[2] - heads[1]).length}
+        claimed["bucket"].extend(bucket_side)
+        rest = [index for index, _ in piece if index not in bucket_side]
+        if not rest:
+            continue
+        centre = sum((mesh.data.vertices[i].co for i in rest), mathutils.Vector()) / len(rest)
+        label = min(links[:2], key=lambda link: _near_segment(centre, link[1], link[2]))[0]
+        claimed[label].extend(rest)
+
+    # Now the scoop is known, the bucket bone is aimed down it: along the line from the pin to the
+    # middle of the scoop, reaching its farthest corner, and kept in the arm's own plane because a
+    # scoop is symmetrical. Aimed straight at that farthest corner it pointed backwards into the
+    # machine, since the bucket's linkage reaches back past the pin.
+    if claimed["bucket"]:
+        scoop = [mesh.data.vertices[i].co for i in claimed["bucket"]]
+        along = (sum(scoop, mathutils.Vector()) / len(scoop)) - heads[2]
+        along.x = 0.0
+        if along.length < 1e-4:
+            along = mathutils.Vector((0.0, 0.0, -1.0))
+        heads[3] = heads[2] + along.normalized() * max((co - heads[2]).length for co in scoop)
+        heads[3].x = heads[2].x
+        _set_bone(rig, "bucket", heads[2], heads[3])
+        links = [links[0], links[1], ("bucket", heads[2], heads[3])]
+
     vertex_groups = {label: (mesh.vertex_groups.get(label) or mesh.vertex_groups.new(name=label))
-                     for label, _, _ in links}
-
-    def near(point, head, tail):
-        span = tail - head
-        length = span.length
-        if length < 1e-6:
-            return (point - head).length
-        t = max(0.0, min(1.0, (point - head).dot(span) / (length * length)))
-        return (point - (head + span * t)).length
-
-    counts = {label: 0 for label, _, _ in links}
-    for index in arm_indices:
-        point = mesh.data.vertices[index].co
-        label = min(links, key=lambda link: near(point, link[1], link[2]))[0]
+                     for label in claimed}
+    counts = {}
+    for label, indices in claimed.items():
         for group in mesh.vertex_groups:
             if group.name != label:
-                group.remove([index])
-        vertex_groups[label].add([index], 1.0, 'REPLACE')
-        counts[label] += 1
+                group.remove(indices)
+        vertex_groups[label].add(indices, 1.0, 'REPLACE')
+        counts[label] = len(indices)
 
     lengths = {label: round((tail - head).length, 3) for label, head, tail in links}
     _log("arm rebuilt: " + ", ".join(f"{label} {count} verts, {lengths[label]} m"
                                      for label, count in counts.items()))
     return {"heads": [[round(v, 3) for v in head] for head in heads],
             "weights": counts, "lengths": lengths}
+
 
 
 def name_parts(mesh, rig):
@@ -334,6 +414,32 @@ def name_parts(mesh, rig):
     # The arm's own bones go; rebuild_arm puts proper ones in their place.
     doomed = [bone.name for chain in arm_chains for bone in chain]
 
+    # Before they go, take what they hold. The auto-rig already knew which geometry is the arm,
+    # and nothing else does: taking "everything standing above the hull" instead swept in the
+    # antennae and the boxes on the machine's back, and the boom then flung them about.
+    group_name = {g.index: g.name for g in mesh.vertex_groups}
+    held = {}
+    for vertex in mesh.data.vertices:
+        best = max(vertex.groups, key=lambda g: g.weight, default=None)
+        if best is not None:
+            held.setdefault(group_name.get(best.group), []).append(vertex.index)
+
+    # And it knew where the bucket's pin is, which no amount of measuring the geometry gets
+    # reliably right. The chain's big bone is the arm itself; whatever hangs off the end of it is
+    # the bucket, and the joint between them is the pin the scan was rigged with.
+    arm_parts = None
+    for chain in arm_chains:
+        main = max(chain, key=lambda b: len(held.get(b.name, ())))
+        after = chain[chain.index(main) + 1:]
+        arm_parts = {
+            "main": [i for b in chain[:chain.index(main) + 1] for i in held.get(b.name, ())],
+            "bucket": [i for b in after for i in held.get(b.name, ())],
+            "pin": (after[0].head_local if after else main.tail_local).copy(),
+            "tip": (after[-1].tail_local if after else main.tail_local).copy(),
+        }
+        break
+    arm_indices = (arm_parts["main"] + arm_parts["bucket"]) if arm_parts else []
+
     anchors = [(name, rig.data.bones[old].head_local.copy())
                for old, name in renames.items() if old in rig.data.bones]
     for bone in rig.data.bones:
@@ -362,25 +468,38 @@ def name_parts(mesh, rig):
 
     _log(f"named {len(renames)} bones, {len(doomed)} arm bones dropped, {folded} weights moved; "
          f"legs {sorted(legs)}")
-    return {"legs": sorted(legs), "arm_bones_dropped": len(doomed)}
+    return {"legs": sorted(legs), "arm_bones_dropped": len(doomed),
+            "arm_indices": arm_indices, "arm_parts": arm_parts}
 
 
 # --- the dig -------------------------------------------------------------------------------------
 
-# The cut, in degrees on each joint: reach out, drop the bucket in, curl it through the ground,
-# lift clear, swing round and open. An excavator's own working arc, not a wave.
-# The cut, as how far each joint turns in its digging direction — which way that is comes from
-# the geometry, not from here (see `_turn_signs`). Reach out, drop in, curl through the ground,
-# lift clear, swing round, open, come back.
+# The cut, as how far each joint has turned in its digging direction — which way that is comes
+# from the geometry, not from here (see `_turn_signs`): the boom lowers, the stick pushes out,
+# the bucket curls in. Negative is the other way: boom up, stick in, bucket open.
+#
+# This is how an excavator is actually dug, from Cat's and SANY's operator guides rather than
+# invented: the stick works between about 40 degrees out and vertical, the bucket floor goes in
+# at about 45 degrees to grade, and the bucket is full by the time the stick stands upright.
+#   reach out   — stick out, bucket open, teeth presented to grade
+#   penetrate   — boom down so the bucket floor sits about 45 degrees into the surface
+#   drag / fill — the long phase: the stick crowds back to vertical while the bucket curls
+#                 through the cut, the boom easing up to hold grade rather than drag the teeth
+#                 under it
+#   lift        — bucket shut on the load, boom up clear of the trench
+#   carry       — nothing moves in the arm; the machine swings its body
+#   dump        — stick out, bucket opens, boom holding its height
+#   return      — back to rest
+# The bucket never opens between the fill and the dump: that is what spills the load.
 DIG = (
-    (1, {"boom": 0.0, "stick": 0.0, "bucket": 0.0}),
-    (12, {"boom": 26.0, "stick": 30.0, "bucket": 8.0}),
-    (26, {"boom": 44.0, "stick": 40.0, "bucket": 18.0}),
-    (40, {"boom": 40.0, "stick": 16.0, "bucket": 56.0}),
-    (54, {"boom": 12.0, "stick": 2.0, "bucket": 64.0}),
-    (68, {"boom": 16.0, "stick": 8.0, "bucket": -22.0}),
-    (80, {"boom": 8.0, "stick": 4.0, "bucket": 0.0}),
-    (90, {"boom": 0.0, "stick": 0.0, "bucket": 0.0}),
+    (1,  {"boom":   0.0, "stick":   0.0, "bucket":   0.0}),
+    (14, {"boom":  20.0, "stick":  40.0, "bucket": -25.0}),
+    (26, {"boom":  34.0, "stick":  38.0, "bucket": -10.0}),
+    (50, {"boom":  22.0, "stick":   0.0, "bucket":  55.0}),
+    (62, {"boom": -18.0, "stick":  -8.0, "bucket":  75.0}),
+    (70, {"boom": -18.0, "stick":  -8.0, "bucket":  75.0}),
+    (80, {"boom": -16.0, "stick":  25.0, "bucket": -35.0}),
+    (90, {"boom":   0.0, "stick":   0.0, "bucket":   0.0}),
 )
 
 # Every joint is a hinge in the arm's own plane. There is no swing: Ronan, 2026-09-22, "it should
@@ -485,7 +604,7 @@ def build(height=HEIGHT, crew=False):
     # Before the arm: the hull and everything tucked inside it goes to the body bone, so the walk
     # cannot drag the underside about. The arm is its own welded shell, well clear of the hull.
     td_walker.shell_to_body(mesh)
-    arm = rebuild_arm(mesh, rig)
+    arm = rebuild_arm(mesh, rig, named.get("arm_parts"))
 
     scale = 1.0
     if height:

@@ -3527,3 +3527,31 @@ The belly is 100% body-weighted afterwards, against 14 vertices riding leg bones
 Two traps fixed along the way: actions were being stamped `dumper|...` because reloading the
 module resets `MACHINE`, so `_new_action` now takes the machine's name from the rig in hand; and
 videos cut between three fixed angles (`cut_angles`) rather than orbiting, per Ronan's ruling.
+
+## 2026-09-22 — Digger arm, third pass: the bucket was never in the arm
+
+Ronan: "the bucket and arm are not correct". Colour-coding each bone's geometry and rendering it
+turned out to be worth more than any amount of measuring: three faults showed up at once.
+
+**The bucket was not part of the arm.** The arm was gathered as "everything standing above the
+hull", and the scoop hangs *below* the top of the hull, so it was never in the arm at all — it
+sat on whichever bone the settle pass folded it into, and could not curl. Which geometry is the
+arm now comes from the scan's own rig (UniRig's arm chain), which also stops the antennae and the
+boxes on the machine's back being flung about by the boom.
+
+**The scan's bones are in the wrong place.** UniRig put its arm bones low on the body, below
+everything they hold, so their joints are useless. Its vertex *groups* are the only thing worth
+having from it; the joints are still measured.
+
+**The scoop is welded into the same piece as the stick**, so no piece-level rule separates them.
+The bucket is now cut at the pin, vertex by vertex, down the line of the stick — which is exactly
+what a real bucket pivot does. Boom and stick stay piece-level, where welded parts must not be
+torn apart. Fitted: boom 1.116 m from the mount on the hull's crown, stick 0.652 m, bucket
+0.647 m, 601/520/409 vertices.
+
+The dig cycle itself was rewritten off Cat's and SANY's operator guides rather than invented:
+stick out about 40 degrees, bucket floor into the surface at about 45 degrees, the stick crowding
+back to vertical while the bucket curls and the boom eases up to hold grade, bucket full by the
+time the stick stands upright, and the bucket never opening between the fill and the dump.
+Sources: https://www.cat.com/en_US/articles/for-owners/tips-for-digging-and-trenching-with-your-excavator.html
+and https://www.sanyglobal.com/blog/how-to-operate-excavator/
