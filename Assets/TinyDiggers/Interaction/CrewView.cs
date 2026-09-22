@@ -187,6 +187,10 @@ namespace TinyDiggers.Interaction
                 else
                     AddBox(role, i, grid.CellSize);
 
+                // A machine takes as long over a cut as the scoop takes to swing: the clip it
+                // plays is what says how long the work looks, so the clip sets the time.
+                TimeWorkToTheClips(unit, _animators[_animators.Count - 1]);
+
                 var line = new GameObject($"{role} {i} Path") { hideFlags = HideFlags.DontSave };
                 line.transform.SetParent(transform, false);
                 var pathLine = line.AddComponent<LineRenderer>();
@@ -257,6 +261,32 @@ namespace TinyDiggers.Interaction
             _clips.Add(null);
             _tinted.Add(false);
             _rings.Add(MakeRing($"{role} {i} Ring", body.transform, 0.22f, 0.26f));
+        }
+
+        /// <summary>
+        /// Sets a unit's work times from the clips its body actually plays (Ronan, 2026-09-22:
+        /// "every dig needs a matching animation, the time to scoop and load truck").
+        ///
+        /// The crew logic holds no animation of its own — it is plain C# and knows nothing about
+        /// Unity's animator — so whatever draws a unit tells it how long the work looks. A body
+        /// with no clips leaves the times alone and the unit keeps its own interval.
+        /// </summary>
+        static void TimeWorkToTheClips(CrewUnit unit, Animator animator)
+        {
+            if (animator == null || animator.runtimeAnimatorController == null)
+                return;
+
+            foreach (var clip in animator.runtimeAnimatorController.animationClips)
+            {
+                if (clip == null || clip.length <= 0f)
+                    continue;
+                // The states are named for what the unit is doing: Work is the cut for a digging
+                // unit and the tip for a hauler, which is exactly how CrewAnimation picks them.
+                if (clip.name.EndsWith("dig"))
+                    unit.DigSeconds = clip.length;
+                else if (clip.name.EndsWith("tip"))
+                    unit.TipSeconds = clip.length;
+            }
         }
 
         /// <summary>A flat ring on the ground, hidden until wanted; null without a marker material.</summary>

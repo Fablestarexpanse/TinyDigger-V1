@@ -3791,3 +3791,21 @@ dump truck bot". That was already true, but only because two separate checks hap
 `TryTransferToAdjacentHauler` is for diggers and `AssignDigger` only offers them. Two tests hold it
 now: a dumper mech asked to serve a crew of starter robots finds nobody, and a starter robot with a
 dumper mech standing by still walks its own barrow to the heap and never waits for one.
+
+## 2026-09-22 — Work takes as long as the animation, and a bed leaves full
+
+**Timings.** A cut used to be a flat 0.4 s tick whatever was swinging. `CrewUnit.DigSeconds` and
+`TipSeconds` now hold what the job takes, and `CrewView` fills them in from the clips the body
+actually plays (`TimeWorkToTheClips`), because the crew logic is plain C# and knows nothing about
+Unity's animator — it is *told* how long the work looks. A body with no clips keeps the old
+interval, which is why nothing in the tests moved. Rock still costs a unit without a cutter its
+hardness on top of the swing. Throughput barely changed: 4.38 m³ against 3.75 the run before.
+
+**A bed leaves full** (Ronan, 2026-09-22: "the dumper mech moves before he is all the way full, he
+shouldn't go until full"). A parked hauler used to give up after `ParkPatience` with nothing tipped
+in. The patience is on its *digger* now, not on the clock: while that one is still working there is
+more coming, however long the cut takes, and it only gives up on a digger that has stopped. The
+old patience test still holds, because a digger with nothing to dig is stopped.
+
+Also seen in that run, and worth recording: with the part-load deadlock fixed, **the four starter
+robots were digging** rather than standing about.

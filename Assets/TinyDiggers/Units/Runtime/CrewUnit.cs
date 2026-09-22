@@ -137,7 +137,8 @@ namespace TinyDiggers.Units
     ///   goes back to a digger.
     /// - Empty (or part loaded with nothing to tip into): serve the reachable digger with the
     ///   fullest load that has no hauler, parking beside it. It leaves when full, when the digger
-    ///   has nothing left to give, or after <see cref="ParkPatience"/> with nothing received.
+    ///   stops, having waited <see cref="ParkPatience"/> with nothing more coming. A working
+    ///   digger it waits on however long the cut takes: the bed leaves full.
     ///
     /// Traffic: units never share a cell, and hold the one they are driving into until they
     /// arrive, so they never overlap on a boundary or cut a diagonal past one another. One whose
@@ -217,8 +218,21 @@ namespace TinyDiggers.Units
         /// </summary>
         public int CliffReachLevels = 6;
 
-        /// <summary>Seconds per height step dug, or per tip.</summary>
+        /// <summary>Seconds per height step dug, or per tip, unless the job has its own time.</summary>
         public float WorkInterval = 0.4f;
+
+        /// <summary>
+        /// Seconds for one cut, or nought to use <see cref="WorkInterval"/>.
+        ///
+        /// A machine takes as long over a scoop as its scoop takes to swing (Ronan, 2026-09-22:
+        /// "every dig needs a matching animation, the time to scoop and load truck"), so whatever
+        /// draws it sets this from the clip it plays. The crew logic keeps no animation of its
+        /// own; it is told how long the work looks.
+        /// </summary>
+        public float DigSeconds;
+
+        /// <summary>Seconds for one tip, or nought to use <see cref="WorkInterval"/>.</summary>
+        public float TipSeconds;
 
         /// <summary>Loose m³ a second moved from a digger's scoop into a hauler.</summary>
         public float TransferRate = 5f;
@@ -412,6 +426,15 @@ namespace TinyDiggers.Units
         public bool Digs => Role != UnitRole.Hauler;
 
         /// <summary>
+        /// Whether this unit is still at work and so still has spoil coming: digging it, carrying
+        /// it, handing it over, or on its way to the next cut. A hauler parked beside it waits on
+        /// this rather than on a clock.
+        /// </summary>
+        public bool StillWorking =>
+            State == CrewUnitState.Digging || State == CrewUnitState.Moving
+            || State == CrewUnitState.WaitingForHauler || State == CrewUnitState.Transferring;
+
+        /// <summary>
         /// Whether this unit is built to cut stone. The digger machine is (see
         /// <see cref="AsMachine"/>); anything else is not, and pays <see cref="StoneEffort"/> for
         /// every step of rock it takes on (Ronan, 2026-09-22: it can, but slowly).
@@ -433,12 +456,13 @@ namespace TinyDiggers.Units
         /// </summary>
         public float StepSeconds(int x, int z)
         {
+            var cut = DigSeconds > 0f ? DigSeconds : WorkInterval;
             if (CutsStone || !_grid.InBounds(x, z))
-                return WorkInterval;
+                return cut;
             var material = _grid.GetTopMaterial(x, z);
             if (!MaterialTable.IsStone(material))
-                return WorkInterval;
-            return WorkInterval * (1f + _grid.Materials.Get(material).Hardness * StoneEffort);
+                return cut;
+            return cut * (1f + _grid.Materials.Get(material).Hardness * StoneEffort);
         }
 
         /// <summary>
@@ -1595,7 +1619,7 @@ namespace TinyDiggers.Units
             // what is being cut, not only on the unit.
             var interval = State == CrewUnitState.Digging
                 ? StepSeconds(JobTarget.x, JobTarget.y)
-                : WorkInterval;
+                : TipSeconds > 0f ? TipSeconds : WorkInterval;
             if (_workTimer < interval)
                 return;
             _workTimer -= interval;
@@ -1743,8 +1767,12 @@ namespace TinyDiggers.Units
                 return;
             }
 
-            if (_parkTimer >= ParkPatience)
-                LeavePark($"nothing tipped in for {ParkPatience:0} s");
+            // It waits for a full bed (Ronan, 2026-09-22: "the dumper mech moves before he is all
+            // the way full, he shouldn't go until full"). Patience is not a clock on the load but
+            // on the digger: while that one is still working there is more coming, however long
+            // this cut is taking. It only gives up on a digger that has stopped.
+            if (_parkTimer >= ParkPatience && !digger.StillWorking)
+                LeavePark($"its digger stopped, and nothing came for {ParkPatience:0} s");
         }
 
         void LeavePark(string why)

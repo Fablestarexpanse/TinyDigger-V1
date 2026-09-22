@@ -149,6 +149,32 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
+        public void AParkedHaulerWaitsForAFullBedWhileItsDiggerIsStillWorking()
+        {
+            // A digger with plenty to dig, and a hauler with a bed far too big to fill quickly.
+            for (var z = 8; z <= 12; z++)
+                for (var x = 8; x <= 12; x++)
+                    _map.Designate(x, z, DesignationKind.Dig, 5f);
+            // Somewhere to tip, so the only reason it could leave is a full bed.
+            for (var z = 2; z <= 4; z++)
+                for (var x = 2; x <= 4; x++)
+                    _map.SetDumpZone(x, z, true);
+            var digger = Spawn(13, 10);
+            var hauler = Spawn(14, 14, UnitRole.Hauler, 400f);
+            hauler.ParkPatience = 1f;
+
+            Run(120f, () => hauler.State == CrewUnitState.Parked);
+            Assert.That(hauler.State, Is.EqualTo(CrewUnitState.Parked), $"never parked: {hauler.Status}");
+
+            // Long past its patience, and nowhere near full: it stays, because more is coming
+            // (Ronan: "he shouldn't go until full").
+            Run(30f, () => hauler.State != CrewUnitState.Parked && !digger.StillWorking);
+            Assert.That(hauler.Inventory.Remaining, Is.GreaterThan(0f), "the test wants a part load");
+            Assert.That(hauler.State, Is.EqualTo(CrewUnitState.Parked),
+                $"left part loaded while its digger was still working: {hauler.Status}");
+        }
+
+        [Test]
         public void AParkedHaulerLeavesAfterItsPatienceRunsOut()
         {
             // A digger with nothing to dig: the hauler parks, gets nothing, and gives up.
