@@ -3062,3 +3062,13 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
     - `RiverBedTests`: 10 cm of river blocks while 10 cm elsewhere is waded; a dried bed is
       ground again, and the change is reported to passability caches.
     - `ChannelCrossingTests` now also runs with rivers filled to only a tenth of their depth.
+- **Crossing a river (Ronan, 2026-09-22): "they will have to fill them in or dig them out".**
+  `RiverCrossingTests` puts a worker on a flat field cut by a river bed two cells wide, carrying
+  0.3 m of water: a river, so it blocks. It passes the existing crew code unchanged:
+  - Nothing crosses the river before it is filled.
+  - Given a Fill designation three rows wide, the worker tips into the river from the bank, a
+    step at a time. It builds the crossing up level with the banks, and the path then crosses
+    only there; the rest of the river still blocks.
+  - Fill designations were already allowed on water (only Dig is refused), and building a cell
+    above the water dries it at once.
+  - A worker left holding less than one tip step (0.125 m³) doesn't tip it and goes idle.
