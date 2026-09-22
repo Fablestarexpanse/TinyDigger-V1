@@ -4,6 +4,7 @@
     "references": [
         "TinyDiggers.Interaction",
         "TinyDiggers.Units",
+        "TinyDiggers.Terrain",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

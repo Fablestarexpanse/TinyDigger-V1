@@ -328,6 +328,23 @@ namespace TinyDiggers.Interaction
 
         public void Deselect() => _selection.Clear();
 
+        /// <summary>Selects unit <paramref name="index"/> of <see cref="Units"/>, on its own or added (Slice 17: the crew panel).</summary>
+        public void Select(int index, bool add = false)
+        {
+            if (index < 0 || index >= _units.Count)
+                return;
+            if (!add)
+                _selection.Clear();
+            if (!_selection.Contains(index))
+                _selection.Add(index);
+        }
+
+        public bool IsSelected(int index) => _selection.Contains(index);
+
+        /// <summary>Where unit <paramref name="index"/>'s body is in the world, for the camera to go to.</summary>
+        public Vector3 BodyPosition(int index) =>
+            index >= 0 && index < _bodies.Count ? _bodies[index].position : Vector3.zero;
+
         /// <summary>
         /// Sends the selected units to the cell, spread over the nearest cells they can stand on,
         /// one each. Onto a dig, fill or dump designation they go back to work once there; onto

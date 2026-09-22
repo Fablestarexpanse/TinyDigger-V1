@@ -154,6 +154,15 @@ namespace TinyDiggers.Interaction
         }
 
         /// <summary>
+        /// Glides the camera's pivot to <paramref name="point"/> (on the ground there), keeping its
+        /// distance and angle (Slice 17: double-clicking a unit in the crew panel).
+        /// </summary>
+        public void FocusOn(Vector3 point)
+        {
+            _rig.Pivot = new Vector3(point.x, GroundHeightAt(point), point.z);
+        }
+
+        /// <summary>
         /// Writes how the camera is looking now to the preset asset. Only the editor can write an
         /// asset, so in a build this reports rather than pretending to have saved.
         /// </summary>

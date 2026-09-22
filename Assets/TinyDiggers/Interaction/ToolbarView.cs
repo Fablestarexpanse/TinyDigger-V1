@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using TinyDiggers.Presentation;
@@ -9,10 +10,12 @@ using UnityEngine.UI;
 namespace TinyDiggers.Interaction
 {
     /// <summary>
-    /// The toolbar along the bottom of the screen: one button per tool, and a line above it that
-    /// says what the tool will do — the brush or road width, the target height H and whether it
-    /// is locked, what the shape under the cursor would cost in cut and fill, how much is
-    /// designated, and a warning while any unit is loaded with nowhere to tip.
+    /// The toolbar along the bottom of the screen (Slice 17: made for the mouse). Icon buttons in
+    /// groups, left to right: Select | Dig Fill Level | Road | Dump Zone | Clear | Seed, Settings
+    /// (F2), Debug (F3) on the far right. Hovering a button for <see cref="Tooltip.Delay"/> shows
+    /// what it is and its hotkey; the active tool is lit. Above the bar, the active tool's panel
+    /// (<see cref="ToolPanelView"/>) and a status line saying what the last action did; top left,
+    /// the crew (<see cref="CrewPanelView"/>).
     ///
     /// Built in code into one Canvas, so there is nothing to wire up in the scene.
     /// </summary>
@@ -21,69 +24,146 @@ namespace TinyDiggers.Interaction
         [SerializeField] PlayerTools _tools;
         [SerializeField] CrewView _crew;
 
-        int _dugVersion = -1;
-        string _dug = string.Empty;
-
-        [Tooltip("The land, for the F2 settings panel's seed and Regenerate.")]
+        [Tooltip("The land, for the seed and Regenerate.")]
         [SerializeField] TerrainView _terrain;
-        [SerializeField] Color _idleColor = new Color(0.16f, 0.17f, 0.19f, 0.9f);
-        [SerializeField] Color _activeColor = new Color(0.95f, 0.78f, 0.25f, 0.95f);
         [SerializeField] Color _warningColor = new Color(1f, 0.55f, 0.2f);
 
-        static readonly (ToolMode Mode, string Label)[] Tools =
+        const float ButtonSize = 58f;
+        const float GroupGap = 16f;
+
+        struct ToolButton
         {
-            (ToolMode.Select, "1 Select"),
-            (ToolMode.Dig, "2 Dig"),
-            (ToolMode.Fill, "3 Fill"),
-            (ToolMode.DumpZone, "4 Dump Zone"),
-            (ToolMode.Level, "5 Level"),
-            (ToolMode.Road, "6 Road"),
-            (ToolMode.Clear, "7 Clear"),
+            public ToolMode Mode;
+            public ToolIcon Icon;
+            public string Name;
+            public string Key;
+            public string Help;
+        }
+
+        static readonly ToolButton[][] Groups =
+        {
+            new[] { new ToolButton { Mode = ToolMode.Select, Icon = ToolIcon.Select, Name = "Select", Key = "1",
+                Help = "click or drag over units; right-click to send them" } },
+            new[]
+            {
+                new ToolButton { Mode = ToolMode.Dig, Icon = ToolIcon.Dig, Name = "Dig", Key = "2", Help = "paint ground to be dug down to H" },
+                new ToolButton { Mode = ToolMode.Fill, Icon = ToolIcon.Fill, Name = "Fill", Key = "3", Help = "paint ground to be filled up to H" },
+                new ToolButton { Mode = ToolMode.Level, Icon = ToolIcon.Level, Name = "Level", Key = "5", Help = "drag a pad to be levelled to H" },
+            },
+            new[] { new ToolButton { Mode = ToolMode.Road, Icon = ToolIcon.Road, Name = "Road", Key = "6",
+                Help = "click points, double-click or Enter to lay it" } },
+            new[] { new ToolButton { Mode = ToolMode.DumpZone, Icon = ToolIcon.DumpZone, Name = "Dump Zone", Key = "4",
+                Help = "drag where spoil may be tipped" } },
+            new[] { new ToolButton { Mode = ToolMode.Clear, Icon = ToolIcon.Clear, Name = "Clear", Key = "7",
+                Help = "drag to take designations off" } },
         };
 
-        readonly List<Image> _buttons = new List<Image>();
-        readonly List<Text> _buttonLabels = new List<Text>();
+        readonly List<(ToolMode Mode, Image Image, Image Icon)> _toolImages = new List<(ToolMode, Image, Image)>();
         readonly StringBuilder _text = new StringBuilder(256);
 
+        Canvas _canvas;
         Text _status;
-        Font _font;
         string _shown = "";
+        int _dugVersion = -1;
+        string _dug = string.Empty;
+        float _seedArmedUntil;
+        Text _seedLabel;
+        TerrainDebugReadout _debug;
 
         RectTransform _settingsPanel;
         InputField _seedField;
         Text _settingsSummary;
 
+        /// <summary>The canvas the toolbar and its panels are drawn on.</summary>
+        public Canvas Canvas => _canvas;
+
         void Start()
         {
-            _font = Font.CreateDynamicFontFromOSFont(new[] { "Segoe UI", "Arial", "Helvetica" }, 16);
+            _canvas = UiKit.NewCanvas(transform, "Toolbar Canvas", 100);
+            _debug = FindAnyObjectByType<TerrainDebugReadout>();
 
-            var canvasObject = new GameObject("Toolbar Canvas") { hideFlags = HideFlags.DontSave };
-            canvasObject.transform.SetParent(transform, false);
-            var canvas = canvasObject.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 100;
-            var scaler = canvasObject.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            canvasObject.AddComponent<GraphicRaycaster>();
+            // Work out the bar's width: the buttons, the gaps between groups, and the right-hand group.
+            var toolCount = 0;
+            foreach (var group in Groups)
+                toolCount += group.Length;
+            var width = 12f + toolCount * (ButtonSize + 4f) + Groups.Length * GroupGap + GroupGap * 2f + 3 * (ButtonSize + 4f);
+            var bar = UiKit.NewPanel(_canvas.transform, "Bar", new Vector2(0.5f, 0f), new Vector2(0f, 10f), new Vector2(width, ButtonSize + 12f));
 
-            var bar = NewPanel(canvasObject.transform, "Bar", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(0f, 12f), new Vector2(Tools.Length * 150f + 16f, 56f), new Color(0.08f, 0.09f, 0.1f, 0.75f));
-            var layout = bar.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.childAlignment = TextAnchor.MiddleCenter;
-            layout.spacing = 6f;
-            layout.padding = new RectOffset(8, 8, 8, 8);
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = true;
+            var x = 8f;
+            foreach (var group in Groups)
+            {
+                foreach (var tool in group)
+                {
+                    var captured = tool;
+                    var button = UiKit.NewButton(bar, "", () => _tools.SetMode(captured.Mode), ToolIcons.Get(tool.Icon));
+                    UiKit.Place((RectTransform)button.transform, x, 6f, ButtonSize, ButtonSize);
+                    UiKit.AddTooltip(button, () => $"{captured.Name}  ({captured.Key}): {captured.Help}");
+                    _toolImages.Add((tool.Mode, button.GetComponent<Image>(), button.transform.Find("Icon").GetComponent<Image>()));
+                    x += ButtonSize + 4f;
+                }
 
-            foreach (var tool in Tools)
-                AddButton(bar.transform, tool.Mode, tool.Label);
+                x += GroupGap;
+            }
 
-            BuildSettingsPanel(canvasObject.transform);
+            // The spacer, then the island and the debug readout, pinned to the right.
+            x = width - 8f - 3 * (ButtonSize + 4f);
+            var seed = UiKit.NewButton(bar, "", ArmOrRegenerate, ToolIcons.Get(ToolIcon.Seed));
+            UiKit.Place((RectTransform)seed.transform, x, 6f, ButtonSize, ButtonSize);
+            UiKit.AddTooltip(seed, () => Time.unscaledTime < _seedArmedUntil
+                ? "Click again to make a new island (the one you have is lost)"
+                : $"New island: seed {(_terrain != null ? _terrain.Seed + 1 : 0)} (click twice)");
+            _seedLabel = UiKit.NewText(seed.transform, "", 12, TextAnchor.LowerCenter, UiKit.Warning);
+            x += ButtonSize + 4f;
 
-            var statusPanel = NewPanel(canvasObject.transform, "Status", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(0f, 74f), new Vector2(Tools.Length * 150f + 16f, 30f), new Color(0.08f, 0.09f, 0.1f, 0.6f));
-            _status = NewText(statusPanel.transform, "", 16, TextAnchor.MiddleCenter);
+            var settings = UiKit.NewButton(bar, "", ToggleSettings, ToolIcons.Get(ToolIcon.Settings));
+            UiKit.Place((RectTransform)settings.transform, x, 6f, ButtonSize, ButtonSize);
+            UiKit.AddTooltip(settings, () => "Settings  (F2): the island's seed and Regenerate");
+            x += ButtonSize + 4f;
+
+            var debug = UiKit.NewButton(bar, "", ToggleDebug, ToolIcons.Get(ToolIcon.Debug));
+            UiKit.Place((RectTransform)debug.transform, x, 6f, ButtonSize, ButtonSize);
+            UiKit.AddTooltip(debug, () => "Debug  (F3): the terrain and crew readout");
+
+            var status = UiKit.NewPanel(_canvas.transform, "Status", new Vector2(0.5f, 0f), new Vector2(0f, ButtonSize + 28f),
+                new Vector2(width, 26f), new Color(0.08f, 0.09f, 0.1f, 0.55f));
+            _status = UiKit.NewText(status, "", 15, TextAnchor.MiddleCenter);
+
+            BuildSettingsPanel(_canvas.transform);
+
+            var panel = gameObject.AddComponent<ToolPanelView>();
+            panel.Build(_canvas, _tools, new Vector2(0f, ButtonSize + 60f));
+            var crewPanel = gameObject.AddComponent<CrewPanelView>();
+            crewPanel.Build(_canvas, _crew, FindAnyObjectByType<RtsCamera>());
+
+            Tooltip.Create(_canvas);
+        }
+
+        void ArmOrRegenerate()
+        {
+            if (Time.unscaledTime < _seedArmedUntil)
+            {
+                _seedArmedUntil = 0f;
+                if (_terrain != null)
+                    _terrain.Regenerate(_terrain.Seed + 1);
+                RefreshSettings();
+                return;
+            }
+
+            _seedArmedUntil = Time.unscaledTime + 2.5f;
+        }
+
+        void ToggleSettings()
+        {
+            var showing = !_settingsPanel.gameObject.activeSelf;
+            _settingsPanel.gameObject.SetActive(showing);
+            if (showing)
+                RefreshSettings();
+        }
+
+        void ToggleDebug()
+        {
+            if (_debug != null)
+                _debug.Visible = !_debug.Visible;
         }
 
         /// <summary>
@@ -92,44 +172,20 @@ namespace TinyDiggers.Interaction
         /// </summary>
         void BuildSettingsPanel(Transform parent)
         {
-            _settingsPanel = NewPanel(parent, "Settings", new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(12f, -12f), new Vector2(320f, 132f), new Color(0.08f, 0.09f, 0.1f, 0.85f));
-            _settingsPanel.pivot = new Vector2(0f, 1f);
-            _settingsPanel.anchoredPosition = new Vector2(12f, -12f);
-
-            var title = NewText(_settingsPanel.transform, "Island  (F2)", 16, TextAnchor.UpperLeft);
+            _settingsPanel = UiKit.NewPanel(parent, "Settings", new Vector2(1f, 1f), new Vector2(-12f, -12f), new Vector2(320f, 132f));
+            var title = UiKit.NewText(_settingsPanel, "Island  (F2)", 16, TextAnchor.UpperLeft);
             title.rectTransform.offsetMax = new Vector2(-6f, -6f);
 
-            var fieldObject = new GameObject("Seed", typeof(RectTransform)) { hideFlags = HideFlags.DontSave };
-            fieldObject.transform.SetParent(_settingsPanel.transform, false);
-            var fieldRect = fieldObject.GetComponent<RectTransform>();
-            fieldRect.anchorMin = new Vector2(0f, 1f);
-            fieldRect.anchorMax = new Vector2(0f, 1f);
-            fieldRect.pivot = new Vector2(0f, 1f);
-            fieldRect.anchoredPosition = new Vector2(10f, -34f);
-            fieldRect.sizeDelta = new Vector2(180f, 28f);
-            var fieldImage = fieldObject.AddComponent<Image>();
-            fieldImage.color = new Color(0.16f, 0.17f, 0.19f, 0.95f);
-            _seedField = fieldObject.AddComponent<InputField>();
-            _seedField.textComponent = NewText(fieldObject.transform, "", 16, TextAnchor.MiddleLeft);
+            _seedField = UiKit.NewNumberField(_settingsPanel, null);
             _seedField.contentType = InputField.ContentType.IntegerNumber;
+            UiKit.Place((RectTransform)_seedField.transform, 10f, 34f, 180f, 28f);
 
-            var buttonObject = new GameObject("Regenerate", typeof(RectTransform)) { hideFlags = HideFlags.DontSave };
-            buttonObject.transform.SetParent(_settingsPanel.transform, false);
-            var buttonRect = buttonObject.GetComponent<RectTransform>();
-            buttonRect.anchorMin = new Vector2(0f, 1f);
-            buttonRect.anchorMax = new Vector2(0f, 1f);
-            buttonRect.pivot = new Vector2(0f, 1f);
-            buttonRect.anchoredPosition = new Vector2(198f, -34f);
-            buttonRect.sizeDelta = new Vector2(112f, 28f);
-            var buttonImage = buttonObject.AddComponent<Image>();
-            buttonImage.color = _activeColor;
-            var regenerate = buttonObject.AddComponent<Button>();
-            regenerate.onClick.AddListener(Regenerate);
-            var buttonLabel = NewText(buttonObject.transform, "Regenerate", 15, TextAnchor.MiddleCenter);
-            buttonLabel.color = Color.black;
+            var regenerate = UiKit.NewButton(_settingsPanel, "Regenerate", Regenerate);
+            regenerate.GetComponent<Image>().color = UiKit.Accent;
+            regenerate.GetComponentInChildren<Text>().color = Color.black;
+            UiKit.Place((RectTransform)regenerate.transform, 198f, 34f, 112f, 28f);
 
-            _settingsSummary = NewText(_settingsPanel.transform, "", 14, TextAnchor.LowerLeft);
+            _settingsSummary = UiKit.NewText(_settingsPanel, "", 14, TextAnchor.LowerLeft);
             _settingsSummary.rectTransform.offsetMin = new Vector2(10f, 8f);
             _settingsSummary.rectTransform.offsetMax = new Vector2(-10f, -70f);
 
@@ -155,104 +211,32 @@ namespace TinyDiggers.Interaction
             var island = _terrain.Island;
             _settingsSummary.text = island == null
                 ? "The old plateau generator is in use; there is no island."
-                : $"Seed {_terrain.Seed}   peak ({island.Peak.x}, {island.Peak.y})   river {island.River.Count} points";
-        }
-
-        void AddButton(Transform parent, ToolMode mode, string label)
-        {
-            var buttonObject = new GameObject(label, typeof(RectTransform)) { hideFlags = HideFlags.DontSave };
-            buttonObject.transform.SetParent(parent, false);
-            var image = buttonObject.AddComponent<Image>();
-            image.color = _idleColor;
-            var button = buttonObject.AddComponent<Button>();
-            var captured = mode;
-            button.onClick.AddListener(() => _tools.SetMode(captured));
-            _buttons.Add(image);
-            _buttonLabels.Add(NewText(buttonObject.transform, label, 16, TextAnchor.MiddleCenter));
-        }
-
-        static RectTransform NewPanel(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 position, Vector2 size, Color color)
-        {
-            var panel = new GameObject(name, typeof(RectTransform)) { hideFlags = HideFlags.DontSave };
-            panel.transform.SetParent(parent, false);
-            var rect = panel.GetComponent<RectTransform>();
-            rect.anchorMin = anchorMin;
-            rect.anchorMax = anchorMax;
-            rect.pivot = new Vector2(0.5f, 0f);
-            rect.anchoredPosition = position;
-            rect.sizeDelta = size;
-            var image = panel.AddComponent<Image>();
-            image.color = color;
-            return rect;
-        }
-
-        Text NewText(Transform parent, string content, int size, TextAnchor alignment)
-        {
-            var textObject = new GameObject("Text", typeof(RectTransform)) { hideFlags = HideFlags.DontSave };
-            textObject.transform.SetParent(parent, false);
-            var rect = textObject.GetComponent<RectTransform>();
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = new Vector2(6f, 2f);
-            rect.offsetMax = new Vector2(-6f, -2f);
-            var text = textObject.AddComponent<Text>();
-            text.font = _font;
-            text.fontSize = size;
-            text.alignment = alignment;
-            text.color = Color.white;
-            text.text = content;
-            text.raycastTarget = false;
-            return text;
+                : $"Seed {_terrain.Seed}   peak ({island.Peak.x}, {island.Peak.y})   {island.Channels.Count} rivers and creeks";
         }
 
         void Update()
         {
             var keyboard = Keyboard.current;
             if (keyboard != null && keyboard.f2Key.wasPressedThisFrame && _settingsPanel != null)
-            {
-                var showing = !_settingsPanel.gameObject.activeSelf;
-                _settingsPanel.gameObject.SetActive(showing);
-                if (showing)
-                    RefreshSettings();
-            }
+                ToggleSettings();
 
             if (_tools == null || _status == null)
                 return;
 
-            for (var i = 0; i < _buttons.Count; i++)
+            foreach (var (mode, image, icon) in _toolImages)
             {
-                var active = Tools[i].Mode == _tools.Mode;
-                _buttons[i].color = active ? _activeColor : _idleColor;
-                _buttonLabels[i].color = active ? Color.black : Color.white;
+                var active = mode == _tools.Mode;
+                image.color = active ? UiKit.Accent : UiKit.ButtonColor;
+                // A dark glyph on the lit button: white on amber barely shows.
+                icon.color = active ? new Color(0.1f, 0.1f, 0.12f) : Color.white;
             }
+            _seedLabel.text = Time.unscaledTime < _seedArmedUntil ? "again?" : "";
 
             var map = _tools.Map;
-            _text.Clear().Append(_tools.Mode);
-            switch (_tools.Mode)
-            {
-                case ToolMode.Dig:
-                case ToolMode.Fill:
-                    _text.Append("  brush ").Append(_tools.BrushRadius).Append(" ([ ])");
-                    break;
-                case ToolMode.Road:
-                    _text.Append("  width ").Append(_tools.RoadWidth).Append(" ([ ])  points ").Append(_tools.RoadPointCount);
-                    break;
-                case ToolMode.DumpZone:
-                    _text.Append("  cap H+").Append(_tools.ZoneCapAbove.ToString("0.#"));
-                    break;
-            }
-
-            if (_tools.Mode != ToolMode.Select && _tools.Mode != ToolMode.Clear)
-                _text.Append("   H ").Append(_tools.TargetHeight.ToString("0.#")).Append(" m")
-                    .Append(_tools.HeightLocked ? " (locked, PgUp/PgDn)" : " (follows cursor)");
-
-            if (_tools.PlannedCut > 0.05f || _tools.PlannedFill > 0.05f)
-                _text.Append("   cut ").Append(_tools.PlannedCut.ToString("0")).Append(" m³, fill ")
-                    .Append(_tools.PlannedFill.ToString("0")).Append(" m³");
-            if (_tools.Mode == ToolMode.Road && _tools.RoadTooSteep)
-                _text.Append("   TOO STEEP ").Append(_tools.RoadGrade.ToString("0.00")).Append(" m/cell");
-
-            _text.Append("   designations ").Append(map.Count);
+            _text.Clear();
+            if (_tools.LastAction.Length > 0)
+                _text.Append(_tools.LastAction).Append("     ");
+            _text.Append("designations ").Append(map.Count);
             if (map.DumpZoneCount > 0)
                 _text.Append(", zone ").Append(map.DumpZoneCount);
 
@@ -266,23 +250,15 @@ namespace TinyDiggers.Interaction
                 }
 
                 if (_dug.Length > 0)
-                    _text.Append("   ").Append(_dug);
+                    _text.Append("     ").Append(_dug);
             }
-
-            var stuck = 0;
-            if (_crew != null)
-                foreach (var unit in _crew.Units)
-                    if (unit.State == CrewUnitState.NeedsSomewhereToTip)
-                        stuck++;
-            if (stuck > 0)
-                _text.Append("   !! ").Append(stuck).Append(stuck == 1 ? " unit needs" : " units need").Append(" a Dump Zone");
 
             var line = _text.ToString();
             if (line == _shown)
                 return;
             _shown = line;
             _status.text = line;
-            _status.color = stuck > 0 || _tools.RoadTooSteep ? _warningColor : Color.white;
+            _status.color = _tools.RoadTooSteep ? _warningColor : Color.white;
         }
     }
 }

@@ -3,8 +3,10 @@ using TinyDiggers.Presentation;
 using TinyDiggers.Terrain;
 using TinyDiggers.Units;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
+using UnityEngine.UI;
 
 namespace TinyDiggers.Interaction
 {
@@ -38,6 +40,10 @@ namespace TinyDiggers.Interaction
     ///
     /// H follows the hovered cell until PageUp or PageDown moves it, which locks it; the toolbar
     /// unlocks it again.
+    ///
+    /// Slice 17: every designation edit goes through <see cref="History"/> (Ctrl+Z, Ctrl+Y);
+    /// Alt-click with a height tool picks the ground height into H; clicks over the UI never
+    /// reach the ground, and hotkeys wait while a text field has the keyboard.
     /// </summary>
     public sealed class PlayerTools : MonoBehaviour
     {
@@ -55,7 +61,12 @@ namespace TinyDiggers.Interaction
         [SerializeField] Color32 _roadSteepColor = new Color32(255, 150, 40, 140);
 
         /// <summary>Cells either side of the hovered one that Dig and Fill paint.</summary>
-        [Range(1, 5)] public int BrushRadius = 2;
+        [Range(BrushPlan.MinRadius, BrushPlan.MaxRadius)] public int BrushRadius = 2;
+
+        /// <summary>Which designations the Clear tool takes off: the panel's checkboxes.</summary>
+        public bool ClearDig = true;
+        public bool ClearFill = true;
+        public bool ClearZones = true;
 
         /// <summary>Cells across a road.</summary>
         [Range(3, 7)] public int RoadWidth = 3;
@@ -70,6 +81,8 @@ namespace TinyDiggers.Interaction
         readonly List<PlannedCell> _plan = new List<PlannedCell>();
         readonly List<RoadPoint> _previewPoints = new List<RoadPoint>();
         readonly HashSet<int> _strokeCells = new HashSet<int>();
+        readonly List<Vector2Int> _brushCells = new List<Vector2Int>();
+        DesignationMap _historyFor;
 
         Mesh _preview;
         bool _painting;
@@ -115,6 +128,74 @@ namespace TinyDiggers.Interaction
 
         public DesignationMap Map => _designations.Map;
 
+        /// <summary>
+        /// A screen point (Input System pixels) the tools aim at instead of the mouse, for scripted
+        /// captures; null for the mouse. Aims only: it clicks nothing.
+        /// </summary>
+        public Vector2? PointerOverride { get; set; }
+
+        /// <summary>Undo and redo for the player's designation edits, for the map now in use.</summary>
+        public DesignationHistory History { get; private set; }
+
+        /// <summary>Cut and fill the brush would designate where it is now, in m³ (Dig and Fill).</summary>
+        public float BrushCut { get; private set; }
+
+        public float BrushFill { get; private set; }
+
+        /// <summary>Whether a Dig or Fill stroke is being painted, and the height it paints to.</summary>
+        public bool IsPainting => _painting;
+
+        public float StrokeHeight => _strokeHeight;
+
+        /// <summary>The height last picked with Alt-click, and where; NaN before the first pick.</summary>
+        public float PickedHeight { get; private set; } = float.NaN;
+
+        public Vector2Int PickedCell { get; private set; }
+
+        /// <summary>Whether the tool uses the target height H.</summary>
+        public bool UsesHeight => Mode == ToolMode.Dig || Mode == ToolMode.Fill || Mode == ToolMode.Level
+            || Mode == ToolMode.DumpZone || Mode == ToolMode.Road;
+
+        /// <summary>Whether H follows the hovered cell (the panel's toggle); false once H is set.</summary>
+        public bool HeightFollowsCursor
+        {
+            get => !HeightLocked;
+            set => HeightLocked = !value;
+        }
+
+        /// <summary>Sets H, which stops it following the cursor.</summary>
+        public void SetTargetHeight(float height)
+        {
+            TargetHeight = height;
+            HeightLocked = true;
+        }
+
+        /// <summary>Moves H up or down, as PageUp and PageDown do.</summary>
+        public void NudgeTargetHeight(float delta)
+        {
+            if (_terrain.Grid != null)
+                NudgeHeight(delta, _terrain.Grid);
+        }
+
+        /// <summary>The height step H moves by: the grid's, or a metre.</summary>
+        public float HeightStep => _terrain.Grid != null && _terrain.Grid.HeightStep > 0f ? _terrain.Grid.HeightStep : 1f;
+
+        /// <summary>Takes back the last designation edit.</summary>
+        public void Undo()
+        {
+            CancelDrawing();
+            var label = History?.Undo();
+            LastAction = label != null ? $"Undid {label}" : "Nothing to undo";
+        }
+
+        /// <summary>Does the last undone edit again.</summary>
+        public void Redo()
+        {
+            CancelDrawing();
+            var label = History?.Redo();
+            LastAction = label != null ? $"Redid {label}" : "Nothing to redo";
+        }
+
         void Start()
         {
             _preview = new Mesh { name = "Tool Preview" };
@@ -125,6 +206,8 @@ namespace TinyDiggers.Interaction
             var meshRenderer = preview.AddComponent<MeshRenderer>();
             meshRenderer.sharedMaterial = _overlayMaterial;
             meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
+
+            gameObject.AddComponent<BrushCursorView>().Init(this, _terrain, _overlayMaterial);
         }
 
         public void SetMode(ToolMode mode)
@@ -160,19 +243,41 @@ namespace TinyDiggers.Interaction
             if (grid == null)
                 return;
 
+            if (!ReferenceEquals(Map, _historyFor))
+            {
+                History?.Dispose();
+                _historyFor = Map;
+                History = Map != null ? new DesignationHistory(Map) : null;
+            }
+
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
-            ReadKeys(keyboard, grid);
+            if (!TypingInField())
+                ReadKeys(keyboard, grid);
 
+            // Over the toolbar or a panel, the mouse belongs to the UI, not the ground; a stroke or
+            // a drag already under way carries on.
+            var overUi = mouse != null && !_painting && !_dragging && !_boxPressed && PointerOverUi();
             HasHover = false;
-            if (mouse != null)
+            if (PointerOverride.HasValue)
+                Pick(grid, PointerOverride.Value);
+            else if (mouse != null && !overUi)
                 Pick(grid, mouse.position.ReadValue());
             if (!HeightLocked && !_painting && !_dragging && HasHover)
                 TargetHeight = grid.GetSurfaceHeight(HoverX, HoverZ);
 
-            if (mouse != null)
+            if (mouse != null && !overUi && !PointerOverride.HasValue)
                 HandleMouse(mouse, grid);
             UpdatePreview(grid);
+        }
+
+        static bool PointerOverUi() => EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+
+        /// <summary>Whether a text field has the keyboard, so keys are typing rather than hotkeys.</summary>
+        static bool TypingInField()
+        {
+            var selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+            return selected != null && selected.TryGetComponent<InputField>(out var field) && field.isFocused;
         }
 
         void ReadKeys(Keyboard keyboard, TerrainGrid grid)
@@ -216,6 +321,18 @@ namespace TinyDiggers.Interaction
 
             if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
                 FinishRoad();
+
+            var ctrl = keyboard.ctrlKey.isPressed;
+            if (ctrl && keyboard.zKey.wasPressedThisFrame)
+            {
+                if (keyboard.shiftKey.isPressed)
+                    Redo();
+                else
+                    Undo();
+            }
+
+            if (ctrl && keyboard.yKey.wasPressedThisFrame)
+                Redo();
         }
 
         void Resize(int by)
@@ -223,7 +340,7 @@ namespace TinyDiggers.Interaction
             if (Mode == ToolMode.Road)
                 RoadWidth = Mathf.Clamp(RoadWidth + by * 2, 3, 7);
             else
-                BrushRadius = Mathf.Clamp(BrushRadius + by, 1, 5);
+                BrushRadius = Mathf.Clamp(BrushRadius + by, BrushPlan.MinRadius, BrushPlan.MaxRadius);
         }
 
         void NudgeHeight(float delta, TerrainGrid grid)
@@ -349,6 +466,21 @@ namespace TinyDiggers.Interaction
                 return;
             }
 
+            // The eyedropper: Alt-click samples the ground into H.
+            var keyboard = Keyboard.current;
+            if (leftDown && UsesHeight && !IsDrawing && keyboard != null && keyboard.altKey.isPressed)
+            {
+                if (HasHover)
+                {
+                    PickedHeight = grid.GetSurfaceHeight(HoverX, HoverZ);
+                    PickedCell = new Vector2Int(HoverX, HoverZ);
+                    SetTargetHeight(PickedHeight);
+                    LastAction = $"Picked H = {PickedHeight:0.##} m at ({HoverX}, {HoverZ})";
+                }
+
+                return;
+            }
+
             if (rightDown)
             {
                 if (IsDrawing)
@@ -358,7 +490,9 @@ namespace TinyDiggers.Interaction
                 }
                 else if (HasHover)
                 {
+                    History?.Begin("clear");
                     var cleared = ApplyBrush(HoverX, HoverZ, cell => Map.Cancel(cell.x, cell.y));
+                    History?.Commit();
                     LastAction = $"Cleared {cleared} cell{(cleared == 1 ? "" : "s")}";
                 }
 
@@ -390,6 +524,7 @@ namespace TinyDiggers.Interaction
                 _painting = true;
                 _strokeHeight = TargetHeight;
                 _strokeCells.Clear();
+                History?.Begin(Mode == ToolMode.Dig ? "dig" : "fill");
             }
 
             if (_painting && held && HasHover)
@@ -408,6 +543,7 @@ namespace TinyDiggers.Interaction
             if (!_painting || !up)
                 return;
             _painting = false;
+            History?.Commit();
             var verb = Mode == ToolMode.Dig ? "dig" : "fill";
             var count = _strokeCells.Count;
             LastAction = count > 0
@@ -431,6 +567,19 @@ namespace TinyDiggers.Interaction
                 return;
 
             var area = Rectangle(_dragFrom, new Vector2Int(HoverX, HoverZ));
+            History?.Begin(Mode == ToolMode.DumpZone ? "dump zone" : Mode == ToolMode.Level ? "level" : "clear");
+            try
+            {
+                ApplyRectangle(area, grid);
+            }
+            finally
+            {
+                History?.Commit();
+            }
+        }
+
+        void ApplyRectangle(RectInt area, TerrainGrid grid)
+        {
             switch (Mode)
             {
                 case ToolMode.DumpZone:
@@ -460,12 +609,24 @@ namespace TinyDiggers.Interaction
                     var cleared = 0;
                     for (var z = area.yMin; z < area.yMax; z++)
                         for (var x = area.xMin; x < area.xMax; x++)
-                            if (Map.Cancel(x, z))
+                            if (ClearCell(x, z))
                                 cleared++;
                     LastAction = $"Cleared {cleared} cell{(cleared == 1 ? "" : "s")}";
                     break;
                 }
             }
+        }
+
+        /// <summary>Takes off what the Clear tool's checkboxes say: dig, fill, Dump Zone. Returns whether anything went.</summary>
+        bool ClearCell(int x, int z)
+        {
+            var kind = Map.GetKind(x, z);
+            var changed = false;
+            if (kind == DesignationKind.Dig && ClearDig || kind == DesignationKind.Fill && ClearFill)
+                changed = Map.CancelDesignation(x, z);
+            if (ClearZones && Map.SetDumpZone(x, z, false))
+                changed = true;
+            return changed;
         }
 
         /// <summary>Places a road control point at a cell, as clicking it would. For scripted runs.</summary>
@@ -520,7 +681,9 @@ namespace TinyDiggers.Interaction
                 return;
             }
 
+            History?.Begin("road");
             var made = Blueprints.Apply(Map, _plan);
+            History?.Commit();
             Blueprints.Volumes(_plan, out var cut, out var fill, _terrain.Grid.CellArea);
             LastAction = $"Road laid: {made} cells, {cut:0} m³ cut, {fill:0} m³ fill";
             CancelDrawing();
@@ -529,19 +692,11 @@ namespace TinyDiggers.Interaction
         /// <summary>Runs <paramref name="apply"/> on every cell of the brush; returns how many it changed.</summary>
         int ApplyBrush(int centreX, int centreZ, System.Func<Vector2Int, bool> apply)
         {
-            var grid = _terrain.Grid;
+            BrushPlan.Cells(_terrain.Grid, centreX, centreZ, BrushRadius, _brushCells);
             var applied = 0;
-            for (var dz = -BrushRadius; dz <= BrushRadius; dz++)
-            {
-                for (var dx = -BrushRadius; dx <= BrushRadius; dx++)
-                {
-                    if (dx * dx + dz * dz > BrushRadius * BrushRadius || !grid.IsGround(centreX + dx, centreZ + dz))
-                        continue;
-                    if (apply(new Vector2Int(centreX + dx, centreZ + dz)))
-                        applied++;
-                }
-            }
-
+            foreach (var cell in _brushCells)
+                if (apply(cell))
+                    applied++;
             return applied;
         }
 
@@ -561,19 +716,23 @@ namespace TinyDiggers.Interaction
             _triangles.Clear();
             PlannedCut = 0f;
             PlannedFill = 0f;
+            BrushCut = 0f;
+            BrushFill = 0f;
 
             switch (Mode)
             {
                 case ToolMode.Dig:
                 case ToolMode.Fill:
+                    // The ring and the ghost disc are BrushCursorView's; this is the cost.
                     if (HasHover)
                     {
                         var height = _painting ? _strokeHeight : TargetHeight;
-                        ApplyBrush(HoverX, HoverZ, cell =>
-                        {
-                            DesignationsView.AddTile(cell.x, cell.y, height, height, height, height, _previewColor, _vertices, _colors, _triangles, _terrain.Grid.CellSize);
-                            return true;
-                        });
+                        BrushPlan.Cells(grid, HoverX, HoverZ, BrushRadius, _brushCells);
+                        BrushPlan.Volumes(grid, _brushCells, height, Mode == ToolMode.Dig, Mode == ToolMode.Fill, out var cut, out var fill);
+                        BrushCut = cut;
+                        BrushFill = fill;
+                        PlannedCut = cut;
+                        PlannedFill = fill;
                     }
 
                     break;
@@ -614,11 +773,26 @@ namespace TinyDiggers.Interaction
                 {
                     if (!grid.IsGround(x, z))
                         continue;
+                    var color = ToolColor(Mode, 90);
                     if (Mode == ToolMode.Level || Mode == ToolMode.DumpZone)
-                        DesignationsView.AddTile(x, z, height, height, height, height, _rectColor, _vertices, _colors, _triangles, _terrain.Grid.CellSize);
+                        DesignationsView.AddTile(x, z, height, height, height, height, color, _vertices, _colors, _triangles, _terrain.Grid.CellSize);
                     else
-                        DesignationsView.AddSurfaceTile(grid, x, z, _rectColor, _vertices, _colors, _triangles, 0.08f);
+                        DesignationsView.AddSurfaceTile(grid, x, z, color, _vertices, _colors, _triangles, 0.08f);
                 }
+            }
+        }
+
+        /// <summary>The colour each tool marks the ground in: red dig, blue fill, purple level, green dump.</summary>
+        public static Color32 ToolColor(ToolMode mode, byte alpha)
+        {
+            switch (mode)
+            {
+                case ToolMode.Dig: return new Color32(235, 70, 60, alpha);
+                case ToolMode.Fill: return new Color32(70, 140, 245, alpha);
+                case ToolMode.Level: return new Color32(170, 90, 230, alpha);
+                case ToolMode.DumpZone: return new Color32(80, 205, 95, alpha);
+                case ToolMode.Road: return new Color32(120, 230, 160, alpha);
+                default: return new Color32(140, 220, 255, alpha);
             }
         }
 

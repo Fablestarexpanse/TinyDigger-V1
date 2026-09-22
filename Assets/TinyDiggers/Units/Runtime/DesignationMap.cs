@@ -15,6 +15,33 @@ namespace TinyDiggers.Units
         Fill,
     }
 
+    /// <summary>One cell's designation and Dump Zone, as <see cref="DesignationMap.Snapshot"/> takes it.</summary>
+    public readonly struct DesignationCellState : IEquatable<DesignationCellState>
+    {
+        public readonly DesignationKind Kind;
+        public readonly float Target;
+        public readonly bool Auto;
+        public readonly bool DumpZone;
+        public readonly float DumpZoneCap;
+
+        public DesignationCellState(DesignationKind kind, float target, bool auto, bool dumpZone, float dumpZoneCap)
+        {
+            Kind = kind;
+            Target = target;
+            Auto = auto;
+            DumpZone = dumpZone;
+            DumpZoneCap = dumpZoneCap;
+        }
+
+        public bool Equals(DesignationCellState other) =>
+            Kind == other.Kind && Target.Equals(other.Target) && Auto == other.Auto
+            && DumpZone == other.DumpZone && DumpZoneCap.Equals(other.DumpZoneCap);
+
+        public override bool Equals(object obj) => obj is DesignationCellState other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(Kind, Target, Auto, DumpZone, DumpZoneCap);
+    }
+
     /// <summary>
     /// What the player has asked to be done to each cell: dig to height H or fill to height H,
     /// per cell (TERRAIN_REFERENCE.md section 4). A designation stays until it is met, when it
@@ -71,6 +98,12 @@ namespace TinyDiggers.Units
         public event Action<int, int> Changed;
 
         /// <summary>
+        /// Raised with (x, z) just before a cell's designation or Dump Zone changes, while it still
+        /// holds what it held: what undo listens to (<see cref="Snapshot"/> in the handler).
+        /// </summary>
+        public event Action<int, int> Changing;
+
+        /// <summary>
         /// Raised with (x, z) when the player removes an Auto designation, or replaces it with one
         /// of their own. Not raised when an Auto designation is met or a unit removes it.
         /// </summary>
@@ -106,6 +139,26 @@ namespace TinyDiggers.Units
 
         /// <summary>The height nothing may be heaped above on this Dump Zone cell; infinite if uncapped.</summary>
         public float DumpZoneCap(int x, int z) => _dumpCap[Index(x, z)];
+
+        /// <summary>Everything the map holds for one cell.</summary>
+        public DesignationCellState Snapshot(int x, int z)
+        {
+            var cell = Index(x, z);
+            return new DesignationCellState(_kinds[cell], _targets[cell], _auto[cell], _dumpSlot[cell] >= 0, _dumpCap[cell]);
+        }
+
+        /// <summary>
+        /// Puts a cell back to a <see cref="Snapshot"/>: its designation (unless the ground already
+        /// meets it, when there is nothing left to do) and its Dump Zone.
+        /// </summary>
+        public void Restore(int x, int z, DesignationCellState state)
+        {
+            if (state.Kind == DesignationKind.None)
+                Clear(x, z);
+            else
+                Designate(x, z, state.Kind, state.Target, state.Auto);
+            SetDumpZone(x, z, state.DumpZone, state.DumpZoneCap);
+        }
 
         /// <summary>Whether the cell's surface already satisfies a designation of this kind and height.</summary>
         public bool Satisfies(int x, int z, DesignationKind kind, float height)
@@ -147,6 +200,7 @@ namespace TinyDiggers.Units
             if (_kinds[cell] == kind && _targets[cell] == height && _auto[cell] == auto)
                 return true;
 
+            Changing?.Invoke(x, z);
             _kinds[cell] = kind;
             _targets[cell] = height;
             SetAuto(cell, auto);
@@ -179,6 +233,22 @@ namespace TinyDiggers.Units
             return hadDesignation || hadZone;
         }
 
+        /// <summary>
+        /// The player's clear of the designation only, leaving any Dump Zone on the cell: as
+        /// <see cref="Cancel"/> otherwise. Returns whether there was a designation to remove.
+        /// </summary>
+        public bool CancelDesignation(int x, int z)
+        {
+            var cell = Index(x, z);
+            if (_kinds[cell] == DesignationKind.None)
+                return false;
+            var wasAuto = _auto[cell];
+            Clear(x, z);
+            if (wasAuto)
+                AutoCancelled?.Invoke(x, z);
+            return true;
+        }
+
         /// <summary>Removes the cell's designation, met or not, without counting as a cancel.</summary>
         public void Clear(int x, int z)
         {
@@ -186,6 +256,7 @@ namespace TinyDiggers.Units
             if (_kinds[cell] == DesignationKind.None)
                 return;
 
+            Changing?.Invoke(x, z);
             _kinds[cell] = DesignationKind.None;
             _targets[cell] = 0f;
             SetAuto(cell, false);
@@ -227,11 +298,13 @@ namespace TinyDiggers.Units
             {
                 if (!on || _dumpCap[cell] == cap)
                     return false;
+                Changing?.Invoke(x, z);
                 _dumpCap[cell] = cap;
                 Raise(x, z);
                 return true;
             }
 
+            Changing?.Invoke(x, z);
             if (on)
             {
                 _dumpCap[cell] = cap;

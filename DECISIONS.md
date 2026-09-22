@@ -3072,3 +3072,68 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   - Fill designations were already allowed on water (only Dig is refused), and building a cell
     above the water dries it at once.
   - A worker left holding less than one tip step (0.125 m³) doesn't tip it and goes idle.
+
+## Slice 17: mouse-first toolbar, then spline roads (2026-09-22) — Part A design, proposed
+- **Ronan's brief is called "Slice 9"**, but that number already belongs to water in this log, and
+  the last one used is 16. It is logged here as Slice 17.
+- **Part A design, awaiting approval** (the working style is to propose the API before writing
+  integration code). The plain C# pieces are unit-tested without a scene:
+  - `Interaction/DesignationHistory` (plain C#): undo and redo for designation edits, 50 steps.
+    Each edit records the cells' state before it (kind, target, auto, dump zone, cap):
+    `Begin(label)`, `Record(x, z)`, `Commit()`, `Undo()`, `Redo()`, `CanUndo`, `CanRedo`.
+    `DesignationMap` gets `CellState Snapshot(x, z)` and `Restore(x, z, CellState)`.
+    Crew work (digging, filling, auto designations) is never recorded.
+  - `Interaction/BrushPlan` (plain C#): the cells under a circular brush of radius 1–8, and the
+    cut, fill and net m³ it would designate at H. The panel readout and the ghost both use it.
+  - `Interaction/ToolIcons`: a 256×256 sprite sheet, 8×8 cells of 32 px. It is drawn by a Python
+    script (`Art/Tools/td_tool_icons.py`, supersampled, flat white glyphs) and committed as a PNG.
+    It is not SVG, because importing SVG needs the vector graphics package.
+  - `ToolbarView`: rebuilt as groups of icon buttons with hover tooltips (label + hotkey, after
+    0.4 s): Select | Dig Fill Level | Road | Dump Zone | Clear | spacer | Seed | Settings (F2) |
+    Debug (F3).
+  - `ToolPanelView`: the context panel above the bar. Brush radius slider; H with −/+ buttons and
+    a field; an "H follows cursor" toggle; the Alt-click eyedropper readout; cut/fill/net under
+    the brush; the Dump Zone cap; Clear checkboxes (dig, fill, dump zone).
+  - `BrushCursorView`: the brush ring draped on the ground and coloured by tool (red dig, blue
+    fill, purple level, green dump), and a translucent ghost disc at H.
+  - `CrewPanelView`: top left, one row per unit (role icon, state, load bar). Click selects,
+    double-click also focuses the camera (a new `RtsCamera.FocusOn(Vector3)`). A yellow banner
+    shows while any unit needs a Dump Zone. The F3 debug readout stays, off by default.
+  - `PlayerTools` keeps all its hotkeys. Escape still returns to Select. It gains Ctrl+Z/Ctrl+Y,
+    Alt-click to pick H, and pipes every designation edit through `DesignationHistory`.
+  - No new packages: uGUI 2.6.0 and the Input System are already in the manifest.
+- **Part A built (approved: "Continue").**
+  - `DesignationHistory`: `DesignationMap` raises `Changing` before any change, and the history
+    snapshots each cell the first time an open edit touches it. Edits are dig/fill strokes,
+    rectangles, roads, and the right-click and Clear-tool clears. The crew's work (a met
+    designation, a unit's own ramp step) happens outside any recording and is never undone.
+    Ctrl+Z undoes; Ctrl+Y or Ctrl+Shift+Z redoes.
+  - `BrushPlan` gives the brush cells (a disc, radius 1–8) and their cut/fill. The panel readout
+    and the ghost both use it.
+  - The icons are drawn by `Art/Tools/td_tool_icons.py` into `Interaction/Resources/ToolIcons.png`:
+    17 glyphs at 64 px, readable at 32. On a lit button the icon turns dark, because white on
+    amber barely showed.
+  - `ToolbarView` is rebuilt as icon groups with 0.4 s tooltips (name, hotkey, what it does). Seed
+    needs a second click within 2.5 s, since it throws the island away. Settings opens the F2
+    panel; Debug toggles the F3 readout.
+  - `ToolPanelView`: the rows each tool needs.
+    - Brush radius slider (Dig and Fill only; Level stays a dragged rectangle until Part B gives
+      it slopes).
+    - H with −/+ and a field; "H follows cursor"; the eyedropper line.
+    - Cut/fill/net readout; Dump Zone cap; road width 3/5/7; Clear checkboxes.
+  - `BrushCursorView`: the ring on the ground and the ghost disc at H, in tool colours.
+  - `CrewPanelView`: the rows, load bars and yellow banner. Double-click glides the camera
+    (`RtsCamera.FocusOn`).
+  - `PlayerTools`:
+    - Clicks over the UI no longer reach the ground (they used to: clicking a toolbar button also
+      applied the tool behind it).
+    - Hotkeys wait while a text field is focused.
+    - Alt-click picks H.
+    - `PointerOverride` lets scripted captures aim the tool without clicking.
+    - Clear honours the checkboxes, via a new `DesignationMap.CancelDesignation`, which leaves a
+      Dump Zone alone.
+  - `TinyDiggers/Slice 17 Capture` writes `Screenshots/Slice17/`: the toolbar with Dig and its
+    panel, the ring and ghost disc on a slope, and the crew panel with the warning. Tooltips
+    follow the real mouse, so no shot shows one.
+  - 441 tests green (7 new: undo/redo, the crew's work not recorded, 50-step cap, brush cells
+    and volumes).
