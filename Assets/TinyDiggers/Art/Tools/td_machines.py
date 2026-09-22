@@ -648,6 +648,108 @@ def clips(name):
             for label, action in made.items()}
 
 
+# --- stage 5: out to Unity ---------------------------------------------------------------------
+
+UNITY_UNITS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Units")
+
+
+def _stash_clips(rig):
+    """
+    Puts each of this rig's actions on its own NLA track, muted, and clears the active action.
+
+    The FBX exporter's "all actions" mode writes *every* action in the file onto *every* armature,
+    so the digger came into Unity carrying the hauler's walk (2026-09-22). One strip per clip per
+    rig is what actually makes one Unity clip per clip.
+    """
+    if rig.animation_data is None:
+        rig.animation_data_create()
+    data = rig.animation_data
+    data.action = None
+    for track in list(data.nla_tracks):
+        data.nla_tracks.remove(track)
+
+    mine = [a for a in bpy.data.actions if a.name.startswith(f"{rig.name}|")]
+    for action in mine:
+        track = data.nla_tracks.new()
+        track.name = action.name.split("|", 1)[1]
+        strip = track.strips.new(track.name, 1, action)
+        strip.name = track.name
+        track.mute = True
+    return [a.name for a in mine]
+
+
+def export(name, folder=None):
+    """
+    Stage 5. Writes <name>.fbx with its rig and its own clips, at true metres.
+
+    The crew rig's notes apply: `bake_space_transform` must stay **off** (with it on the armature
+    clips came out flattened in Unity) and the model must already face Blender +Y, because the FBX
+    axis options are undone on the way in. The Unity importer wants `bakeAxisConversion` on.
+
+    Scale is written with FBX_SCALE_UNITS: FBX_SCALE_NONE brought the machines into Unity a
+    hundredth of their size. Textures are written beside the file rather than embedded, because an
+    embedded .fbm put Unity into an endless re-import loop.
+    """
+    folder = folder or UNITY_UNITS
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, f"{name}.fbx")
+
+    mesh = bpy.data.objects[name]
+    rig = bpy.data.objects[f"{name}_rig"]
+    clips_out = [a.name for a in bpy.data.actions if a.name.startswith(f"{rig.name}|")]
+    rig.animation_data_create()
+    rig.animation_data.action = None
+
+    for obj in bpy.data.objects:
+        obj.select_set(obj in (mesh, rig))
+    bpy.context.view_layer.objects.active = rig
+
+    with bpy.context.temp_override(active_object=rig, object=rig,
+                                   selected_objects=[mesh, rig],
+                                   selected_editable_objects=[mesh, rig]):
+        bpy.ops.export_scene.fbx(
+            filepath=path,
+            use_selection=True,
+            apply_scale_options='FBX_SCALE_UNITS',
+            bake_space_transform=False,
+            object_types={'ARMATURE', 'MESH'},
+            use_mesh_modifiers=False,
+            add_leaf_bones=False,
+            primary_bone_axis='Y',
+            secondary_bone_axis='X',
+            # Every action in the file, which is why a machine is exported from a scene of its
+            # own: "all actions" means all of them, so a shared scene gave the digger the
+            # hauler's walk. Muted NLA strips, tried first, gave Unity no takes at all.
+            bake_anim=True,
+            bake_anim_use_all_actions=True,
+            bake_anim_use_nla_strips=False,
+            bake_anim_simplify_factor=0.0,
+            # The maps already live in the project (Units/Textures), so the FBX points at them
+            # rather than carrying copies: an embedded .fbm put Unity into an endless re-import.
+            path_mode='AUTO',
+            embed_textures=False,
+        )
+
+    for obj in bpy.data.objects:
+        obj.select_set(False)
+    size = os.path.getsize(path)
+    _log(f"{name}: exported {path} ({size / 1e6:.1f} MB, clips {len(clips_out)})")
+    return {"path": path, "bytes": size, "clips": clips_out}
+
+
+def export_all(folder=None):
+    """
+    Builds each machine in a scene of its own and exports it, so its FBX carries its own clips and
+    nothing else. Leaves both machines in the scene afterwards, ready to look at.
+    """
+    out = {}
+    for name in SCANS:
+        bpy.ops.wm.read_homefile(use_empty=True)
+        build(name)
+        out[name] = export(name, folder)
+    return out
+
+
 # --- looking at what came out ----------------------------------------------------------------
 
 CREW_BLEND = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),

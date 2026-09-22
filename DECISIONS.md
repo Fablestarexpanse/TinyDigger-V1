@@ -3350,4 +3350,26 @@ hand-fixed:
   ball's radius.
 - Deciding per vertex split long panels: the hauler's tray came apart into slabs, half following
   the tray and half staying put. Weighting decides per shell now.
+- **Clips (stage 4):** walk, idle and turn in place for both, the digger's scoop and the hauler's
+  tip. Opposite legs swing together so two feet are always down; the body bobs 5 cm over a stride.
+  Eight actions at 30 fps, kept by a fake user.
+- **The tray rests level now.** The scan was made tipped up, which is a poor rest pose. The tray is
+  measured by its **rim** — a hopper's floor is a V, and fitting that gave nonsense — and turned
+  back 4.8 degrees about its hinge, leaving 0.7 degrees of slope.
+- **Out to Unity (stage 5):** `digger.fbx` and `hauler.fbx` under `Art/Units`, with
+  `Art/Units/Textures`, `Materials` and `Prefabs` beside them. Digger 9959 triangles at
+  3.14 x 3.24 m, hauler 9796 at 2.42 x 2.85 m; four named, looping-where-they-should clips each.
+- **The rust is eased** (`Art/Tools/td_ease_rust.py`): orange-brown, duller, darker pixels that
+  differ from the paint around them are pulled 65% towards a median-filtered copy. About 4 to 5% of
+  each colour map was rust. The raw maps are kept beside them as `*_raw.png`.
+- **Export traps, all recorded in the tool:** `FBX_SCALE_NONE` brought the machines in at a
+  hundredth of their size; embedding textures put Unity into an endless re-import loop; muted NLA
+  strips gave Unity no takes at all; and "all actions" means *all* of them, so each machine is now
+  exported from a scene of its own or the digger carries the hauler's walk.
+- **Materials:** glTF packs occlusion, roughness and metallic into one map, so it is repacked once
+  for URP (metallic in R, smoothness in A). The multipliers are pulled back to metal 0.12 and
+  smoothness 0.35 — at full strength the shell read as chrome beside the terrain.
+
+**Not done yet:** the machines are art and prefabs only. Nothing in the game spawns them, and the
+`Digger` and `Hauler` roles still run with the crew robot's look and numbers.
 
