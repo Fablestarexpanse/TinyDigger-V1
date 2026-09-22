@@ -195,18 +195,23 @@ namespace TinyDiggers.Terrain
         /// </summary>
         public static void Thermal(float[] heights, int width, int depth, bool[] fixedCells, float[] talus, int iterations)
         {
+            // Two buffers, swapped each pass rather than copied back: the copy was a full pass
+            // over the map of its own.
+            var current = heights;
             var next = new float[heights.Length];
             for (var pass = 0; pass < iterations; pass++)
             {
+                var from = current;
+                var to = next;
                 Parallel.For(0, depth, z =>
                 {
                     for (var x = 0; x < width; x++)
                     {
                         var cell = z * width + x;
-                        var h = heights[cell];
+                        var h = from[cell];
                         if (fixedCells[cell])
                         {
-                            next[cell] = h;
+                            to[cell] = h;
                             continue;
                         }
 
@@ -220,7 +225,7 @@ namespace TinyDiggers.Terrain
                             var other = az * width + ax;
                             if (fixedCells[other])
                                 continue;
-                            var hn = heights[other];
+                            var hn = from[other];
                             // A pair is judged by the talus of its higher cell, so both cells
                             // work out the same transfer and what one loses the other gains.
                             if (h > hn)
@@ -237,11 +242,15 @@ namespace TinyDiggers.Terrain
                             }
                         }
 
-                        next[cell] = h + change;
+                        to[cell] = h + change;
                     }
                 });
-                Array.Copy(next, heights, heights.Length);
+                current = to;
+                next = from;
             }
+
+            if (!ReferenceEquals(current, heights))
+                Array.Copy(current, heights, heights.Length);
         }
 
         // --- depressions ----------------------------------------------------------------------

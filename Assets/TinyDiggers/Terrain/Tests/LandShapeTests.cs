@@ -6,8 +6,8 @@ namespace TinyDiggers.Terrain.Tests
 {
     /// <summary>
     /// What the land mask has to produce whatever the seed: a coast with bays in it, land worth
-    /// playing on rather than a scatter of specks, rivers that reach the sea, and a map in under
-    /// half a second.
+    /// playing on rather than a scatter of specks, rivers that reach the sea, and a 512² map in under
+    /// 0.65 s (half a second until the natural terrain; raised with Ronan's OK, 2026-09-21).
     /// </summary>
     public class LandShapeTests
     {
@@ -244,7 +244,7 @@ namespace TinyDiggers.Terrain.Tests
                     best = System.Math.Min(best, IslandGenerator.Generate(grid, settings).Milliseconds);
                 }
 
-                Assert.That(best, Is.LessThan(500d), $"512² took {best:0} ms at best of three");
+                Assert.That(best, Is.LessThan(650d), $"512² took {best:0} ms at best of three");
             }
             finally
             {

@@ -117,7 +117,9 @@ namespace TinyDiggers.Terrain.Tests
         public void AGameSizeMapAtHalfMetreCellsIsGeneratedWithinBudget()
         {
             // The scene's map: 1024² half-metre cells over the same ~512 m island. The budget is
-            // 1.2 s (it was 500 ms at 512² one-metre cells; approved with slice 11).
+            // 1.6 s. It was 500 ms at 512² one-metre cells, then 1.2 s with slice 11, and was raised
+            // with Ronan's OK (2026-09-21) for the natural terrain: erosion, cliffs, bigger mountains
+            // and rivers.
             var settings = ScriptableObject.CreateInstance<TerrainGenSettings>();
             try
             {
@@ -130,7 +132,7 @@ namespace TinyDiggers.Terrain.Tests
                     best = System.Math.Min(best, IslandGenerator.Generate(grid, settings).Milliseconds);
                 }
 
-                Assert.That(best, Is.LessThan(1200d), $"1024² at 0.5 m took {best:0} ms at best of two");
+                Assert.That(best, Is.LessThan(1600d), $"1024² at 0.5 m took {best:0} ms at best of two");
             }
             finally
             {

@@ -26,8 +26,8 @@ MonoBehaviour:
   UseLandTypes: 1
   PlainsShareMin: 0.25
   PlainsShareMax: 0.55
-  MountainShareMin: 0.08
-  MountainShareMax: 0.3
+  MountainShareMin: 0.18
+  MountainShareMax: 0.38
   TypeFeatureSize: 260
   TypeBlend: 0.06
   RidgeMountainBias: 0.35
@@ -36,8 +36,8 @@ MonoBehaviour:
   ShoreHeight: 1
   InlandRise: 5
   InlandRiseDistance: 120
-  MountainCrestMin: 35
-  MountainCrestMax: 70
+  MountainCrestMin: 80
+  MountainCrestMax: 130
   PlainsFeatureSize: 180
   PlainsRelief: 1.5
   HillsFeatureSize: 140
@@ -83,7 +83,7 @@ MonoBehaviour:
   MaxCliffStep: 3
   CliffSlope: 55
   RidgeHeight: 30
-  RidgeWidth: 110
+  RidgeWidth: 170
   ValleyCut: 5
   Plateaus: 1
   RidgeWarpSize: 25

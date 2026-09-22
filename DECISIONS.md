@@ -2887,3 +2887,32 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   The loaded asset kept an in-memory value from an earlier build (crest minimum 45 where the code
   said 35) until it was set and saved (`SetDirty` + `SaveAssets`). New settings now go into the
   asset.
+
+### Much bigger mountains, faster generation, new budgets (2026-09-21)
+- **Ronan:** "I still think mountains could be much larger and taller".
+- **The asset now draws:**
+  - mountains as 18–38% of the land (was 8–30%);
+  - the crest at 80–130 m (was 35–70 m);
+  - a ridge band 170 m wide (was 110 m).
+- **Result, seeds 11, 23, 37 and 58:**
+
+  | Measure | Value |
+  |---|---|
+  | Peaks | 88.5, 77.5, 102 and 79 m |
+  | Mountains | 23–29% of the land |
+  | Steep ground | 26–32% |
+  | Cliff steps | 15–20% (the mountains' rock faces) |
+  | Pits | 3–9 |
+
+- **Faster:** heights no longer compute the hill and mountain noise where their weight is zero,
+  which was most of the land; that took heights from about 240 ms to about 110 ms at 1024². The
+  thermal passes swap two buffers instead of copying back. The flow accumulation sorts a key array
+  instead of using a comparison delegate.
+- **Budgets raised** with Ronan's OK (AskUserQuestion: "Raise to 1.6 s"). The 1024² map at 0.5 m
+  went from 1.2 s to 1.6 s: in the suite it was measuring 1,204–1,239 ms, and about 1,110 ms
+  alone. The 512² map went from 500 ms to 650 ms: it measured 532 ms before the speed-ups,
+  443–457 ms after.
+- **Rivers and creeks, agreed design** (AskUserQuestion; the recommended option each time):
+  - 1–3 rivers and 4–10 creeks, random per seed;
+  - rivers block the crew (deeper than wading), and creeks wade;
+  - the water is simulated from springs at each head, not drawn as ribbons.

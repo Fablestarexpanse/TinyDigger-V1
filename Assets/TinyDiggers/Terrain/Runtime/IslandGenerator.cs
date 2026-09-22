@@ -537,18 +537,29 @@ namespace TinyDiggers.Terrain
                     var rise = settings.InlandRise * (1f - Mathf.Exp(-toSea[cell] / Mathf.Max(1f, settings.InlandRiseDistance)));
                     var plain = settings.ShoreHeight + rise + Fbm(warped, baseOffset, settings.PlainsFeatureSize, 2) * 2f * settings.PlainsRelief;
 
-                    var mound = Smooth(Fbm(warped, hillsOffset, settings.HillsFeatureSize, 3) * 1.6f + 0.5f);
-                    var hill = plain + mound * settings.HillsRelief;
+                    // Only what has weight here is worked out: most land is plain, where the hill
+                    // and mountain noise counted for nothing but cost most of the stage.
+                    var hill = plain;
+                    if (plains < 1f)
+                    {
+                        var mound = Smooth(Fbm(warped, hillsOffset, settings.HillsFeatureSize, 3) * 1.6f + 0.5f);
+                        hill = plain + mound * settings.HillsRelief;
+                    }
 
                     // Mountains: the ridged crest, stronger on the ridge line, and the finer octaves.
-                    var crestAt = warped + Direction(warped, ridgeWarp, settings.RidgeWarpSize) * settings.RidgeWarpStrength;
-                    var crest = RidgedFbm(crestAt, ridgeOffset, settings.FeatureSize * 0.55f, 4);
-                    crest += (Noise(crestAt, ridgeOffset + new Vector2(211f, 97f), settings.RidgeWarpSize * 1.6f) - 0.5f) * 0.22f;
-                    var alongRidge = Mathf.Clamp01(1f - DistanceToCurve(warped, ridge) / Mathf.Max(4f, settings.RidgeWidth));
-                    var peak = Mathf.Clamp01(crest) * (0.55f + 0.45f * Smooth(alongRidge));
-                    var roughness = (Noise(warped, mediumOffset, settings.MediumSize) - 0.5f) * settings.MediumRelief
-                        + Fbm(warped, mediumOffset + new Vector2(313f, 77f), settings.DetailSize, 2) * 2f * settings.DetailRelief;
-                    var mountain = hill + peak * map.MountainCrest + roughness;
+                    var mountain = hill;
+                    var peak = 0f;
+                    if (mountains > 0f)
+                    {
+                        var crestAt = warped + Direction(warped, ridgeWarp, settings.RidgeWarpSize) * settings.RidgeWarpStrength;
+                        var crest = RidgedFbm(crestAt, ridgeOffset, settings.FeatureSize * 0.55f, 4);
+                        crest += (Noise(crestAt, ridgeOffset + new Vector2(211f, 97f), settings.RidgeWarpSize * 1.6f) - 0.5f) * 0.22f;
+                        var alongRidge = Mathf.Clamp01(1f - DistanceToCurve(warped, ridge) / Mathf.Max(4f, settings.RidgeWidth));
+                        peak = Mathf.Clamp01(crest) * (0.55f + 0.45f * Smooth(alongRidge));
+                        var roughness = (Noise(warped, mediumOffset, settings.MediumSize) - 0.5f) * settings.MediumRelief
+                            + Fbm(warped, mediumOffset + new Vector2(313f, 77f), settings.DetailSize, 2) * 2f * settings.DetailRelief;
+                        mountain = hill + peak * map.MountainCrest + roughness;
+                    }
 
                     var height = plains * plain + hills * hill + mountains * mountain;
                     highGround[cell] = mountains * peak;
@@ -1180,16 +1191,27 @@ namespace TinyDiggers.Terrain
         {
             var cells = heights.Length;
             var accumulation = new float[cells];
-            var order = new List<int>(cells);
+            var landCount = 0;
+            for (var cell = 0; cell < cells; cell++)
+                if (land[cell])
+                    landCount++;
+
+            // Highest first: sorted on a key array (the negated heights), which is several times
+            // faster than a comparison delegate over a million cells.
+            var order = new int[landCount];
+            var keys = new float[landCount];
+            var filled = 0;
             for (var cell = 0; cell < cells; cell++)
             {
                 if (!land[cell])
                     continue;
                 accumulation[cell] = 1f;
-                order.Add(cell);
+                order[filled] = cell;
+                keys[filled] = -heights[cell];
+                filled++;
             }
 
-            order.Sort((a, b) => heights[b].CompareTo(heights[a]));
+            Array.Sort(keys, order);
             foreach (var cell in order)
             {
                 var x = cell % width;
