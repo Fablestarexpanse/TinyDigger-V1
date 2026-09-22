@@ -36,6 +36,12 @@ namespace TinyDiggers.Units
         /// <summary>Extra cost per metre of height change, as a fraction of the step's length.</summary>
         public float SlopeCostFactor = 1f;
 
+        /// <summary>
+        /// Share of the normal cost of a step from one Road cell to another (Slice 17 Part B), with
+        /// no charge for the slope: that is what a road is for, and why units prefer one.
+        /// </summary>
+        public float RoadCost = 0.7f;
+
         readonly TerrainGrid _grid;
         readonly float[] _cost;
         readonly int[] _parent;
@@ -89,6 +95,8 @@ namespace TinyDiggers.Units
         public float StepCost(int ax, int az, int bx, int bz)
         {
             var distance = (ax != bx && az != bz ? Diagonal : 1f) * _grid.CellSize;
+            if (_grid.GetTopMaterial(ax, az) == MaterialTable.Road && _grid.GetTopMaterial(bx, bz) == MaterialTable.Road)
+                return distance * RoadCost;
             var rise = Math.Abs(_grid.GetSurfaceHeight(bx, bz) - _grid.GetSurfaceHeight(ax, az));
             return distance * (1f + rise * SlopeCostFactor);
         }
@@ -362,7 +370,9 @@ namespace TinyDiggers.Units
             var dx = Math.Abs(x - tx);
             var dz = Math.Abs(z - tz);
             var octile = Math.Max(dx, dz) + (Diagonal - 1f) * Math.Min(dx, dz);
-            return Math.Max(0f, octile - slack) * _grid.CellSize;
+            // Scaled by the road cost, the cheapest a step can be, so it never overestimates and the
+            // search still finds the cheapest way, road or not.
+            return Math.Max(0f, octile - slack) * _grid.CellSize * Math.Min(1f, RoadCost);
         }
 
         void Push(int cell, float key)

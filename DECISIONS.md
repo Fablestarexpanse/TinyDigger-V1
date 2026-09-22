@@ -3137,3 +3137,60 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
     follow the real mouse, so no shot shows one.
   - 441 tests green (7 new: undo/redo, the crew's work not recorded, 50-step cap, brush cells
     and volumes).
+
+### Slice 17 Part B: spline roads — the model (built) and the integration (proposed)
+- **Ronan approved Part A ("Continue").** The road model is plain C# and tested, so it is built;
+  wiring it into the game waits for approval of the design below, as the working style asks.
+- **Built** (Units/Runtime/Roads):
+  - `RoadNetwork`: serialisable (JsonUtility) nodes and segments. A road is the chain of
+    segments drawn in one go, 3/5/7 cells wide. Each node has a height, `LockToGround` and an
+    optional tangent handle. `AddRoad` joins a road's ends to any node within 1.5 cells, which
+    is how roads meet and junctions form. `MoveNode`, `SetHeight` (unlocks the node from the
+    ground), `SetHandle`, `RemoveRoad` (drops orphaned nodes), and `Changed(road)`.
+  - `RoadSpline`: a cubic Hermite through the nodes, the same curve as a Bézier with its handles
+    a third of the tangent out. Tangents are automatic (Catmull-Rom) unless dragged. It is 3D:
+    the height runs along it smoothly but never beyond a segment's end heights, so it never
+    humps. `Sample` gives points evenly spaced by arc length. `Grade` is a segment's steepest
+    stretch, not its average, because the height eases in and out at nodes and the steepest
+    part is what the crew climbs.
+  - `RoadPlanner`:
+    - `Footprint`: road bed at the spline height across the full width, then a 0.5-cell
+      shoulder blended into the ground, rounded to the height step.
+    - `Settle`: the cut faces (at the ground's angle of repose) and embankments (at the spoil's)
+      that slump will leave, for the ghost.
+    - `Judge`: fine, steep over the 12% limit, refused over twice it.
+  - A new material `Road` (id 18): packed gravel, (158, 150, 136), diggable back to loose rock.
+  - `GridPathfinder.RoadCost = 0.7`: a step from one Road cell to another costs 0.7 of its
+    distance and nothing for its slope. The octile heuristic is scaled by the same factor, so
+    it stays admissible and the search still finds the cheapest way.
+  - 8 new tests (449 green): samples evenly spaced and only forwards; grade is rise over run
+    and judged against the limit; the steepest stretch is at least the average; the footprint
+    has no holes across the full width; a straight road is exactly its width; drawing from a
+    road's end joins it and a third road makes a junction; the network round-trips through
+    JSON; units take a longer road route when it is cheaper at 0.7.
+- **Proposed integration:**
+  - `RoadDraft` (Interaction, plain C#, tested): the road being drawn or edited.
+    - Nodes are placed by click. A node or its handle is dragged. Backspace drops the last
+      node; double-click or Enter commits; Escape cancels.
+    - Snapping: to a road's end or node (join); to 45° from the last node (a toggle); to the
+      ground height by default.
+    - Per-node height: scroll or PageUp/PageDown in 1 m steps (0.25 m with Shift), plus a "lock
+      to ground" toggle.
+    - Commit is refused while any segment is over twice the max grade.
+  - `RoadGhostView`: a translucent ribbon with a centre line, coloured per segment (green,
+    orange over the limit, red over twice). Cut faces and embankments from `Settle` are drawn
+    in their own tint. Nodes show as discs and handles as dots. Each segment has a grade label
+    in screen space. The panel shows cut/fill/net m³ (road and faces), each segment's %, max
+    grade (field, default 12%), width 3/5/7, the 45° snap and the node lock.
+  - `RoadBuilder` (Units, plain C#, tested): watches the designations. When a road-bed cell's
+    designation is met, its top 0.25 m becomes Road: the column's top layer is split, so the
+    height doesn't change. Deleting a road turns its Road layer back to Dirt. Editing a built
+    road re-plans it: cells whose target moved get new designations, and cells left out of the
+    footprint lose theirs and their Road layer.
+  - `RoadNetworkHost` on the terrain holds the network. It is cleared when the island is
+    regenerated. With the Road tool and no draft, clicking a road selects it for editing.
+  - The terrain palette and the material atlas get a gravel recipe for Road.
+  - Level: a rectangle with an optional "ramp" toggle, H at the edge the drag starts from and
+    H2 at the far edge, interpolated across (`Blueprints.PlanLevel` gains the slope).
+  - The old straight-leg road (`Blueprints.PlanRoad`, and `MaxGrade` 0.25 m/m in `PlayerTools`)
+    is retired.

@@ -87,6 +87,12 @@ namespace TinyDiggers.Terrain
         public static readonly MaterialId Limestone = new MaterialId(16);
         public static readonly MaterialId LimestoneLoose = new MaterialId(17);
 
+        /// <summary>
+        /// A built road's surface (Slice 17 Part B): packed gravel laid in place of the top of the
+        /// ground, not on top of it. Crews drive it at full speed whatever its slope.
+        /// </summary>
+        public static readonly MaterialId Road = new MaterialId(18);
+
         /// <summary>The in-place ores, in the order generation and the ore view use.</summary>
         public static readonly MaterialId[] Ores = { Coal, IronOre, CopperOre, Limestone };
 
@@ -133,7 +139,9 @@ namespace TinyDiggers.Terrain
                 new MaterialDefinition(CopperOre, "Copper ore", new Color32(78, 140, 118, 255), 0.65f, 85f, disturbed: CopperOreLoose, bulkingFactor: 1.5f),
                 new MaterialDefinition(CopperOreLoose, "Loose copper ore", new Color32(88, 148, 124, 255), 0.30f, 38f, isLoose: true),
                 new MaterialDefinition(Limestone, "Limestone", new Color32(214, 206, 184, 255), 0.50f, 85f, disturbed: LimestoneLoose, bulkingFactor: 1.45f),
-                new MaterialDefinition(LimestoneLoose, "Loose limestone", new Color32(222, 214, 192, 255), 0.25f, 36f, isLoose: true));
+                new MaterialDefinition(LimestoneLoose, "Loose limestone", new Color32(222, 214, 192, 255), 0.25f, 36f, isLoose: true),
+                // Packed gravel: greyer and a little darker than loose rock, so a road reads as a road.
+                new MaterialDefinition(Road, "Road", new Color32(158, 150, 136, 255), 0.45f, 60f, disturbed: RockLoose, bulkingFactor: 1.3f));
         }
     }
 }
