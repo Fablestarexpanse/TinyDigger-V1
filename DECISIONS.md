@@ -3401,4 +3401,15 @@ The digger and hauler assets are deleted. `Art/Tools/td_dumper.py` does this one
   puts the ankle where it needs to be and everything past it is aimed at the contact point, so a
   foot on the ground stays on the ground while the machine rolls over it.
 - Videos land in `Screenshots/Units`.
+- **The dumper's clip set (2026-09-22).** Ronan's rulings: one turn clip, mirrored in code; videos
+  longer and **not orbiting**. Ten clips: walk, idle, turn, tip, walk_loaded, idle_loaded,
+  take_load, start, stop, stuck.
+  - Loaded walk and idle carry a full bed: the shell sits 7 cm lower on its legs, the stride
+    shortens to 0.32 m and the roll grows, so a loaded hauler reads as loaded across the site.
+  - `take_load` is the bucketful landing: the machine drops, the bed shudders, it settles.
+  - `start` and `stop` lean into and out of the stride, so it does not snap between standing and
+    full pace.
+  - `stuck` paws the ground and rocks — something to look at while the crew panel explains itself.
+  - Videos write under their final name: ending the render path with `.mp4` stops Blender
+    appending the frame range, which had been confusing the tidy-up afterwards.
 

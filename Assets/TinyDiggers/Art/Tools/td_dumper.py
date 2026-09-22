@@ -727,7 +727,8 @@ def _rest_pose(rig):
     bpy.context.view_layer.update()
 
 
-def walk(rig, legs, name="walk", length=32, stride=STRIDE, lift=LIFT, turn=0.0):
+def walk(rig, legs, name="walk", length=32, stride=STRIDE, lift=LIFT, turn=0.0,
+         sink=0.0, sway=SWAY, bob=BOB, share=1.0):
     """
     A crab's walk: the diagonals take turns, two feet always on the ground, the shell sinking and
     swaying towards whichever pair is carrying it. Nothing travels — the feet slide back under the
@@ -741,9 +742,9 @@ def walk(rig, legs, name="walk", length=32, stride=STRIDE, lift=LIFT, turn=0.0):
         phase0 = (step % length) / length
         _rest_pose(rig)
 
-        sway = math.sin(phase0 * math.tau) * SWAY
-        sink = -abs(math.sin(phase0 * math.tau)) * BOB
-        offset = mathutils.Vector((sway, 0.0, sink))
+        roll = math.sin(phase0 * math.tau) * sway
+        drop = -sink - abs(math.sin(phase0 * math.tau)) * bob
+        offset = mathutils.Vector((roll, 0.0, drop))
         body.location = (rig.pose.bones["body"].bone.matrix_local.to_3x3().inverted()
                          @ offset)
         bpy.context.view_layer.update()
@@ -755,7 +756,8 @@ def walk(rig, legs, name="walk", length=32, stride=STRIDE, lift=LIFT, turn=0.0):
                 if leg is None:
                     continue
                 anchor = leg["contact"]
-                step_offset = _foot_offset(phase, stride, lift, turn=turn, anchor=anchor)
+                step_offset = _foot_offset(phase, stride * share, lift * share,
+                                           turn=turn * share, anchor=anchor)
                 _solve_leg(rig, leg, anchor + step_offset, offset)
 
         _key(rig, legs, frame)
@@ -764,7 +766,7 @@ def walk(rig, legs, name="walk", length=32, stride=STRIDE, lift=LIFT, turn=0.0):
     return action
 
 
-def idle(rig, legs, name="idle", length=60):
+def idle(rig, legs, name="idle", length=60, sink=0.0, breath=BOB):
     """At rest the machine settles on its legs and breathes, so it never looks switched off."""
     action = _new_action(rig, name)
     body = rig.pose.bones["body"]
@@ -774,7 +776,7 @@ def idle(rig, legs, name="idle", length=60):
         phase = (step % length) / length
         _rest_pose(rig)
 
-        settle = -0.5 * BOB * (1.0 - math.cos(phase * math.tau))
+        settle = -sink - 0.5 * breath * (1.0 - math.cos(phase * math.tau))
         offset = mathutils.Vector((0.0, 0.0, settle))
         body.location = body.bone.matrix_local.to_3x3().inverted() @ offset
         bpy.context.view_layer.update()
@@ -861,14 +863,124 @@ def tip(rig, legs, name="tip", length=54, angle=TIP, mesh=None):
     return action
 
 
+# How far the shell sits down on its legs with a full bed, and how much slower and shorter its
+# stride gets. A loaded hauler should read as loaded from across the site.
+LOADED_SINK = 0.07
+LOADED_STRIDE = 0.32
+LOADED_SWAY = 0.075
+
+
+def take_load(rig, legs, name="take_load", length=30):
+    """
+    A bucketful lands in the bed: the machine drops on its legs, the bed shudders, and it settles.
+    One shot, played each time a digger loads it.
+    """
+    action = _new_action(rig, name)
+    body = rig.pose.bones["body"]
+    tray = rig.pose.bones.get("tray")
+
+    marks = ((1, 0.0, 0.0), (4, -0.09, 2.5), (9, -0.05, -1.5), (15, -0.075, 0.8),
+             (22, -0.06, 0.0), (length, -0.05, 0.0))
+    for frame, drop, shake in marks:
+        _rest_pose(rig)
+        offset = mathutils.Vector((0.0, 0.0, drop))
+        body.location = body.bone.matrix_local.to_3x3().inverted() @ offset
+        bpy.context.view_layer.update()
+        for leg in legs.values():
+            _solve_leg(rig, leg, leg["contact"], offset)
+        if tray is not None:
+            tray.rotation_quaternion = mathutils.Quaternion((1.0, 0.0, 0.0), math.radians(shake))
+        _follow_ram(rig)
+        _key(rig, legs, frame, keyed_tray=tray is not None)
+
+    _log(f"{name}: {length} frames")
+    return action
+
+
+def lean(rig, legs, name="start", length=12, into=True):
+    """
+    Leaning into the walk, or settling out of it: the stride grows from nothing or fades to it, so
+    the machine does not snap between standing still and full pace.
+    """
+    action = _new_action(rig, name)
+    body = rig.pose.bones["body"]
+
+    for step in range(length + 1):
+        frame = 1 + step
+        share = step / length if into else 1.0 - step / length
+        phase = (step / length) * 0.5 if into else 0.5 + (step / length) * 0.5
+        _rest_pose(rig)
+
+        offset = mathutils.Vector((math.sin(phase * math.tau) * SWAY * share, 0.0,
+                                   -abs(math.sin(phase * math.tau)) * BOB * share))
+        body.location = body.bone.matrix_local.to_3x3().inverted() @ offset
+        bpy.context.view_layer.update()
+
+        for index, pair in enumerate(PAIRS):
+            legphase = (phase + index * 0.5) % 1.0
+            for corner in pair:
+                leg = legs.get(corner)
+                if leg is None:
+                    continue
+                step_offset = _foot_offset(legphase, STRIDE * share, LIFT * share,
+                                           anchor=leg["contact"])
+                _solve_leg(rig, leg, leg["contact"] + step_offset, offset)
+
+        _key(rig, legs, frame)
+
+    _log(f"{name}: {length} frames")
+    return action
+
+
+def stuck(rig, legs, name="stuck", length=48):
+    """
+    Sent somewhere it cannot reach, or holding a load with nowhere to tip: it paws the ground with
+    one leg, rocks, and settles. Something to look at while the crew panel explains itself.
+    """
+    action = _new_action(rig, name)
+    body = rig.pose.bones["body"]
+    paw = legs.get("front_right") or next(iter(legs.values()))
+
+    for step in range(length + 1):
+        frame = 1 + step
+        phase = (step % length) / length
+        _rest_pose(rig)
+
+        rock = math.sin(phase * math.tau * 2.0) * 0.02
+        offset = mathutils.Vector((rock, 0.0, -0.01))
+        body.location = body.bone.matrix_local.to_3x3().inverted() @ offset
+        bpy.context.view_layer.update()
+
+        for corner, leg in legs.items():
+            target = leg["contact"]
+            if leg is paw and phase < 0.5:
+                swing = math.sin(phase * 2.0 * math.pi)
+                target = target + mathutils.Vector((0.0, 0.10 * swing, 0.13 * swing))
+            _solve_leg(rig, leg, target, offset)
+
+        _key(rig, legs, frame)
+
+    _log(f"{name}: {length} frames")
+    return action
+
+
 def clips(rig, legs, mesh=None):
     """Stage 3. Every clip the dumper needs, each its own action."""
     bpy.context.scene.render.fps = FPS
     made = {
         "walk": walk(rig, legs),
         "idle": idle(rig, legs),
+        # One turn clip: Ronan's ruling is that the game mirrors it for the other way round, and
+        # a crab shuffle reads the same either way.
         "turn": walk(rig, legs, name="turn", stride=0.0, lift=LIFT * 0.8, turn=TURN),
         "tip": tip(rig, legs, mesh=mesh),
+        "walk_loaded": walk(rig, legs, name="walk_loaded", length=40, stride=LOADED_STRIDE,
+                            lift=LIFT * 0.85, sink=LOADED_SINK, sway=LOADED_SWAY),
+        "idle_loaded": idle(rig, legs, name="idle_loaded", sink=LOADED_SINK, breath=BOB * 0.6),
+        "take_load": take_load(rig, legs),
+        "start": lean(rig, legs, name="start", into=True),
+        "stop": lean(rig, legs, name="stop", into=False),
+        "stuck": stuck(rig, legs),
     }
     rig.animation_data.action = None
     _rest_pose(rig)
@@ -942,7 +1054,7 @@ def orbit(camera, mesh, start, end, turn=150.0, distance=5.2, height=2.1):
     return camera
 
 
-def video(rig, mesh, clip="walk", folder=None, repeats=2, size=(960, 540), turning=True):
+def video(rig, mesh, clip="walk", folder=None, repeats=4, size=(960, 540), turning=False):
     """
     Stage 4. Renders one clip to an MP4 to look at before anything goes near Unity. Loops the
     walk a couple of times so the gait can be judged rather than guessed at.
@@ -959,15 +1071,15 @@ def video(rig, mesh, clip="walk", folder=None, repeats=2, size=(960, 540), turni
 
     start, end = (int(v) for v in action.frame_range)
     scene.frame_start = start
-    scene.frame_end = start + (end - start) * max(1, repeats) if clip in ("walk", "turn") else end
+    scene.frame_end = start + (end - start) * max(1, repeats)
     if scene.frame_end > end:
-        # Looping clips are keyed one cycle long: repeat by cycling the action.
+        # A clip is keyed one cycle long, so the video repeats it by cycling the curves. Worth
+        # doing for the one-shots too: a tip or a load lands better watched a few times over.
         for curve in _fcurves(action):
-            modifier = next((m for m in curve.modifiers if m.type == 'CYCLES'), None)
-            if modifier is None:
+            if not any(m.type == 'CYCLES' for m in curve.modifiers):
                 curve.modifiers.new('CYCLES')
 
-    camera = stage(mesh)
+    camera = stage(mesh, distance=5.0, height=1.8)
     if turning:
         orbit(camera, mesh, scene.frame_start, scene.frame_end)
     else:
@@ -983,16 +1095,15 @@ def video(rig, mesh, clip="walk", folder=None, repeats=2, size=(960, 540), turni
     scene.render.ffmpeg.codec = 'H264'
     scene.render.ffmpeg.constant_rate_factor = 'HIGH'
     scene.render.ffmpeg.ffmpeg_preset = 'REALTIME'
-    scene.render.filepath = os.path.join(folder, f"dumper_{clip}")
+    # Ending the path with .mp4 stops Blender appending the frame range, so the file lands under
+    # the name it will be talked about by.
+    scene.render.filepath = os.path.join(folder, f"dumper_{clip}.mp4")
 
     with bpy.context.temp_override(**_window_override()):
         bpy.ops.render.render(animation=True)
 
-    path = scene.render.filepath + f"{scene.frame_start:04d}-{scene.frame_end:04d}.mp4"
-    if not os.path.exists(path):
-        made = [f for f in os.listdir(folder) if f.startswith(f"dumper_{clip}")]
-        path = os.path.join(folder, made[0]) if made else path
-    _log(f"{clip}: video {path}")
+    path = scene.render.filepath
+    _log(f"{clip}: video {path} ({scene.frame_end - scene.frame_start + 1} frames)")
     return path
 
 
