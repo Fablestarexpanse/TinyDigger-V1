@@ -988,6 +988,92 @@ def clips(rig, legs, mesh=None):
             for name, action in made.items()}
 
 
+# --- sizing it against the crew ------------------------------------------------------------------
+
+CREW_BLEND = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          "Blender~", "crew_unit.blend")
+
+# The crew robot is 0.43 m to the top of its shell and sets the game's human scale (Ronan,
+# 2026-09-21). Everything else is sized against it.
+CREW_HEIGHT = 0.43
+
+
+def bring_crew(beside=True, gap=0.9):
+    """
+    Brings the crew robot into the scene beside the dumper, so the machine can be sized by eye
+    against the unit that sets human scale.
+    """
+    for old in [o for o in bpy.data.objects if o.name.startswith(("crew_unit", "CrewRig", "CrewGlow"))]:
+        bpy.data.objects.remove(old, do_unlink=True)
+
+    if not os.path.exists(CREW_BLEND):
+        _log(f"no crew file at {CREW_BLEND}")
+        return None
+
+    with bpy.context.temp_override(**_window_override()):
+        with bpy.data.libraries.load(CREW_BLEND, link=False) as (source, target):
+            target.objects = list(source.objects)
+
+    brought = [o for o in target.objects if o is not None]
+    for obj in brought:
+        if obj.name not in bpy.context.scene.collection.objects:
+            bpy.context.scene.collection.objects.link(obj)
+
+    roots = [o for o in brought if o.parent is None]
+    if beside:
+        dumper = bpy.data.objects.get("dumper")
+        offset = (dumper.dimensions.x * 0.5 + gap) if dumper else 1.5
+        for obj in roots:
+            obj.location.x += offset
+
+    top = max((obj.matrix_world @ mathutils.Vector(corner)).z
+              for obj in brought if obj.type == 'MESH'
+              for corner in obj.bound_box)
+    _log(f"crew robot beside the dumper: {len(brought)} objects, standing {top:.2f} m "
+         f"(the ruling is {CREW_HEIGHT} m)")
+    return {"objects": [o.name for o in brought], "height": round(top, 3)}
+
+
+def set_height(metres, shell_only=True):
+    """
+    Scales the dumper, rig and all, to stand `metres` high. With `shell_only` the height is
+    measured to the top of the body shell rather than to the raised bed, which is how the
+    machines were sized before.
+    """
+    mesh = bpy.data.objects["dumper"]
+    rig = bpy.data.objects["dumper_rig"]
+
+    tray = mesh.vertex_groups.get("tray")
+    tray_indices = {v.index for v in mesh.data.vertices
+                    if tray is not None and any(g.group == tray.index and g.weight > 0.5
+                                                for g in v.groups)}
+    floor = min(v.co.z for v in mesh.data.vertices)
+    if shell_only and tray_indices:
+        top = max(v.co.z for v in mesh.data.vertices if v.index not in tray_indices)
+    else:
+        top = max(v.co.z for v in mesh.data.vertices)
+
+    now = top - floor
+    if now < 1e-4:
+        return None
+    scale = metres / now
+
+    mesh.data.transform(mathutils.Matrix.Scale(scale, 4))
+    mesh.data.update()
+    with bpy.context.temp_override(**_window_override(), active_object=rig, object=rig,
+                                   selected_objects=[rig], selected_editable_objects=[rig]):
+        bpy.context.view_layer.objects.active = rig
+        bpy.ops.object.mode_set(mode='EDIT')
+        for bone in rig.data.edit_bones:
+            bone.head = bone.head * scale
+            bone.tail = bone.tail * scale
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+    _log(f"scaled by {scale:.3f}: shell now {metres:.2f} m, machine "
+         f"{max(v.co.z for v in mesh.data.vertices) - floor * scale:.2f} m over all")
+    return scale
+
+
 # --- stage 4: a video to look at ----------------------------------------------------------------
 
 def stage(mesh, distance=5.0, height=2.0):
