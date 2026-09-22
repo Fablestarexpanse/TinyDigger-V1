@@ -3412,4 +3412,10 @@ The digger and hauler assets are deleted. `Art/Tools/td_dumper.py` does this one
   - `stuck` paws the ground and rocks — something to look at while the crew panel explains itself.
   - Videos write under their final name: ending the render path with `.mp4` stops Blender
     appending the frame range, which had been confusing the tidy-up afterwards.
+- **Sizing the dumper (2026-09-22).** The crew robot is appended beside it in the blend, standing
+  on the same floor, because it sets human scale. `build(height=...)` scales mesh and rest
+  skeleton and then lays the clips with the same factor on every distance in them, so a smaller
+  machine takes smaller steps. Tried at 1.0 m ("still feels too big") and now **0.7 m to the top
+  of the shell**: 0.79 m over all, 0.74 by 0.95 m on the ground, about 1.7 robots tall, with a bed
+  holding roughly 0.1 m³ — half a Worker's barrow.
 
