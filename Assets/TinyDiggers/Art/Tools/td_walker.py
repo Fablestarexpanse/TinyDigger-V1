@@ -505,13 +505,34 @@ def shell_to_body(mesh):
     hull = shells[0]
     indices = [index for index, _ in hull]
 
+    # Hatches, belly plates and the like sit inside the hull as pieces of their own. They are part
+    # of the body too: left on a leg bone they drag the underside about as the machine walks
+    # (Ronan, 2026-09-22: "the walk is still deforming the underside").
+    points = [co for _, co in hull]
+    lo = mathutils.Vector((min(c.x for c in points), min(c.y for c in points), min(c.z for c in points)))
+    hi = mathutils.Vector((max(c.x for c in points), max(c.y for c in points), max(c.z for c in points)))
+    centre = (lo + hi) * 0.5
+    axes = (hi - lo) * 0.5
+
+    def inside(co, slack=1.01):
+        d = co - centre
+        return ((d.x / max(axes.x * slack, 1e-6)) ** 2 + (d.y / max(axes.y * slack, 1e-6)) ** 2
+                + (d.z / max(axes.z * slack, 1e-6)) ** 2) <= 1.0
+
+    tucked = 0
+    for shell in shells[1:]:
+        if all(inside(co) for _, co in shell):
+            indices.extend(index for index, _ in shell)
+            tucked += 1
+
     body = mesh.vertex_groups.get("body") or mesh.vertex_groups.new(name="body")
     for group in mesh.vertex_groups:
         if group.name != "body":
             group.remove(indices)
     body.add(indices, 1.0, 'REPLACE')
     mesh.data.update()
-    _log(f"body shell locked to the body bone: {len(indices)} vertices")
+    _log(f"body shell locked to the body bone: {len(indices)} vertices "
+         f"({tucked} pieces tucked inside it)")
     return len(indices)
 
 
@@ -750,7 +771,10 @@ def _ease(share):
 def _new_action(rig, name):
     if rig.animation_data is None:
         rig.animation_data_create()
-    action = bpy.data.actions.new(f"{MACHINE}|{name}")
+    # Named off the rig, not the module: reloading this file resets MACHINE to the dumper, and
+    # clips laid after a reload would otherwise be stamped with the wrong machine's name.
+    machine = rig.name[:-4] if rig.name.endswith("_rig") else MACHINE
+    action = bpy.data.actions.new(f"{machine}|{name}")
     action.use_fake_user = True
     return _play(rig, action)
 
@@ -1436,7 +1460,33 @@ def orbit(camera, mesh, start, end, turn=150.0, distance=5.2, height=2.1):
     return camera
 
 
-def video(rig, mesh, clip="walk", folder=None, repeats=4, size=(960, 540), turning=False):
+def cut_angles(camera, mesh, start, end, yaws=(-115.0, -55.0, 25.0), distance=5.0, height=1.9):
+    """
+    Shows the machine from several fixed angles in one take, by cutting between them.
+
+    Ronan wants more than one angle but no orbit ("have the video longer and not orbiting"), so
+    the camera holds still through each shot and jumps to the next: constant interpolation, one
+    shot per angle, equal thirds of the clip.
+    """
+    target = mathutils.Vector((0.0, 0.0, mesh.dimensions.z * 0.45))
+    camera.animation_data_clear()
+    span = max(1, end - start)
+    for shot, yaw in enumerate(yaws):
+        frame = start + int(span * shot / len(yaws))
+        angle = math.radians(yaw)
+        camera.location = target + mathutils.Vector((distance * math.cos(angle),
+                                                     distance * math.sin(angle),
+                                                     height))
+        camera.rotation_euler = (target - camera.location).to_track_quat('-Z', 'Y').to_euler()
+        camera.keyframe_insert("location", frame=frame)
+        camera.keyframe_insert("rotation_euler", frame=frame)
+    for curve in _fcurves(camera.animation_data.action):
+        for point in curve.keyframe_points:
+            point.interpolation = 'CONSTANT'
+    return camera
+
+
+def video(rig, mesh, clip="walk", folder=None, repeats=4, size=(960, 540), turning=False, angles=True):
     """
     Stage 4. Renders one clip to an MP4 to look at before anything goes near Unity. Loops the
     walk a couple of times so the gait can be judged rather than guessed at.
@@ -1467,6 +1517,8 @@ def video(rig, mesh, clip="walk", folder=None, repeats=4, size=(960, 540), turni
     camera = stage(mesh, distance=5.0, height=1.8)
     if turning:
         orbit(camera, mesh, scene.frame_start, scene.frame_end)
+    elif angles:
+        cut_angles(camera, mesh, scene.frame_start, scene.frame_end)
     else:
         camera.animation_data_clear()
     scene.render.fps = FPS

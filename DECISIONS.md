@@ -3476,3 +3476,54 @@ to fix its legs as well". The scans now live in `Art/Blender~/Scans` under their
     bone outright; with a leg bone holding part of it the machine wobbled like a blob as it
     walked. Measured across a walk cycle the shell's bounds no longer change at all.
 
+
+## Crew robot rendered magenta — the importer was not the cause (2026-09-22)
+
+The magenta shell on the crew robot in TerrainSandbox was not a missing material remap on
+`crew_unit.fbx`. The importer's external-object map already carried `CrewShell -> crew_shell.mat`,
+and both the FBX and `crew_unit.prefab` resolve all seven slots (shell, trim, band, lens, iris,
+highlight, pad) plus the separate `CrewGlow` renderer.
+
+The null was a *scene* override. A stray root-level `crew_unit` instance in TerrainSandbox — a
+direct instance of the FBX, not of the prefab, sitting at the origin — overrode
+`m_Materials.Array.data[0]` with material guid `bf084033337db454da6493596bbbf57e`, which exists
+nowhere in the project. A deleted material leaves the override behind as a null reference, and
+Unity draws that as magenta. Reverting the property override on that instance drops it back to the
+FBX's remapped `crew_shell`.
+
+Two things this cost time on, worth remembering:
+
+- **Read the live importer, not the guess.** `.meta` on disk and `GetExternalObjectMap()` agreed;
+  the wrong slot number in the report sent the search to the importer instead of the scene. A scan
+  for renderers whose `sharedMaterials` entry is null or whose shader is the internal error shader
+  finds these in one pass, across scene and assets.
+- **`ModelImporter.sourceMaterials` throws** in this Unity (6000.6.1f1) through the MCP run-command
+  harness — the script dies with no logs. Enumerate `GetExternalObjectMap()` instead.
+
+Also closed the one genuine importer gap while in there: `CrewGlow` had no remap, so the glow
+renderer was relying on a per-instance override in both the prefab and the scene to reach
+`crew_glow.mat`. It is now remapped on the importer like the other seven; the overrides are
+redundant but harmless.
+
+The stray `crew_unit` instance is still in the scene and TerrainSandbox has not been saved.
+
+## 2026-09-22 — Digger arm: joints found by the pinch, hull locked before the arm
+
+Ronan's excavator diagram (O1 boom pivot low on the body, O2 at the top of the fold, O3 at the
+bucket pin, O4 at the teeth) did not match the fit, which was taking a fixed share of the limb's
+length and giving the boom the whole folded arm.
+
+The joints now come off the scan's own landmarks. O2 is the highest point of the arm; **O3 is the
+pinch** — the thinnest slice across the descending limb, because a joint is a pin and this scan's
+bucket pin narrows to 12 mm where the arm around it is 90 mm; O4 is the far end of the bucket
+below the pin. The fit now reads like the diagram: boom 0.484 m off the hull at z 0.382, stick
+0.267 m, bucket 0.089 m. The arm is three hinges on one axis, with no swing.
+
+The underside was still deforming during the walk because `shell_to_body` — the pass that locks
+the hull and everything tucked inside it to the body bone — was never in the digger's build. It is
+now, run before the arm is rebuilt (the arm is a separate welded shell, well clear of the hull).
+The belly is 100% body-weighted afterwards, against 14 vertices riding leg bones before.
+
+Two traps fixed along the way: actions were being stamped `dumper|...` because reloading the
+module resets `MACHINE`, so `_new_action` now takes the machine's name from the rig in hand; and
+videos cut between three fixed angles (`cut_angles`) rather than orbiting, per Ronan's ruling.

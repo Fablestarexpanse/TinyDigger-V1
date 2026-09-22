@@ -41,9 +41,9 @@ STEP = 0.075
 # Where the joints sit along the arm, as a share of its length, when the bends are not clear.
 FALLBACK = (0.38, 0.72)
 
-# The least of the arm any one segment may be. Ronan, 2026-09-22: three joints, "at bucket, at
-# next joint up, and at end of last arm" — so three segments that each amount to something.
-LEAST = 0.22
+# How much of the front limb's height the bucket takes up. The bucket is the short link at the
+# bottom; the stick is the long run down to it.
+BUCKET_SHARE = 0.34
 
 # The digger's scan carries its arm along -X. An excavator faces the way it digs, so it is turned
 # a quarter the other way from the dumper to look along +Y (Unity's +Z) with the bucket out front.
@@ -146,59 +146,73 @@ def _joints(spine):
     return best[1]
 
 
-def _three_parts(points, shoulder):
+def _pinch(points, axis_lo, axis_hi, bands=24):
     """
-    Splits the arm into its three parts — boom, stick, bucket — and returns them with the joints
-    between them.
+    Where a limb pinches: the narrowest slice across it between two heights.
 
-    The arm is folded back on itself in the scan, so walking out through the vertices jumps the
-    fold and the order comes out nonsense. Instead the three parts are found as clusters, seeded
-    where they must be: one at the shoulder, one at the far tip, one at the bend between them.
-    The joint is where two parts meet — the midpoint of their closest pair.
+    A machine's joints are pins, and a pin is the thinnest thing on the limb — on this scan the
+    bucket's pivot narrows to twelve millimetres where the arm around it is ninety. Looking for
+    the pinch finds the joint the model actually has, instead of guessing a share of its length.
     """
-    tip = max(points, key=lambda c: (c - shoulder).length)
-    axis = (tip - shoulder).normalized()
-    bend = max(points, key=lambda c: ((c - shoulder) - axis * (c - shoulder).dot(axis)).length)
-    seeds = [shoulder.copy(), bend.copy(), tip.copy()]
+    inside = [c for c in points if axis_lo <= c.z <= axis_hi]
+    if len(inside) < 12:
+        return None
 
-    groups = [[], [], []]
-    for _ in range(12):
-        groups = [[], [], []]
-        for point in points:
-            groups[min(range(3), key=lambda i: (point - seeds[i]).length)].append(point)
-        moved = 0.0
-        for i, group in enumerate(groups):
-            if not group:
-                continue
-            middle = sum(group, mathutils.Vector()) / len(group)
-            moved = max(moved, (middle - seeds[i]).length)
-            seeds[i] = middle
-        if moved < 1e-4:
-            break
+    low = min(c.z for c in inside)
+    high = max(c.z for c in inside)
+    if high - low < 1e-4:
+        return None
 
-    # Order them along the arm: the part holding the shoulder first, the one holding the tip last.
-    order = sorted(range(3), key=lambda i: min((p - shoulder).length for p in groups[i]) if groups[i] else 9e9)
-    groups = [groups[i] for i in order]
-
-    joints = []
-    for first, second in zip(groups, groups[1:]):
-        if not first or not second:
-            joints.append((seeds[0] + seeds[1]) * 0.5)
+    best = None
+    for band in range(bands):
+        a = low + (high - low) * band / bands
+        b = low + (high - low) * (band + 1) / bands
+        slice_ = [c for c in inside if a <= c.z <= b]
+        if len(slice_) < 4:
             continue
-        pair = min(((a - b).length, a, b) for a in first for b in second)
-        joints.append((pair[1] + pair[2]) * 0.5)
+        width = max(c.x for c in slice_) - min(c.x for c in slice_)
+        depth = max(c.y for c in slice_) - min(c.y for c in slice_)
+        girth = max(width, depth)
+        if best is None or girth < best[0]:
+            best = (girth, sum(slice_, mathutils.Vector()) / len(slice_))
 
-    far = max(groups[2], key=lambda c: (c - joints[-1]).length) if groups[2] else tip
-    return groups, [shoulder.copy()] + joints + [far]
+    return None if best is None else best[1]
+
+
+def _arm_joints(points, shoulder):
+    """
+    The excavator's own joints, off the machine's landmarks rather than a share of its length.
+
+    Reading the layout Ronan sent: the boom pivots low on the body (O1) and rises to the top of
+    the fold (O2); the stick runs from there down and forward to the bucket's pivot (O3); the
+    bucket curls about that and ends in its teeth (O4).
+
+    O2 is the top of the arm. O3 is the **pinch** in the limb below it — the bucket's pin, which
+    is the thinnest part of the arm. O4 is the far end of the bucket below the pin.
+    """
+    top = max(points, key=lambda c: c.z)
+    front = [c for c in points if c.y > top.y - 0.06]
+    if len(front) < 20:
+        front = [c for c in points if (c - shoulder).length > (top - shoulder).length * 0.8]
+
+    low = min(c.z for c in front)
+    span = top.z - low
+
+    # The pin is in the lower half of the descending limb, clear of its end.
+    wrist = _pinch(front, low + span * 0.08, low + span * 0.55)
+    if wrist is None:
+        wrist = mathutils.Vector((top.x, top.y, low + span * BUCKET_SHARE))
+
+    bucket = [c for c in front if c.z < wrist.z]
+    teeth = max(bucket, key=lambda c: (c - wrist).length) if bucket else         mathutils.Vector((wrist.x, wrist.y, low))
+    return [shoulder.copy(), top.copy(), wrist, teeth]
 
 
 def rebuild_arm(mesh, rig):
     """
     Replaces the auto-rig's single arm bone with the three an excavator actually has: a boom off
-    the body, a stick, and a bucket, each a hinge in the arm's own plane.
-
-    Ronan, 2026-09-22: "the arm is three joints at bucket at next joint up and at end of last arm,
-    it should not move side to side it should move like an excavator".
+    the body, a stick, and a bucket, each a hinge across the machine so the arm works in its own
+    plane and never swings sideways.
     """
     ball = _ball(mesh)
     owner = {v.index: max(((g.weight, g.group) for g in v.groups), default=(0.0, -1))[1]
@@ -214,7 +228,7 @@ def rebuild_arm(mesh, rig):
 
     points = [mesh.data.vertices[i].co.copy() for i in arm_indices]
     shoulder = min(points, key=lambda c: (c - ball["centre"]).length)
-    groups, heads = _three_parts(points, shoulder)
+    heads = _arm_joints(points, shoulder)
 
     with bpy.context.temp_override(**_window_override(), active_object=rig, object=rig,
                                    selected_objects=[rig], selected_editable_objects=[rig]):
@@ -232,8 +246,6 @@ def rebuild_arm(mesh, rig):
             bone = bones.new(label)
             bone.head = head
             bone.tail = tail
-            # Every joint hinges across the machine, so the arm works in its own plane and never
-            # swings sideways.
             bone.roll = 0.0
             bone.parent = parent
             bone.use_connect = label != "boom"
@@ -241,25 +253,35 @@ def rebuild_arm(mesh, rig):
 
         bpy.ops.object.mode_set(mode='OBJECT')
 
-    labels = ("boom", "stick", "bucket")
+    # Each vertex goes to the link it lies along, so a panel belongs to the part it is bolted to.
+    links = [("boom", heads[0], heads[1]), ("stick", heads[1], heads[2]),
+             ("bucket", heads[2], heads[3])]
     vertex_groups = {label: (mesh.vertex_groups.get(label) or mesh.vertex_groups.new(name=label))
-                     for label in labels}
-    seeds = [sum(group, mathutils.Vector()) / len(group) if group else mathutils.Vector()
-             for group in groups]
+                     for label, _, _ in links}
 
-    counts = {label: 0 for label in labels}
+    def near(point, head, tail):
+        span = tail - head
+        length = span.length
+        if length < 1e-6:
+            return (point - head).length
+        t = max(0.0, min(1.0, (point - head).dot(span) / (length * length)))
+        return (point - (head + span * t)).length
+
+    counts = {label: 0 for label, _, _ in links}
     for index in arm_indices:
         point = mesh.data.vertices[index].co
-        label = labels[min(range(3), key=lambda i: (point - seeds[i]).length)]
+        label = min(links, key=lambda link: near(point, link[1], link[2]))[0]
         for group in mesh.vertex_groups:
             if group.name != label:
                 group.remove([index])
         vertex_groups[label].add([index], 1.0, 'REPLACE')
         counts[label] += 1
 
-    _log("arm rebuilt: " + ", ".join(f"{label} {count}" for label, count in counts.items())
-         + "; joints at " + " and ".join(str([round(v, 2) for v in head]) for head in heads[1:3]))
-    return {"heads": [[round(v, 3) for v in head] for head in heads], "weights": counts}
+    lengths = {label: round((tail - head).length, 3) for label, head, tail in links}
+    _log("arm rebuilt: " + ", ".join(f"{label} {count} verts, {lengths[label]} m"
+                                     for label, count in counts.items()))
+    return {"heads": [[round(v, 3) for v in head] for head in heads],
+            "weights": counts, "lengths": lengths}
 
 
 def name_parts(mesh, rig):
@@ -460,6 +482,9 @@ def build(height=HEIGHT, crew=False):
     face_forward(mesh, rig, yaw=FACING)
     named = name_parts(mesh, rig)
     harden(mesh)
+    # Before the arm: the hull and everything tucked inside it goes to the body bone, so the walk
+    # cannot drag the underside about. The arm is its own welded shell, well clear of the hull.
+    td_walker.shell_to_body(mesh)
     arm = rebuild_arm(mesh, rig)
 
     scale = 1.0
