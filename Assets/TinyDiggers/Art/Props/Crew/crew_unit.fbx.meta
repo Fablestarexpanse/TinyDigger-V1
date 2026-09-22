@@ -12,6 +12,11 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
+      name: CrewGlow
+    second: {fileID: 2100000, guid: 6c7328d343818fc418e4eee8f617fbbd, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
       name: CrewHighlight
     second: {fileID: 2100000, guid: fdb2f994ab74c23418b73f674c615a16, type: 2}
   - first:
