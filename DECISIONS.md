@@ -3595,3 +3595,20 @@ teeth 0.158, all as fitted.
 
 Rendering for Ronan to draw on is orthographic and dead side-on, so anything marked on the image
 maps straight back onto the rig.
+
+## 2026-09-22 — Digger: the arm's joints are Ronan's marks, not a measurement
+
+Ronan drew the three joints on a side-on orthographic render: the boom's pivot on the hull, the
+top of the fold, and the bucket's pin. Read off that image they came out 74 mm higher, 84 mm lower
+and **164 mm** lower than the fitted ones — the pin especially, which the pinch kept finding at the
+top of the fold instead of at the scoop. They live in `JOINTS` as fractions of the machine's own
+box, so they hold at whatever size it is built, and land within 0.3 mm of his marks.
+
+Measuring for them was tried four ways over as many passes and never held. It is not a thing worth
+measuring on a scan: the machine tells you which geometry is the arm, and a person tells you where
+its joints are.
+
+Two smaller rules came out of the same picture. A piece the scan does not call arm joins the arm
+only if it stands **in front of the hull**, where nothing else reaches: the aerial box sits over
+the hull and rode the boom otherwise, swinging about as the machine dug, while the scoop's loose
+panels are well out in front and belong to the bucket.

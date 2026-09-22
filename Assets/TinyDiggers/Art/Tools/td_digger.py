@@ -45,6 +45,15 @@ FALLBACK = (0.38, 0.72)
 # bottom; the stick is the long run down to it.
 BUCKET_SHARE = 0.34
 
+
+# Where the arm's joints are, as fractions of the machine's own box — along it, then up it — read
+# off Ronan's marks on a side-on render. Front is +Y.
+JOINTS = (
+    (0.335, 0.696),   # O1, the boom's pivot on the hull
+    (0.850, 0.880),   # O2, the top of the fold
+    (0.934, 0.392),   # O3, the bucket's pin
+)
+
 # The digger's scan carries its arm along -X. An excavator faces the way it digs, so it is turned
 # a quarter the other way from the dumper to look along +Y (Unity's +Z) with the bucket out front.
 FACING = -90.0
@@ -315,15 +324,38 @@ def rebuild_arm(mesh, rig, parts=None):
 
     points = [mesh.data.vertices[i].co.copy() for i in arm_indices]
     if parts:
-        # O1 is the mount on the crown of the hull, where this machine carries its arm. The
-        # middle of the hull puts the pivot inside the sphere and the boom then swings its base
-        # out through the shell.
-        crown = max((co for _, co in shells[0]), key=lambda c: c.z) if shells else ball["centre"]
-        shoulder = min(points, key=lambda c: (c - crown).length)
+        # O1, O2 and O3 are where Ronan drew them, marked on a dead side-on orthographic render of
+        # this machine and read straight off it (2026-09-22). Measuring never landed them right:
+        # the pinch kept finding the top of the fold rather than the bucket's pin, which sat
+        # 164 mm too high, and the arm then worked about the wrong points however well the
+        # geometry was divided up. They are fractions of the machine's own box, so they hold at
+        # whatever size it is built.
+        corners = [vertex.co for vertex in mesh.data.vertices]
+        low = mathutils.Vector((min(c.x for c in corners), min(c.y for c in corners),
+                                min(c.z for c in corners)))
+        high = mathutils.Vector((max(c.x for c in corners), max(c.y for c in corners),
+                                 max(c.z for c in corners)))
+        span = high - low
+        middle_x = sum(c.x for c in points) / len(points)
+        shoulder, knuckle, wrist = (
+            mathutils.Vector((middle_x, low.y + span.y * along, low.z + span.z * up))
+            for along, up in JOINTS)
+
+        # O4 is not drawn: the teeth are the far end of the scoop hanging off the pin, down the
+        # line from the pin to the middle of it, kept in the arm's own plane.
+        scoop = [co for co in points if (co - wrist).length <= span.z * 0.35 and co.z < wrist.z]
+        aim = ((sum(scoop, mathutils.Vector()) / len(scoop)) - wrist) if scoop             else mathutils.Vector((0.0, 0.0, -1.0))
+        aim.x = 0.0
+        if aim.length < 1e-4:
+            aim = mathutils.Vector((0.0, 0.0, -1.0))
+        reach = max(((co - wrist).length for co in scoop), default=span.z * 0.2)
+        teeth = wrist + aim.normalized() * reach
+        teeth.x = middle_x
+        heads = [shoulder, knuckle, wrist, teeth]
     else:
         shoulder = min(points, key=lambda c: (c - ball["centre"]).length)
-    heads = _arm_joints(points, shoulder)
-    heads[0] = shoulder.copy()
+        heads = _arm_joints(points, shoulder)
+        heads[0] = shoulder.copy()
 
     with bpy.context.temp_override(**_window_override(), active_object=rig, object=rig,
                                    selected_objects=[rig], selected_editable_objects=[rig]):
@@ -352,6 +384,8 @@ def rebuild_arm(mesh, rig, parts=None):
 
         bpy.ops.object.mode_set(mode='OBJECT')
 
+    arm_own = set(arm_indices)
+
     def claim_faces():
         """
         Hands every face of the machine to one bone: the one actually nearest the part it is in.
@@ -377,6 +411,10 @@ def rebuild_arm(mesh, rig, parts=None):
             hull_tree.insert(mesh.data.vertices[index].co, index)
         hull_tree.balance()
 
+        # The arm works out in front of the machine, so anything in front of the hull is the
+        # arm's and anything over it is the machine's own.
+        hull_front = max((mesh.data.vertices[index].co.y for index in hull), default=0.0)
+
         # Which part each welded piece belongs to, decided once for the whole piece.
         part = {}
         for number, shell in enumerate(shells):
@@ -388,6 +426,13 @@ def rebuild_arm(mesh, rig, parts=None):
             to_leg = min((_near_segment(centre, head, tail) for head, tail in legs),
                          default=float("inf"))
             to_hull = hull_tree.find(centre)[2]
+            # A piece the scan does not call arm joins the arm only if it stands in front of the
+            # hull, where nothing else reaches. The aerial box sits over the hull and rode the
+            # boom otherwise, swinging about as the machine dug; the scoop's loose panels are
+            # well out in front and belong to the bucket.
+            if not any(index in arm_own for index, _ in shell) and centre.y <= hull_front:
+                part[number] = "leg" if to_leg < to_hull else "hull"
+                continue
             part[number] = ("leg" if to_leg < to_arm and to_leg < to_hull
                             else "hull" if to_hull < to_arm else "arm")
 
