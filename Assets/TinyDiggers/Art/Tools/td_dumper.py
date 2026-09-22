@@ -1099,9 +1099,23 @@ def paint(mesh, rig):
         for index in indices:
             choice[index] = pick
 
+    # The bed's rim takes the band. It is decided per polygon rather than per piece, because the
+    # bed is one piece and its middle is nowhere near its lip; the game looks down on these
+    # machines, and the crew robot's own stripe is hidden under the bed, so the rim is where the
+    # family colour actually shows.
+    bed_points = [v.co for v in mesh.data.vertices if choice.get(v.index) == "bed"]
+    if bed_points:
+        bed_top = max(c.z for c in bed_points)
+        bed_low = min(c.z for c in bed_points)
+        rim = bed_top - (bed_top - bed_low) * 0.14
+
     counts = {name: 0 for name in order}
     for polygon in mesh.data.polygons:
         pick = choice.get(polygon.vertices[0], "shell")
+        if pick == "bed" and bed_points:
+            middle_z = sum(mesh.data.vertices[i].co.z for i in polygon.vertices) / len(polygon.vertices)
+            if middle_z > rim:
+                pick = "band"
         polygon.material_index = slot[pick]
         counts[pick] += 1
 
@@ -1194,6 +1208,70 @@ def set_height(metres, shell_only=True):
     _log(f"scaled by {scale:.3f}: shell now {metres:.2f} m, machine "
          f"{max(v.co.z for v in mesh.data.vertices) - floor * scale:.2f} m over all")
     return scale
+
+
+# --- out to Unity --------------------------------------------------------------------------------
+
+UNITY_UNITS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Units")
+
+
+def export(folder=None, name="dumper"):
+    """
+    Writes <name>.fbx with the rig and every clip.
+
+    The crew rig's notes apply: `bake_space_transform` stays **off** (with it on, armature clips
+    came out flattened in Unity) and the model already faces +Y, because the FBX axis options are
+    undone on the way in. Scale goes out as FBX_SCALE_UNITS — FBX_SCALE_NONE arrived in Unity a
+    hundredth of its size — and the crew reference is left behind.
+    """
+    folder = folder or UNITY_UNITS
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, f"{name}.fbx")
+
+    mesh = bpy.data.objects["dumper"]
+    rig = bpy.data.objects["dumper_rig"]
+    _play(rig, None)
+    _rest_pose(rig)
+
+    for obj in bpy.data.objects:
+        obj.select_set(obj in (mesh, rig))
+    bpy.context.view_layer.objects.active = rig
+
+    with bpy.context.temp_override(**_window_override(), active_object=rig, object=rig,
+                                   selected_objects=[mesh, rig],
+                                   selected_editable_objects=[mesh, rig]):
+        bpy.ops.export_scene.fbx(
+            filepath=path,
+            use_selection=True,
+            apply_scale_options='FBX_SCALE_UNITS',
+            bake_space_transform=False,
+            object_types={'ARMATURE', 'MESH'},
+            use_mesh_modifiers=False,
+            add_leaf_bones=False,
+            primary_bone_axis='Y',
+            secondary_bone_axis='X',
+            bake_anim=True,
+            bake_anim_use_all_actions=True,
+            bake_anim_use_nla_strips=False,
+            bake_anim_simplify_factor=0.0,
+            path_mode='AUTO',
+            embed_textures=False,
+        )
+
+    for obj in bpy.data.objects:
+        obj.select_set(False)
+
+    clips = sorted(a.name.split("|", 1)[1] for a in bpy.data.actions if a.name.startswith("dumper|"))
+    size = os.path.getsize(path)
+    _log(f"exported {path} ({size / 1e6:.1f} MB), clips: {', '.join(clips)}")
+    return {"path": path, "bytes": size, "clips": clips}
+
+
+def deliver(height=0.7):
+    """Build it at the agreed size, with no crew reference in the file, and export."""
+    report = build(height=height, crew=False)
+    report["export"] = export()
+    return report
 
 
 # --- stage 4: a video to look at ----------------------------------------------------------------

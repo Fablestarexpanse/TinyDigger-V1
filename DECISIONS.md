@@ -3418,4 +3418,17 @@ The digger and hauler assets are deleted. `Art/Tools/td_dumper.py` does this one
   machine takes smaller steps. Tried at 1.0 m ("still feels too big") and now **0.7 m to the top
   of the shell**: 0.79 m over all, 0.74 by 0.95 m on the ground, about 1.7 robots tall, with a bed
   holding roughly 0.1 m³ — half a Worker's barrow.
+- **Painted and delivered (2026-09-22).** No UVs and no maps came with the scan, so the machine
+  wears flat materials in the crew robot's palette, read out of `crew_unit.blend`: cream shell,
+  near-black trim and claws, cyan lenses, steel ram, pale bed. Colours are decided per welded
+  piece — per polygon the band smeared across the hips and the eye was never found.
+  - **Ronan's call left to me:** the band goes round the **bed's rim** rather than the ball's
+    waist, because the game looks down on these machines and the bed hides the waist; and both of
+    the scan's front ports are lit, which reads as a face.
+  - `deliver()` exports `Art/Units/dumper.fbx` (2.1 MB, ten clips) with the crew rig's rules:
+    bake_space_transform off, already facing +Y, FBX_SCALE_UNITS. Unity: generic rig,
+    `bakeAxisConversion`, clips named and looped where they should be, six URP materials matching
+    the palette, and `Art/Units/Prefabs/dumper.prefab`. It arrives 0.74 x 0.95 x 0.79 m.
+  - **Spotted in passing:** the crew robot's own shell material is missing on its importer, so it
+    renders magenta in the sandbox scene. Raised as its own task.
 
