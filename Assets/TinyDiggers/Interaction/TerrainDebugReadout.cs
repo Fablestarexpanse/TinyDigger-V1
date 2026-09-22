@@ -141,14 +141,14 @@ namespace TinyDiggers.Interaction
                 foreach (var member in units)
                 {
                     _unitText.Append(ReferenceEquals(member, _crew.Selected) ? " >" : "  ")
-                        .Append(member.Id).Append(' ').Append(member.Role).Append(": ").Append(member.State).Append("  ")
+                        .Append(member.Id).Append(' ').Append(UnitNames.Of(member.Role)).Append(": ").Append(member.State).Append("  ")
                         .Append(member.Inventory.Total.ToString("0.0")).Append('/')
                         .Append(member.Inventory.Capacity.ToString("0")).Append(" m³  ")
                         .AppendLine(member.Status);
                 }
 
                 _unitText.AppendLine()
-                    .Append(ReferenceEquals(shown, _crew.Selected) ? "Selected " : "Unit ").Append(shown.Role)
+                    .Append(ReferenceEquals(shown, _crew.Selected) ? "Selected " : "Unit ").Append(UnitNames.Of(shown.Role))
                     .Append(' ').Append(shown.Id)
                     .Append(": ").AppendLine(shown.Status)
                     .Append("  at (").Append(shown.Cell.x).Append(", ").Append(shown.Cell.y).Append("), dig reach ±")

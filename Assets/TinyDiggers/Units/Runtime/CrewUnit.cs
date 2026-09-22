@@ -6,6 +6,29 @@ using UnityEngine;
 namespace TinyDiggers.Units
 {
     /// <summary>What a unit is for. Both carry a <see cref="MaterialInventory"/>.</summary>
+    /// <summary>
+    /// What each kind of unit is called where the player can see it (Ronan, 2026-09-22): "digger
+    /// mech, dumper mech, starter robot are good". The roles keep their own names in the code,
+    /// which say what a unit does rather than what it is.
+    /// </summary>
+    public static class UnitNames
+    {
+        public const string Worker = "Starter robot";
+        public const string Digger = "Digger mech";
+        public const string Hauler = "Dumper mech";
+
+        /// <summary>What to call a unit of this role.</summary>
+        public static string Of(UnitRole role)
+        {
+            switch (role)
+            {
+                case UnitRole.Digger: return Digger;
+                case UnitRole.Hauler: return Hauler;
+                default: return Worker;
+            }
+        }
+    }
+
     public enum UnitRole
     {
         /// <summary>Digs and fills the ground, and empties its scoop into a hauler or an area to tip in.</summary>

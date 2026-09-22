@@ -3778,3 +3778,16 @@ Standing in a cut is now a **machine's** privilege (`WorksFromInside`). A machin
 bench at a time and can climb back out; a robot with a barrow keeps to the older rule — work a dig
 area from outside, never from inside — and waits for a way down. Both of Ronan's readings hold,
 and the rule the tests were written to survives.
+
+## 2026-09-22 — Names, and who hauls
+
+Ronan's names (2026-09-22): **starter robot**, **digger mech**, **dumper mech**. They live in
+`UnitNames` and are what the crew panel and the readout show. The `UnitRole` values keep their own
+names in the code, because a role says what a unit *does* — plenty of things dig without being the
+digger mech.
+
+And his rule: "the smallest ones have to dig and haul their own material, they can't dump into the
+dump truck bot". That was already true, but only because two separate checks happened to agree —
+`TryTransferToAdjacentHauler` is for diggers and `AssignDigger` only offers them. Two tests hold it
+now: a dumper mech asked to serve a crew of starter robots finds nobody, and a starter robot with a
+dumper mech standing by still walks its own barrow to the heap and never waits for one.

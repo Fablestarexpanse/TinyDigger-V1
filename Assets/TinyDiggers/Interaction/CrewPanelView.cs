@@ -133,7 +133,7 @@ namespace TinyDiggers.Interaction
 
                 counts.TryGetValue(unit.Role, out var n);
                 counts[unit.Role] = ++n;
-                row.Name.text = $"{unit.Role} {n}";
+                row.Name.text = $"{UnitNames.Of(unit.Role)} {n}";
                 row.State.text = Short(unit);
                 row.State.color = unit.State == CrewUnitState.NeedsSomewhereToTip || unit.State == CrewUnitState.NeedsMaterial
                     ? UiKit.Warning : new Color(0.8f, 0.82f, 0.85f);
