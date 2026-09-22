@@ -3650,3 +3650,18 @@ On the box he thought was turning with the arm: in this rig it is not. Measured 
 slew, every vertex of it is on the body bone and moves nought millimetres. What he was looking at
 was the stale FBX in Unity, from the first delivery, when the arm's weights were quite different.
 Unity has the current one now: 8 clips, walk/idle/turn/stuck/slew looping, prefab rebuilt.
+
+## 2026-09-22 — Scale: the digger was half a machine, and is now the bigger one
+
+Lining the three units up side by side showed the digger was not the dumper's size at all. Both
+read "0.70 m", but the digger's was measured over its folded arm: its hull stood 0.53 m and was
+0.37 m wide against the dumper's 0.79 and 0.74 — half the machine.
+
+`set_height` now takes the groups to ignore when measuring, so each machine is sized to the top of
+its **hull**, ignoring whatever it carries above that: the dumper's raised bed, the digger's
+folded arm. The digger's own fittings are dropped clear of the swing before it is sized, too —
+they were the tallest thing on it, so sizing first measured masts that were about to come down.
+
+**Ronan's ruling: the digger is slightly bigger than the dumper.** Its hull stands 0.86 m against
+the dumper's 0.79, it is 0.59 m wide by 1.08 deep, and 1.12 m to the top of its arm when carried.
+The crew robot is 0.41 m. Lineup: `Screenshots/Units/units_scale_lineup.png`.

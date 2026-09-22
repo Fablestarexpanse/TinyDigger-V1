@@ -32,7 +32,10 @@ from td_walker import _log, _shells_of, _window_override, harden, weld, face_for
 NAME = "digger"
 
 # Ronan's ruling: the same size as the dumper, measured to the top of the body shell.
-HEIGHT = 0.7
+# To the top of the hull, not over the folded arm. The dumper's body stands 0.79 m and Ronan
+# wants this one slightly bigger (2026-09-22), so it is the taller machine of the pair, standing
+# about 1.15 m to the top of its arm when that is carried.
+HEIGHT = 0.86
 
 # How far apart two arm vertices can be and still count as joined when the spine is walked out.
 # The arm's pieces stand a few millimetres clear of each other in the scan.
@@ -900,11 +903,16 @@ def build(height=HEIGHT, crew=False):
     td_walker.shell_to_body(mesh)
     arm = rebuild_arm(mesh, rig, named.get("arm_parts"))
 
+    # Drop the fittings before sizing: they are the tallest thing on the machine after the arm,
+    # so sizing first measured the machine to the tips of masts that were about to come down.
+    clear_the_swing(mesh, rig)
+
     scale = 1.0
     if height:
-        scale = td_walker.set_height(height) or 1.0
+        # Measured to the top of the hull: the arm folds up well above it, and sizing over that
+        # made this machine half the dumper while both read the same number.
+        scale = td_walker.set_height(height, ignore=("turret", "boom", "stick", "bucket")) or 1.0
 
-    clear_the_swing(mesh, rig)
     td_walker.settle_weights(mesh, rig)
     td_walker.paint(mesh, rig)
     legs = td_walker._rest(rig)

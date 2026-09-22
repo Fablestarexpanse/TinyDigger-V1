@@ -1285,22 +1285,23 @@ def bring_crew(beside=True, gap=0.9):
     return {"objects": [o.name for o in brought], "height": round(top, 3)}
 
 
-def set_height(metres, shell_only=True):
+def set_height(metres, shell_only=True, ignore=("tray",)):
     """
-    Scales the dumper, rig and all, to stand `metres` high. With `shell_only` the height is
-    measured to the top of the body shell rather than to the raised bed, which is how the
-    machines were sized before.
+    Scales the machine, rig and all, to stand `metres` high.
+
+    With `shell_only` the height is measured to the top of the body shell, ignoring whatever the
+    machine carries above it — the dumper's raised bed, or the digger's folded arm. Measuring over
+    the arm made the digger half the dumper's machine while both read "0.70 m".
     """
     mesh = bpy.data.objects[MACHINE]
     rig = bpy.data.objects[f"{MACHINE}_rig"]
 
-    tray = mesh.vertex_groups.get("tray")
-    tray_indices = {v.index for v in mesh.data.vertices
-                    if tray is not None and any(g.group == tray.index and g.weight > 0.5
-                                                for g in v.groups)}
+    carried = {group.index for group in mesh.vertex_groups if group.name in ignore}
+    carried_indices = {v.index for v in mesh.data.vertices
+                       if any(g.group in carried and g.weight > 0.5 for g in v.groups)}
     floor = min(v.co.z for v in mesh.data.vertices)
-    if shell_only and tray_indices:
-        top = max(v.co.z for v in mesh.data.vertices if v.index not in tray_indices)
+    if shell_only and carried_indices:
+        top = max(v.co.z for v in mesh.data.vertices if v.index not in carried_indices)
     else:
         top = max(v.co.z for v in mesh.data.vertices)
 
