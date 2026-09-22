@@ -416,18 +416,236 @@ def skin(name):
     return counts
 
 
-def build(name):
-    """Stages 1 to 3 for one machine."""
+def _rim_tilt(tray):
+    """
+    How far the tray's rim slopes front to back, in radians. The rim is what the eye reads as
+    level; fitting the floor instead gives nonsense, because the floor of a hopper is a V.
+    """
+    front = [v.co for v in tray if v.co.y > 0.55]
+    rear = [v.co for v in tray if v.co.y < -0.85]
+    if not front or not rear:
+        return 0.0
+
+    def lip(band):
+        top = sorted(band, key=lambda c: -c.z)[:max(3, len(band) // 8)]
+        return (sum(c.y for c in top) / len(top), sum(c.z for c in top) / len(top))
+
+    fy, fz = lip(front)
+    ry, rz = lip(rear)
+    return math.atan((fz - rz) / (fy - ry)) if abs(fy - ry) > 1e-6 else 0.0
+
+
+def level_tray(name="hauler"):
+    """
+    Rests the hauler's tray level. The scan was made with the tray tipped up, which is a fine
+    picture and a poor rest pose: a machine standing about with its tray in the air looks like it
+    is about to drop something. The tray's floor is measured and turned back down about its hinge,
+    so rest is level and the tip clip is the thing that raises it.
+    """
+    obj = bpy.data.objects[name]
+    group = obj.vertex_groups.get("tray")
+    if group is None:
+        return None
+    index = group.index
+    tray = [v for v in obj.data.vertices if any(g.group == index for g in v.groups)]
+    if not tray:
+        return None
+
+    tilt = _rim_tilt(tray)
+    hinge = bpy.data.objects[f"{name}_rig"].data.bones["tray"].head_local.copy()
+    turn = (mathutils.Matrix.Translation(hinge)
+            @ mathutils.Matrix.Rotation(-tilt, 4, 'X')
+            @ mathutils.Matrix.Translation(-hinge))
+    for vertex in tray:
+        vertex.co = turn @ vertex.co
+    obj.data.update()
+
+    left = _rim_tilt(tray)
+    _log(f"{name}: tray rested level, turned back {math.degrees(tilt):.1f} degrees "
+         f"({math.degrees(left):.1f} left)")
+    return {"tilt_deg": round(math.degrees(tilt), 1),
+            "left_deg": round(math.degrees(left), 1),
+            "verts": len(tray)}
+
+
+def build(name, animate=True):
+    """Stages 1 to 4 for one machine: clean, skeleton, skin, and the clips."""
     report = clean(name)
     report["skeleton"] = skeleton(name)
     report["weights"] = skin(name)
+    if name == "hauler":
+        report["tray"] = level_tray(name)
+    if animate:
+        report["clips"] = clips(name)
     return report
 
 
-def build_all():
-    """Stages 1 to 3 for both machines, into an empty scene."""
+def build_all(animate=True):
+    """Every stage for both machines, into an empty scene."""
     bpy.ops.wm.read_homefile(use_empty=True)
-    return {name: build(name) for name in SCANS}
+    return {name: build(name, animate=animate) for name in SCANS}
+
+
+# --- stage 4: the clips ------------------------------------------------------------------------
+
+# Frames a second the clips are authored at. Unity resamples, but whole frames keep the poses
+# where they were put.
+FPS = 30
+
+# The four legs in the order they step: opposite corners together, the way a four-legged machine
+# keeps two feet down at all times.
+GAITS = {
+    "digger": [("fl", "br"), ("fr", "bl")],
+    "hauler": [("fl", "br"), ("fr", "bl")],
+}
+
+# How far a leg swings, in degrees, and how much the knee folds under it.
+STRIDE = 22.0
+KNEE = 30.0
+
+# How far the body sinks and rises over a stride, in metres.
+BOB = 0.05
+
+
+def _fcurves(action):
+    """
+    An action's curves, whichever way this Blender keeps them: 4.x hangs them off the action,
+    5.x puts them in a channelbag inside a layer's strip (slotted actions).
+    """
+    if hasattr(action, "fcurves") and len(action.fcurves):
+        return list(action.fcurves)
+    curves = []
+    for layer in getattr(action, "layers", []):
+        for strip in getattr(layer, "strips", []):
+            for bag in getattr(strip, "channelbags", []):
+                curves.extend(bag.fcurves)
+    return curves
+
+
+def _clip(rig, name, frames):
+    """
+    Lays one clip on the rig. `frames` is {frame: {bone: (rx, ry, rz)}} in degrees, with the bone
+    name "body" also taking a (0, 0, dz) lift through a fourth number.
+    """
+    if rig.animation_data is None:
+        rig.animation_data_create()
+    action = bpy.data.actions.new(f"{rig.name}|{name}")
+    action.use_fake_user = True
+    rig.animation_data.action = action
+
+    for bone in rig.pose.bones:
+        bone.rotation_mode = 'XYZ'
+
+    for frame, poses in sorted(frames.items()):
+        for bone_name, values in poses.items():
+            bone = rig.pose.bones.get(bone_name)
+            if bone is None:
+                continue
+            bone.rotation_euler = [math.radians(v) for v in values[:3]]
+            bone.keyframe_insert("rotation_euler", frame=frame)
+            if len(values) > 3:
+                bone.location = (0.0, 0.0, values[3])
+                bone.keyframe_insert("location", frame=frame)
+
+    for curve in _fcurves(action):
+        for point in curve.keyframe_points:
+            point.interpolation = 'BEZIER'
+    return action
+
+
+def _walk_frames(name, length=24, stride=STRIDE, knee=KNEE, bob=BOB, turn=0.0):
+    """
+    A four-leg walk: opposite corners swing together, so two feet are always down. `turn` swings
+    the legs sideways instead of forward, which walks the machine round on the spot.
+    """
+    pairs = GAITS[name]
+    frames = {}
+    for step in range(5):
+        frame = 1 + round(step * length / 4.0)
+        phase = step / 4.0
+        poses = {}
+        for i, pair in enumerate(pairs):
+            # One pair is half a cycle behind the other.
+            angle = math.sin((phase + i * 0.5) * math.tau)
+            lift = max(0.0, math.cos((phase + i * 0.5) * math.tau))
+            for quad in pair:
+                swing = angle * stride
+                poses[f"leg_{quad}_upper"] = (swing * (1.0 - abs(turn)), 0.0, turn * swing)
+                poses[f"leg_{quad}_lower"] = (-lift * knee, 0.0, 0.0)
+                poses[f"leg_{quad}_foot"] = (lift * knee * 0.45, 0.0, 0.0)
+        poses["body"] = (0.0, 0.0, 0.0, -bob * abs(math.sin(phase * math.tau)))
+        frames[frame] = poses
+    return frames
+
+
+def _idle_frames(name, length=48, sink=0.02):
+    """A machine at rest: it settles on its legs and breathes, so it never looks frozen."""
+    frames = {}
+    for step, share in ((0, 0.0), (1, 1.0), (2, 0.0)):
+        frame = 1 + round(step * length / 2.0)
+        poses = {"body": (0.0, 0.0, 0.0, -sink * share)}
+        for pair in GAITS[name]:
+            for quad in pair:
+                poses[f"leg_{quad}_upper"] = (share * 2.0, 0.0, 0.0)
+                poses[f"leg_{quad}_lower"] = (-share * 3.0, 0.0, 0.0)
+        frames[frame] = poses
+    return frames
+
+
+def _scoop_frames(length=60):
+    """
+    The digger's cut: reach out and down, curl the bucket through the ground, lift it clear, swing
+    round to the side and open it, then come back. The angles are the rig's own, in degrees.
+    """
+    reach = {"boom": (-28.0, 0.0, 0.0), "stick": (34.0, 0.0, 0.0), "bucket": (10.0, 0.0, 0.0)}
+    cut = {"boom": (-18.0, 0.0, 0.0), "stick": (46.0, 0.0, 0.0), "bucket": (55.0, 0.0, 0.0)}
+    lift = {"boom": (-40.0, 0.0, 0.0), "stick": (20.0, 0.0, 0.0), "bucket": (60.0, 0.0, 0.0)}
+    swing = {"turret": (0.0, 0.0, 55.0), "boom": (-40.0, 0.0, 0.0), "stick": (20.0, 0.0, 0.0),
+             "bucket": (60.0, 0.0, 0.0)}
+    drop = {"turret": (0.0, 0.0, 55.0), "boom": (-34.0, 0.0, 0.0), "stick": (26.0, 0.0, 0.0),
+            "bucket": (-15.0, 0.0, 0.0)}
+    rest = {"turret": (0.0, 0.0, 0.0), "boom": (0.0, 0.0, 0.0), "stick": (0.0, 0.0, 0.0),
+            "bucket": (0.0, 0.0, 0.0)}
+    marks = [(1, rest), (10, reach), (20, cut), (30, lift), (40, swing), (48, drop), (length, rest)]
+    return {frame: dict(pose) for frame, pose in marks}
+
+
+def _tip_frames(length=48, angle=48.0):
+    """The hauler's tip: the tray rises, holds while the load runs out, and settles back."""
+    return {
+        1: {"tray": (0.0, 0.0, 0.0)},
+        14: {"tray": (angle, 0.0, 0.0)},
+        30: {"tray": (angle, 0.0, 0.0)},
+        length: {"tray": (0.0, 0.0, 0.0)},
+    }
+
+
+def clips(name):
+    """
+    Stage 4. Lays the clips Ronan asked for on one machine: walk, idle and turn for both, the
+    scoop for the digger, the tip for the hauler. Each is its own action, kept by a fake user so
+    it survives a save, and the FBX export writes them as Unity clips.
+    """
+    rig = bpy.data.objects[f"{name}_rig"]
+    bpy.context.scene.render.fps = FPS
+
+    made = {}
+    made["walk"] = _clip(rig, "walk", _walk_frames(name))
+    made["idle"] = _clip(rig, "idle", _idle_frames(name))
+    made["turn"] = _clip(rig, "turn", _walk_frames(name, stride=STRIDE * 0.8, turn=0.8))
+    if name == "digger":
+        made["scoop"] = _clip(rig, "scoop", _scoop_frames())
+    else:
+        made["tip"] = _clip(rig, "tip", _tip_frames())
+
+    rig.animation_data.action = None
+    for bone in rig.pose.bones:
+        bone.rotation_euler = (0.0, 0.0, 0.0)
+        bone.location = (0.0, 0.0, 0.0)
+
+    _log(f"{name}: {len(made)} clips ({', '.join(sorted(made))})")
+    return {label: {"name": action.name, "frames": int(action.frame_range[1])}
+            for label, action in made.items()}
 
 
 # --- looking at what came out ----------------------------------------------------------------
@@ -509,6 +727,8 @@ def check_sheet(folder, crew=True, only=None):
     wide = 4.0 * len(machines) + 3.0
     centre = mathutils.Vector((0.0, 0.0, span * 0.45))
     shots = {}
+    # to_track_quat's second axis is the camera's own up, not a world axis: 'Y' is what keeps the
+    # shot upright. Passing 'Z' lays every standing view on its side.
     for label, offset, scale in (
         ("side", (12.0, 0.0, 0.0), wide),
         ("front", (0.0, -12.0, 0.0), wide),
