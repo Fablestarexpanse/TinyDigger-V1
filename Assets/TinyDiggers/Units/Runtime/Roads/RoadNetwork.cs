@@ -127,6 +127,60 @@ namespace TinyDiggers.Units
             return road;
         }
 
+        /// <summary>
+        /// Redraws a road through <paramref name="nodes"/>, keeping its id, so an edit re-designates
+        /// only what changed. A node with an id already in the network is that node, moved to
+        /// where the draft has it (and every road through it reshaped with it); a node with id 0
+        /// is new, and at either end joins a node within <paramref name="snap"/> cells as
+        /// <see cref="AddRoad"/> does. Returns false if fewer than two distinct nodes are left.
+        /// </summary>
+        public bool ReplaceRoad(int road, IReadOnlyList<RoadNode> nodes, int width, float snap = 1.5f)
+        {
+            if (nodes == null || nodes.Count < 2)
+                return false;
+            var touched = new HashSet<int> { road };
+            var chain = new List<int>();
+            for (var i = 0; i < nodes.Count; i++)
+            {
+                var draft = nodes[i];
+                var node = draft.Id != 0 ? Node(draft.Id) : null;
+                if (node == null && (i == 0 || i == nodes.Count - 1))
+                    node = NodeNear(draft.Position, snap);
+                if (node == null)
+                {
+                    node = new RoadNode { Id = NextId++ };
+                    Nodes.Add(node);
+                }
+                else
+                {
+                    foreach (var segment in Segments)
+                        if (segment.From == node.Id || segment.To == node.Id)
+                            touched.Add(segment.Road);
+                }
+
+                if (draft.Id == node.Id || draft.Id == 0 && Degree(node.Id) == 0)
+                {
+                    node.Position = draft.Position;
+                    node.Height = draft.Height;
+                    node.LockToGround = draft.LockToGround;
+                    node.Handle = draft.Handle;
+                }
+
+                if (chain.Count == 0 || chain[chain.Count - 1] != node.Id)
+                    chain.Add(node.Id);
+            }
+
+            if (chain.Count < 2)
+                return false;
+            Segments.RemoveAll(s => s.Road == road);
+            for (var i = 0; i + 1 < chain.Count; i++)
+                Segments.Add(new RoadSegment { Id = NextId++, Road = road, From = chain[i], To = chain[i + 1], Width = width });
+            RemoveOrphans();
+            foreach (var changed in touched)
+                Changed?.Invoke(changed);
+            return true;
+        }
+
         /// <summary>The road's nodes in order, first to last.</summary>
         public List<RoadNode> Chain(int road)
         {

@@ -195,6 +195,40 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
   with nothing tipped in.
 - One hauler per digger at a time; the dispatcher hands them out.
 
+### Roads (built, slice 17)
+
+- **A road is a spline, not painted cells.** The `RoadNetwork` (plain C#, serialisable) holds
+  nodes and segments.
+  - A road is the chain of segments drawn in one go, 3, 5 or 7 cells wide.
+  - Each node has a height, a "lock to ground" flag and an optional tangent handle.
+  - Roads meet by sharing a node: a road's end placed within 1.5 cells of a node joins it, and
+    that is a junction.
+- **The curve** is a cubic Hermite (the same as a Bézier with its handles a third of the tangent
+  out). Tangents are automatic (Catmull-Rom) unless dragged.
+  - It is 3D: the height runs smoothly along it but never beyond a segment's end heights, so a
+    road never humps between two nodes.
+  - A segment's **grade** is its steepest stretch, not its average. Up to the limit (default 12%)
+    it is fine; over it the ghost shows orange; over twice it, red, and the road is refused.
+- **The spline is the plan; designations are the work.**
+  - The footprint is the spline's height across the full width (the road bed), then a half-cell
+    shoulder blending into the ground, rounded to the height step. Those cells become Dig or
+    Fill designations to that height.
+  - Cut faces and embankments beyond them are left to slump, as for any dig or fill. The ghost
+    shows what slump will leave, at the ground's and the spoil's angles of repose, and counts it
+    in the cut/fill readout.
+- **Road material.** When a road-bed cell's designation is met, the top 0.25 m of its column
+  becomes `Road` (packed gravel, id 18) in place, so the height does not change.
+  - Deleting the road turns it back to Dirt.
+  - Editing a built road re-designates only what moved.
+  - A cell shared by two roads stays Road while either does.
+- **Road cells are cheap to drive:** a step from Road to Road costs 0.7 of its distance and
+  nothing for its slope, so units go out of their way to use a road.
+- **A road's cut needs a Dump Zone, and its fill needs material from somewhere.** The crew only
+  moves what exists. Laying a road that makes spoil with no Dump Zone on the map is reported
+  straight away.
+- **Known limit:** a road cut deep into a steep hillside can outrun the crew's dig reach. In the
+  slice 17 run the crew built the lower stretch and reported the deep cuts unreachable.
+
 ## 5. Rendering plan
 
 ### Now (slice 0/1)

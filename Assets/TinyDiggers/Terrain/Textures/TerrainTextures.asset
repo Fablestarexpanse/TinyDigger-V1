@@ -132,3 +132,10 @@ MonoBehaviour:
     CutAlbedo: {fileID: 0}
     CutNormal: {fileID: 0}
     Smoothness: 0.06
+  - MaterialId: 18
+    Name: Road
+    Albedo: {fileID: 2800000, guid: c53539d56019f5b4297bdc13209467d6, type: 3}
+    Normal: {fileID: 2800000, guid: 767e3e98ca8f0dd4c89a7e19add33b66, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    Smoothness: 0.1

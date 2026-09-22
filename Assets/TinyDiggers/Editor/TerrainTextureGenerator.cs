@@ -613,6 +613,24 @@ namespace TinyDiggers.EditorTools
                         Relief = 0.95f, Shade = 0.13f, Evenness = 300f,
                     },
                 },
+                new Recipe
+                {
+                    Id = MaterialTable.Road, Name = "Road", Smoothness = 0.1f,
+                    // Packed gravel (Slice 17 Part B): stones a thumb across, rolled flat, so fine
+                    // grain and little relief; a warm grey with darker grit between the stones and
+                    // faint wheel-worn streaks, so it reads as made ground next to the loose rubble.
+                    Main = new Pattern
+                    {
+                        File = "road",
+                        Base = new Color(0.46f, 0.44f, 0.39f),
+                        Fleck = new Color(0.34f, 0.32f, 0.29f),
+                        Height = (x, y) => 0.55f * (1f - Worley(x, y, Feature(28f)))
+                                         + 0.3f * Fbm(x, y, Feature(8f), 2)
+                                         + 0.15f * Fbm(x * 0.2f, y, Feature(120f), 2),
+                        Flecks = (x, y) => Mathf.SmoothStep(0.55f, 0.9f, Worley(x, y, Feature(28f))) * 0.8f,
+                        Relief = 0.3f, Shade = 0.08f, Evenness = 220f,
+                    },
+                },
             };
         }
 

@@ -31,12 +31,10 @@ namespace TinyDiggers.Interaction
     ///   <see cref="BrushRadius"/> cells ([ and ] resize it).
     /// - **Dump Zone**, **Level** and **Clear** are dragged out as rectangles: a zone capped at
     ///   H + <see cref="ZoneCapAbove"/>, a pad levelled to H by digging or filling whichever each
-    ///   cell needs, and a rubber that takes every designation and zone off the cells it covers.
-    /// - **Road** takes a run of clicked points, each at the ground height where it was clicked
-    ///   (or H while H is locked), and lays a ribbon <see cref="RoadWidth"/> cells wide between
-    ///   them, its height interpolated along each leg. The ghost shows the cut and fill it would
-    ///   cost before anything is committed, and turns orange and refuses to confirm if any leg is
-    ///   steeper than <see cref="MaxGrade"/>.
+    ///   cell needs (or, with <see cref="LevelRamp"/>, a ramp from H at the edge the drag started
+    ///   from to <see cref="LevelHeightB"/> at the far edge), and a rubber that takes designations
+    ///   and zones off the cells it covers.
+    /// - **Road** is a spline tool (Slice 17 Part B): see <see cref="RoadsHost"/>.
     ///
     /// H follows the hovered cell until PageUp or PageDown moves it, which locks it; the toolbar
     /// unlocks it again.
@@ -47,9 +45,6 @@ namespace TinyDiggers.Interaction
     /// </summary>
     public sealed class PlayerTools : MonoBehaviour
     {
-        /// <summary>Metres of rise per metre a road may climb before the crew is asked to do too much.</summary>
-        public const float MaxGrade = 0.25f;
-
         [SerializeField] TerrainView _terrain;
         [SerializeField] Camera _camera;
         [SerializeField] DesignationsView _designations;
@@ -57,8 +52,6 @@ namespace TinyDiggers.Interaction
         [SerializeField] Material _overlayMaterial;
         [SerializeField] Color32 _previewColor = new Color32(255, 240, 160, 90);
         [SerializeField] Color32 _rectColor = new Color32(140, 220, 255, 90);
-        [SerializeField] Color32 _roadColor = new Color32(120, 230, 160, 110);
-        [SerializeField] Color32 _roadSteepColor = new Color32(255, 150, 40, 140);
 
         /// <summary>Cells either side of the hovered one that Dig and Fill paint.</summary>
         [Range(BrushPlan.MinRadius, BrushPlan.MaxRadius)] public int BrushRadius = 2;
@@ -68,8 +61,22 @@ namespace TinyDiggers.Interaction
         public bool ClearFill = true;
         public bool ClearZones = true;
 
-        /// <summary>Cells across a road.</summary>
-        [Range(3, 7)] public int RoadWidth = 3;
+        /// <summary>Cells across the road being drawn: 3, 5 or 7.</summary>
+        public int RoadWidth
+        {
+            get => Roads != null ? Roads.Draft.Width : 3;
+            set
+            {
+                if (Roads != null)
+                    Roads.Draft.Width = Mathf.Clamp(value, 3, 7) | 1;
+            }
+        }
+
+        /// <summary>Level makes a ramp: H at the edge the drag started from, <see cref="LevelHeightB"/> at the far edge.</summary>
+        public bool LevelRamp;
+
+        /// <summary>The ramp's height at the far edge, in metres.</summary>
+        public float LevelHeightB;
 
         /// <summary>Metres above H that spoil may be heaped on a Dump Zone marked now.</summary>
         [Min(0f)] public float ZoneCapAbove = 3f;
@@ -77,9 +84,7 @@ namespace TinyDiggers.Interaction
         readonly List<Vector3> _vertices = new List<Vector3>();
         readonly List<Color32> _colors = new List<Color32>();
         readonly List<int> _triangles = new List<int>();
-        readonly List<RoadPoint> _roadPoints = new List<RoadPoint>();
         readonly List<PlannedCell> _plan = new List<PlannedCell>();
-        readonly List<RoadPoint> _previewPoints = new List<RoadPoint>();
         readonly HashSet<int> _strokeCells = new HashSet<int>();
         readonly List<Vector2Int> _brushCells = new List<Vector2Int>();
         DesignationMap _historyFor;
@@ -89,8 +94,6 @@ namespace TinyDiggers.Interaction
         float _strokeHeight;
         bool _dragging;
         Vector2Int _dragFrom;
-        float _lastRoadClickTime;
-        Vector2Int _lastRoadClickCell;
 
         public ToolMode Mode { get; private set; } = ToolMode.Select;
 
@@ -109,22 +112,28 @@ namespace TinyDiggers.Interaction
         /// <summary>What the last action did, for the toolbar.</summary>
         public string LastAction { get; private set; } = "";
 
-        /// <summary>Control points placed on the road being laid out.</summary>
-        public int RoadPointCount => _roadPoints.Count;
-
         /// <summary>Cut and fill the shape under the cursor would cost, in m³.</summary>
         public float PlannedCut { get; private set; }
 
         public float PlannedFill { get; private set; }
 
-        /// <summary>Whether the road as drawn is too steep to confirm.</summary>
-        public bool RoadTooSteep { get; private set; }
+        /// <summary>Whether the road being drawn has a segment over twice the max grade, which refuses it.</summary>
+        public bool RoadTooSteep => Roads != null && Roads.State == RoadGradeState.Refused;
 
-        /// <summary>The steepest leg of the road being drawn, in metres per cell.</summary>
-        public float RoadGrade { get; private set; }
+        /// <summary>The island's roads and the Road tool (Slice 17 Part B).</summary>
+        public RoadsHost Roads { get; private set; }
+
+        /// <summary>The camera the tools pick through.</summary>
+        public Camera Camera => _camera;
+
+        /// <summary>The cursor on the ground in cells, continuous (a cell's centre is at .5).</summary>
+        public Vector2 HoverCells { get; private set; }
+
+        /// <summary>Puts a line in the status bar.</summary>
+        public void Say(string message) => LastAction = message;
 
         /// <summary>Whether a rectangle or a road is part-drawn.</summary>
-        public bool IsDrawing => _dragging || _roadPoints.Count > 0;
+        public bool IsDrawing => _dragging || Roads != null && Roads.IsDrawing;
 
         public DesignationMap Map => _designations.Map;
 
@@ -208,6 +217,8 @@ namespace TinyDiggers.Interaction
             meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
 
             gameObject.AddComponent<BrushCursorView>().Init(this, _terrain, _overlayMaterial);
+            Roads = gameObject.AddComponent<RoadsHost>();
+            Roads.Init(this, _terrain, _overlayMaterial);
         }
 
         public void SetMode(ToolMode mode)
@@ -229,12 +240,10 @@ namespace TinyDiggers.Interaction
         {
             _dragging = false;
             _painting = false;
-            _roadPoints.Clear();
+            Roads?.Cancel();
             _plan.Clear();
             PlannedCut = 0f;
             PlannedFill = 0f;
-            RoadTooSteep = false;
-            RoadGrade = 0f;
         }
 
         void Update()
@@ -309,6 +318,9 @@ namespace TinyDiggers.Interaction
                     SetMode(ToolMode.Select);
             }
 
+            if (Mode == ToolMode.Road && Roads != null && Roads.HandleKeys(keyboard))
+                return;
+
             if (keyboard.pageUpKey.wasPressedThisFrame)
                 NudgeHeight(step, grid);
             if (keyboard.pageDownKey.wasPressedThisFrame)
@@ -318,9 +330,6 @@ namespace TinyDiggers.Interaction
                 Resize(-1);
             if (keyboard.rightBracketKey.wasPressedThisFrame)
                 Resize(1);
-
-            if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
-                FinishRoad();
 
             var ctrl = keyboard.ctrlKey.isPressed;
             if (ctrl && keyboard.zKey.wasPressedThisFrame)
@@ -338,7 +347,7 @@ namespace TinyDiggers.Interaction
         void Resize(int by)
         {
             if (Mode == ToolMode.Road)
-                RoadWidth = Mathf.Clamp(RoadWidth + by * 2, 3, 7);
+                RoadWidth = RoadWidth + by * 2;
             else
                 BrushRadius = Mathf.Clamp(BrushRadius + by, BrushPlan.MinRadius, BrushPlan.MaxRadius);
         }
@@ -361,11 +370,12 @@ namespace TinyDiggers.Interaction
                 terrainTransform.InverseTransformDirection(ray.direction),
                 out var x,
                 out var z,
-                out _) && grid.IsGround(x, z);
+                out var point) && grid.IsGround(x, z);
             if (!HasHover)
                 return;
             HoverX = x;
             HoverZ = z;
+            HoverCells = new Vector2(point.x / grid.CellSize, point.z / grid.CellSize);
         }
 
         /// <summary>Whether a selection box is being dragged, and where (Input System pixels).</summary>
@@ -511,8 +521,7 @@ namespace TinyDiggers.Interaction
                     DragRectangle(leftDown, leftUp, grid);
                     break;
                 case ToolMode.Road:
-                    if (leftDown)
-                        AddRoadPoint(grid);
+                    Roads.HandleMouse(mouse, HasHover, HoverCells);
                     break;
             }
         }
@@ -596,10 +605,12 @@ namespace TinyDiggers.Interaction
 
                 case ToolMode.Level:
                 {
-                    Blueprints.PlanLevel(grid, area, _strokeHeight, _plan);
+                    PlanPad(grid, area, _dragFrom, _strokeHeight, includeSettled: false);
                     var made = Blueprints.Apply(Map, _plan);
                     Blueprints.Volumes(_plan, out var cut, out var fill, _terrain.Grid.CellArea);
-                    LastAction = $"Level to {_strokeHeight:0.#} m: {made} cells, {cut:0} m³ cut, {fill:0} m³ fill";
+                    LastAction = LevelRamp
+                        ? $"Ramp {_strokeHeight:0.#} m to {LevelHeightB:0.#} m: {made} cells, {cut:0} m³ cut, {fill:0} m³ fill"
+                        : $"Level to {_strokeHeight:0.#} m: {made} cells, {cut:0} m³ cut, {fill:0} m³ fill";
                     _plan.Clear();
                     break;
                 }
@@ -617,6 +628,15 @@ namespace TinyDiggers.Interaction
             }
         }
 
+        /// <summary>A level pad, or with <see cref="LevelRamp"/> a ramp from the drag's start edge up or down to <see cref="LevelHeightB"/>.</summary>
+        void PlanPad(TerrainGrid grid, RectInt area, Vector2Int from, float height, bool includeSettled)
+        {
+            if (LevelRamp)
+                Blueprints.PlanRamp(grid, area, from, height, LevelHeightB, _plan, includeSettled);
+            else
+                Blueprints.PlanLevel(grid, area, height, _plan, includeSettled);
+        }
+
         /// <summary>Takes off what the Clear tool's checkboxes say: dig, fill, Dump Zone. Returns whether anything went.</summary>
         bool ClearCell(int x, int z)
         {
@@ -627,66 +647,6 @@ namespace TinyDiggers.Interaction
             if (ClearZones && Map.SetDumpZone(x, z, false))
                 changed = true;
             return changed;
-        }
-
-        /// <summary>Places a road control point at a cell, as clicking it would. For scripted runs.</summary>
-        public void PlaceRoadPoint(int x, int z, float? height = null)
-        {
-            var grid = _terrain.Grid;
-            if (grid == null || !grid.IsGround(x, z))
-                return;
-            _roadPoints.Add(new RoadPoint(new Vector2Int(x, z), height ?? grid.GetSurfaceHeight(x, z)));
-            RefreshRoadPlan(grid, null);
-        }
-
-        /// <summary>Lays the road that has been drawn, if it is not too steep. Returns whether it went down.</summary>
-        public bool ConfirmRoad()
-        {
-            if (Mode != ToolMode.Road || _roadPoints.Count < 2)
-                return false;
-            RefreshRoadPlan(_terrain.Grid, null);
-            if (RoadTooSteep)
-                return false;
-            FinishRoad();
-            return true;
-        }
-
-        void AddRoadPoint(TerrainGrid grid)
-        {
-            if (!HasHover)
-                return;
-            var cell = new Vector2Int(HoverX, HoverZ);
-            var height = HeightLocked ? TargetHeight : grid.GetSurfaceHeight(HoverX, HoverZ);
-
-            // A second click on the same cell, or soon after the last one, finishes the road.
-            if (_roadPoints.Count > 0 && cell == _lastRoadClickCell && Time.unscaledTime - _lastRoadClickTime < 0.4f)
-            {
-                FinishRoad();
-                return;
-            }
-
-            _lastRoadClickCell = cell;
-            _lastRoadClickTime = Time.unscaledTime;
-            _roadPoints.Add(new RoadPoint(cell, height));
-            LastAction = $"Road: {_roadPoints.Count} point{(_roadPoints.Count == 1 ? "" : "s")}, double-click or Enter to lay it";
-        }
-
-        void FinishRoad()
-        {
-            if (Mode != ToolMode.Road || _roadPoints.Count < 2)
-                return;
-            if (RoadTooSteep)
-            {
-                LastAction = $"Too steep: {RoadGrade:0.00} m per m, limit {MaxGrade:0.00}";
-                return;
-            }
-
-            History?.Begin("road");
-            var made = Blueprints.Apply(Map, _plan);
-            History?.Commit();
-            Blueprints.Volumes(_plan, out var cut, out var fill, _terrain.Grid.CellArea);
-            LastAction = $"Road laid: {made} cells, {cut:0} m³ cut, {fill:0} m³ fill";
-            CancelDrawing();
         }
 
         /// <summary>Runs <paramref name="apply"/> on every cell of the brush; returns how many it changed.</summary>
@@ -742,7 +702,12 @@ namespace TinyDiggers.Interaction
                     PreviewRectangle(grid);
                     break;
                 case ToolMode.Road:
-                    PreviewRoad(grid);
+                    if (Roads != null)
+                    {
+                        PlannedCut = Roads.Cut;
+                        PlannedFill = Roads.Fill;
+                    }
+
                     break;
             }
 
@@ -761,10 +726,15 @@ namespace TinyDiggers.Interaction
             var height = _dragging ? _strokeHeight : TargetHeight;
             if (Mode == ToolMode.Level)
             {
-                Blueprints.PlanLevel(grid, area, height, _plan, includeSettled: true);
+                PlanPad(grid, area, from, height, includeSettled: true);
                 Blueprints.Volumes(_plan, out var cut, out var fill, _terrain.Grid.CellArea);
                 PlannedCut = cut;
                 PlannedFill = fill;
+                // The pad (or ramp) as it will be, cell by cell.
+                foreach (var cell in _plan)
+                    DesignationsView.AddTile(cell.X, cell.Z, cell.Height, cell.Height, cell.Height, cell.Height,
+                        ToolColor(Mode, 90), _vertices, _colors, _triangles, _terrain.Grid.CellSize);
+                return;
             }
 
             for (var z = area.yMin; z < area.yMax; z++)
@@ -793,50 +763,6 @@ namespace TinyDiggers.Interaction
                 case ToolMode.DumpZone: return new Color32(80, 205, 95, alpha);
                 case ToolMode.Road: return new Color32(120, 230, 160, alpha);
                 default: return new Color32(140, 220, 255, alpha);
-            }
-        }
-
-        /// <summary>Works out the road as it would be with <paramref name="next"/> as its next point.</summary>
-        void RefreshRoadPlan(TerrainGrid grid, RoadPoint? next)
-        {
-            _previewPoints.Clear();
-            _previewPoints.AddRange(_roadPoints);
-            if (next.HasValue)
-                _previewPoints.Add(next.Value);
-
-            RoadGrade = Blueprints.SteepestGrade(_previewPoints, out _, grid.CellSize);
-            RoadTooSteep = RoadGrade > MaxGrade + 1e-4f;
-            Blueprints.PlanRoad(grid, _previewPoints, RoadWidth, _plan, includeSettled: true);
-            Blueprints.Volumes(_plan, out var cut, out var fill, _terrain.Grid.CellArea);
-            PlannedCut = cut;
-            PlannedFill = fill;
-        }
-
-        void PreviewRoad(TerrainGrid grid)
-        {
-            if (_roadPoints.Count == 0)
-            {
-                if (HasHover)
-                    DesignationsView.AddSurfaceTile(grid, HoverX, HoverZ, _roadColor, _vertices, _colors, _triangles, 0.08f);
-                return;
-            }
-
-            // The road as it would be if the cursor were the next point.
-            RoadPoint? next = null;
-            if (HasHover)
-            {
-                var height = HeightLocked ? TargetHeight : grid.GetSurfaceHeight(HoverX, HoverZ);
-                next = new RoadPoint(new Vector2Int(HoverX, HoverZ), height);
-            }
-
-            RefreshRoadPlan(grid, next);
-            var color = RoadTooSteep ? _roadSteepColor : _roadColor;
-            foreach (var cell in _plan)
-            {
-                // Lie on the road bed, or on the ground where the road is cut into it, so the
-                // ribbon reads as one line rather than disappearing into the hill it cuts.
-                var height = Mathf.Max(cell.Height, grid.GetSurfaceHeight(cell.X, cell.Z)) + 0.06f;
-                DesignationsView.AddTile(cell.X, cell.Z, height, height, height, height, color, _vertices, _colors, _triangles, _terrain.Grid.CellSize);
             }
         }
     }

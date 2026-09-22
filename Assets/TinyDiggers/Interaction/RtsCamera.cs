@@ -303,8 +303,20 @@ namespace TinyDiggers.Interaction
                 _turning = false;
         }
 
+        /// <summary>
+        /// Set by a tool that wants the scroll wheel this frame (Slice 17: scrolling over a road
+        /// node raises it); the camera then leaves the wheel alone. Cleared after each read.
+        /// </summary>
+        public static bool ScrollCaptured;
+
         void ReadZoom(Keyboard keyboard, Mouse mouse)
         {
+            if (ScrollCaptured)
+            {
+                ScrollCaptured = false;
+                return;
+            }
+
             if (mouse == null)
                 return;
             var scroll = mouse.scroll.ReadValue().y;

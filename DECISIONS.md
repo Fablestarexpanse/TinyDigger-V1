@@ -3194,3 +3194,39 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
     H2 at the far edge, interpolated across (`Blueprints.PlanLevel` gains the slope).
   - The old straight-leg road (`Blueprints.PlanRoad`, and `MaxGrade` 0.25 m/m in `PlayerTools`)
     is retired.
+- **Part B integration built (approved: "Continue").**
+  - `RoadsHost` holds the network, the builder and the draft. It takes the Road tool's mouse and
+    keys and draws the ghost:
+    - a ribbon coloured per segment by grade, on the road bed or on the ground where the road
+      cuts in (drawn at the bed's height it was buried and invisible in the first run);
+    - a centre line, cut faces on the ground they take and embankments where they stand;
+    - nodes, handles, and each segment's grade in a screen label.
+  - Clicking a built road with no draft picks it up to edit; Delete removes it. Scrolling over a
+    node raises it (`RtsCamera.ScrollCaptured` stops the camera zooming).
+  - `RoadDraft` is plain C# and tested: snap 45°, join, raise/lock, grade refusal, and edits
+    moving the real nodes and junctions.
+  - `RoadBuilder` is plain C# and tested: it designates, paves the top 0.25 m in place when built,
+    re-plans deltas, removes, and keeps shared junction cells Road.
+    `TerrainGrid.CopyLayers` is top first while `SetColumn` is bottom first, which the first
+    `Pave` got backwards.
+  - `RoadNetwork.ReplaceRoad` redraws a road and keeps its id.
+  - The road texture comes from a new `Road` recipe in the texture generator. Regenerating the set
+    left every other texture byte-identical.
+  - Level has a "Ramp to" height at the far edge (`Blueprints.PlanRamp`).
+  - The old straight-leg road is gone from `PlayerTools` (`Blueprints.PlanRoad` stays for its
+    tests).
+  - 460 tests green.
+- **Evidence** (`TinyDiggers/Slice 17 Road Capture`, `Screenshots/Slice17/road_*`):
+  - A road up a hillside near the crew, with grades 10.6%, 16.6% (orange) and 10.4%; cut 81 m³
+    and fill 63 m³.
+  - The first run had no Dump Zone: the crew stopped with loads, and the banner said so. Laying a
+    road with spoil and no zone now says so at once.
+  - With a zone, at 40× time for 300 s, the crew finished the fill and paved the lower part.
+    The rest of the cut, up to 6.5 m into the hill, they report unreachable, and the auto-ramp
+    did not open a way in. The "built" shot shows exactly that: gravel at the bottom and the
+    remaining digs above.
+  - A second road from the first one's middle node makes a junction (one node, three segments).
+- **Ronan (mid-run):** "you may also need a dig zone / quarry area for them to get material to
+  fill low spots … you cant make it appear out of thin air it has to come from someplace". A fill
+  can only be met with spoil from somewhere. Today that is only another Dig designation, so a
+  road that is mostly fill would leave the crew idle. A Quarry zone is proposed to Ronan below.

@@ -69,6 +69,40 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
+        /// A ramp over the rectangle (Slice 17 Part B): <paramref name="heightA"/> along the edge
+        /// nearest <paramref name="from"/> (where the drag started), <paramref name="heightB"/>
+        /// along the far edge, even between, running along the rectangle's longer side. Heights are
+        /// rounded to the grid's height step, so a gentle ramp comes out as even treads.
+        /// </summary>
+        public static void PlanRamp(TerrainGrid grid, RectInt area, Vector2Int from, float heightA, float heightB,
+            List<PlannedCell> into, bool includeSettled = false)
+        {
+            if (grid == null)
+                throw new ArgumentNullException(nameof(grid));
+            if (into == null)
+                throw new ArgumentNullException(nameof(into));
+
+            into.Clear();
+            var alongX = area.width >= area.height;
+            var span = (alongX ? area.width : area.height) - 1;
+            var startsLow = alongX ? from.x <= area.xMin : from.y <= area.yMin;
+            for (var z = area.yMin; z < area.yMax; z++)
+            {
+                for (var x = area.xMin; x < area.xMax; x++)
+                {
+                    var along = alongX ? x - area.xMin : z - area.yMin;
+                    var t = span > 0 ? along / (float)span : 0f;
+                    if (!startsLow)
+                        t = 1f - t;
+                    var height = Mathf.Lerp(heightA, heightB, t);
+                    if (grid.HeightStep > 0f)
+                        height = Mathf.Round(height / grid.HeightStep) * grid.HeightStep;
+                    AddCell(grid, x, z, height, into, includeSettled);
+                }
+            }
+        }
+
+        /// <summary>
         /// A road of <paramref name="width"/> cells through the control points, its height
         /// interpolated along each leg between the heights of the points at either end, so the
         /// grade is even between them.
