@@ -49,9 +49,14 @@ namespace TinyDiggers.Units.Tests
         CrewUnit Spawn(int x, int z, UnitRole role)
         {
             _dispatcher = new JobDispatcher(_grid, _map, _pathfinder);
-            return _unit = new CrewUnit(_dispatcher, x, z, role,
+            var unit = new CrewUnit(_dispatcher, x, z, role,
                 role == UnitRole.Worker ? UnitLoads.Barrow
                 : role == UnitRole.Digger ? UnitLoads.Scoop : UnitLoads.Bed);
+            // The digger and the dumper are machines in the game; the crew logic makes no such
+            // assumption, so whatever spawns them says so.
+            if (role != UnitRole.Worker)
+                unit.AsMachine();
+            return _unit = unit;
         }
 
         // --- the loads ------------------------------------------------------------------------

@@ -343,6 +343,18 @@ namespace TinyDiggers.Units
             _occupant[cell] = unitId;
         }
 
+        /// <summary>
+        /// How close a digger and the hauler serving it may get, as a share of the larger of the
+        /// two. They have to nest to load — the bed goes under the scoop — and at the sum of two
+        /// machines' radii a hauler could never reach a cell beside its digger, so nothing was
+        /// ever loaded.
+        /// </summary>
+        public const float LoadingGap = 0.75f;
+
+        /// <summary>Whether these two are a digger and the hauler serving it.</summary>
+        public bool Partnered(int unitId, int otherId) =>
+            HaulerFor(unitId) == otherId || DiggerFor(unitId) == otherId;
+
         /// <summary>Whether another unit is standing on this cell.</summary>
         public bool IsOccupiedByOther(int x, int z, int unitId)
         {
@@ -351,22 +363,26 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
-        /// Whether a unit may move from <paramref name="from"/> to <paramref name="to"/> without
-        /// closing to within <paramref name="clearance"/> of another unit. Cell occupancy only
-        /// changes as a unit crosses an edge, so two of them can still overlap on a boundary or
-        /// clip past each other on a diagonal; this is what actually keeps the bodies apart.
-        /// Units already standing closer than that (a hauler parked at a digger) may still move,
-        /// as long as they are not getting closer.
+        /// Whether a unit of <paramref name="radius"/> may move from <paramref name="from"/> to
+        /// <paramref name="to"/> without closing to within its own radius plus the other unit's
+        /// of anybody. Cell occupancy only changes as a unit crosses an edge, so two of them can
+        /// still overlap on a boundary or clip past each other on a diagonal; this is what
+        /// actually keeps the bodies apart, and it is what gives the machines their room — a
+        /// machine is over a metre long where a robot is half of one. Units already standing
+        /// closer than that (a hauler parked at a digger) may still move, as long as they are not
+        /// getting closer.
         /// </summary>
-        public bool CanMoveTo(Vector2 from, Vector2 to, int unitId, float clearance)
+        public bool CanMoveTo(Vector2 from, Vector2 to, int unitId, float radius)
         {
-            var squared = clearance * clearance;
             foreach (var other in _units)
             {
                 if (other == null || other.Id == unitId)
                     continue;
+                var apart = Partnered(unitId, other.Id)
+                    ? LoadingGap * Math.Max(radius, other.Radius)
+                    : radius + other.Radius;
                 var after = (to - other.Position).sqrMagnitude;
-                if (after >= squared)
+                if (after >= apart * apart)
                     continue;
                 if (after < (from - other.Position).sqrMagnitude)
                     return false;

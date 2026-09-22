@@ -3707,3 +3707,25 @@ so two a cell apart start inside one another.
 
 `TinyDiggers/Units Capture` takes the picture from play:
 `Screenshots/Units/units_in_game.png`.
+
+## 2026-09-22 — Footprint: every unit carries the room it takes
+
+Ronan: "footprint will be important", and of the three ways up, the keep-apart radius (2026-09-22).
+Each unit has a `Radius` in cells and two of them keep the sum of theirs between their centres.
+The crew's 0.35 reproduces exactly the 0.7 that was hard-coded before, so nothing about the crew
+changes; the machines are set from their models — a digger is 2.2 cells long, so 1.1 either side.
+
+**A role is what a unit does, not what it is.** Setting the size and the rock cutter from
+`UnitRole.Digger` broke nine tests at a stroke: plenty of units dig without being the digger
+machine, and sizing them all as machines jammed every crew in the game solid. A unit is crew-sized
+and no rock cutter until something calls `AsMachine()`, and the thing that knows is whatever
+spawns it — in the game, `CrewView`.
+
+**A digger and its hauler have to nest.** Loading puts the bed under the scoop, and at the sum of
+two machines' radii a hauler could never reach a cell beside its digger, so nothing would ever be
+loaded — the suite missed this because those tests use crew-sized units. Partners keep
+`JobDispatcher.LoadingGap` (three quarters of the larger radius) instead. Anyone else stays out.
+
+Not done, and worth knowing: a machine is still one cell to the crew logic, so it can walk down a
+one-cell trench and clip the walls. True multi-cell occupancy waits until something in the game
+needs a machine kept out of tight ground.

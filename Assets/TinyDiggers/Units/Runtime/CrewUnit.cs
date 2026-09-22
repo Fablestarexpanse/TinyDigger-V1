@@ -168,11 +168,25 @@ namespace TinyDiggers.Units
         public float TrafficWaitSeconds = 1f;
 
         /// <summary>
-        /// How close a unit will let itself get to another, in cells. Just under the 0.707 of a
-        /// diagonal pass, so units can still drive past one another corner to corner, but never
-        /// close in on each other head-on or overlap across a cell edge.
+        /// How much room this unit takes, as a radius in cells: two units keep the sum of their
+        /// radii between their centres.
+        ///
+        /// The crew's 0.35 makes the old 0.7 between two of them — just under the 0.707 of a
+        /// diagonal pass, so they still drive past one another corner to corner but never close
+        /// in head-on or overlap across a cell edge. The machines are set from their models:
+        /// half of a metre-long machine is about 1.1 cells at the sandbox's half-metre cells, and
+        /// without it a digger and a dumper stand inside each other.
         /// </summary>
-        public float Clearance = 0.7f;
+        public float Radius = CrewRadius;
+
+        /// <summary>The starter robot, 0.41 m across on half-metre cells.</summary>
+        public const float CrewRadius = 0.35f;
+
+        /// <summary>The digger machine: about 1.1 m long, so 2.2 cells, so 1.1 either side.</summary>
+        public const float DiggerRadius = 1.1f;
+
+        /// <summary>The dumper: a little shorter than the digger, a little wider.</summary>
+        public const float HaulerRadius = 0.95f;
 
         readonly TerrainGrid _grid;
         readonly DesignationMap _designations;
@@ -229,8 +243,6 @@ namespace TinyDiggers.Units
                 throw new ArgumentOutOfRangeException(nameof(startX), "The unit must start on the map.");
 
             Role = role;
-            // The digger machine is built for rock; the starter robot takes it slowly.
-            CutsStone = role == UnitRole.Digger;
             Inventory = new MaterialInventory(capacity);
             Position = new Vector2(startX + 0.5f, startZ + 0.5f);
             Height = TerrainSurface.SampleHeight(_grid, Position.x, Position.y);
@@ -323,9 +335,9 @@ namespace TinyDiggers.Units
         public bool Digs => Role != UnitRole.Hauler;
 
         /// <summary>
-        /// Whether this unit is built to cut stone. The digger machine is; the starter robot is
-        /// not, and pays <see cref="StoneEffort"/> for every step of rock it takes on (Ronan,
-        /// 2026-09-22: it can, but slowly). Set it to make a particular unit an exception.
+        /// Whether this unit is built to cut stone. The digger machine is (see
+        /// <see cref="AsMachine"/>); anything else is not, and pays <see cref="StoneEffort"/> for
+        /// every step of rock it takes on (Ronan, 2026-09-22: it can, but slowly).
         /// </summary>
         public bool CutsStone;
 
@@ -436,6 +448,23 @@ namespace TinyDiggers.Units
                 return false;
             var adjacent = Math.Abs(standX - targetX) <= 1 && Math.Abs(standZ - targetZ) <= 1 && (standX != targetX || standZ != targetZ);
             return adjacent && WithinReach(_grid.GetSurfaceHeight(standX, standZ), _grid.GetSurfaceHeight(targetX, targetZ));
+        }
+
+        /// <summary>
+        /// Fits this unit out as the machine its role names: the digger cuts stone, and both
+        /// machines take a machine's room.
+        ///
+        /// A role says what a unit is *for*, not what it is: plenty of units dig without being
+        /// the digger machine, and sizing them all as one jammed every crew in the game solid.
+        /// So a unit is crew-sized and cannot cut rock quickly until something says otherwise,
+        /// and the thing that knows is whatever spawns it.
+        /// </summary>
+        public CrewUnit AsMachine()
+        {
+            CutsStone = Role == UnitRole.Digger;
+            Radius = Role == UnitRole.Digger ? DiggerRadius
+                : Role == UnitRole.Hauler ? HaulerRadius : CrewRadius;
+            return this;
         }
 
         /// <summary>Makes the unit choose its job afresh on the next tick, as if the world had changed.</summary>
@@ -1176,7 +1205,7 @@ namespace TinyDiggers.Units
             // the way, then goes round it, and gives the job up if there is no way round.
             var next = NextCell();
             var blocked = next.x >= 0
-                && (_dispatcher.IsOccupiedByOther(next.x, next.y, Id) || !_dispatcher.CanMoveTo(Position, Probe(deltaTime), Id, Clearance));
+                && (_dispatcher.IsOccupiedByOther(next.x, next.y, Id) || !_dispatcher.CanMoveTo(Position, Probe(deltaTime), Id, Radius));
             if (blocked)
             {
                 _waitTimer += deltaTime;

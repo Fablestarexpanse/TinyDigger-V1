@@ -103,11 +103,12 @@ namespace TinyDiggers.Interaction
         [Min(0.05f)] public float bodyScale = 1f;
 
         /// <summary>
-        /// Cells between machines where they start. The crew logic gives every unit one cell, but
-        /// a machine is over a metre long on half-metre cells, so two of them a cell apart start
+        /// Cells between machines where they start, from the room a machine actually takes
+        /// (<see cref="CrewUnit.DiggerRadius"/>). The crew logic gives every unit one cell, but a
+        /// machine is over a metre long on half-metre cells, so two of them a cell apart start
         /// inside one another.
         /// </summary>
-        const int MachineSpacing = 4;
+        static int MachineSpacing => Mathf.CeilToInt(2f * CrewUnit.DiggerRadius) + 1;
 
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
@@ -173,7 +174,12 @@ namespace TinyDiggers.Interaction
                 var x = Mathf.Clamp(spawnX + i % 2 * apart - apart / 2, 0, grid.Width - 1);
                 var z = Mathf.Clamp(spawnZ + i / 2 * apart - apart / 2, 0, grid.Height - 1);
                 var capacity = role == UnitRole.Worker ? _workerCapacity : role == UnitRole.Digger ? _capacity : _haulerCapacity;
-                _units.Add(new CrewUnit(Dispatcher, x, z, role, capacity));
+                var unit = new CrewUnit(Dispatcher, x, z, role, capacity);
+                // In the game a digger or a hauler is a machine, with a machine's room and, for
+                // the digger, a rock cutter. The crew logic itself makes no such assumption.
+                if (role != UnitRole.Worker)
+                    unit.AsMachine();
+                _units.Add(unit);
 
                 var prefab = BodyFor(role);
                 if (prefab != null)
