@@ -890,6 +890,7 @@ GameObject:
   - component: {fileID: 1181658045}
   - component: {fileID: 1181658050}
   - component: {fileID: 1181658051}
+  - component: {fileID: 1181658052}
   m_Layer: 0
   m_Name: Dynamic Water
   m_TagString: Untagged
@@ -1018,6 +1019,23 @@ MonoBehaviour:
   _terrain: {fileID: 551060599}
   _wetDepth: 0.02
   _rowsPerFrame: 128
+--- !u!114 &1181658052
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1181658044}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 312591ac0d8cc1f4bb441efdd2173f14, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: TinyDiggers.Presentation::TinyDiggers.Presentation.ChannelSprings
+  _terrain: {fileID: 551060599}
+  _riverFill: 0.75
+  _creekFill: 0.25
+  _flowSpeed: 0.8
+  _referenceCatchment: 100
 --- !u!1 &1212779770
 GameObject:
   m_ObjectHideFlags: 0

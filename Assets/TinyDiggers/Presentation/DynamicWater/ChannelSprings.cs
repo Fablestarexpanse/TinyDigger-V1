@@ -1,0 +1,206 @@
+using System;
+using System.Collections.Generic;
+using PromptWaffle.DynamicWater;
+using TinyDiggers.Terrain;
+using UnityEngine;
+
+namespace TinyDiggers.Presentation
+{
+    /// <summary>
+    /// Rivers and creeks, step 2 (Ronan, 2026-09-21: "simulated from springs"). Puts a spring,
+    /// a Source effector, at the head of every channel the island was cut with. When the water
+    /// zone builds a new simulation, fills every channel's bed to its running depth, so the
+    /// rivers are flowing from the first frame instead of filling over minutes.
+    ///
+    /// A river runs deeper than the crew can wade and a creek does not: the fills sit either side
+    /// of <see cref="TerrainGrid.DeepWater"/>. Where the water goes after that is the
+    /// simulation's business: down the channels to the sea, and over the dam's spillways once
+    /// the sea stands above its level.
+    ///
+    /// The arithmetic is in <see cref="SpringRate"/> and <see cref="Prefill"/>, so it is tested
+    /// without a scene.
+    /// </summary>
+    [RequireComponent(typeof(WaterZone))]
+    public sealed class ChannelSprings : MonoBehaviour
+    {
+        /// <summary>The fills the component starts with: a river runs at three quarters of its bed's depth, a creek at 0.25 m.</summary>
+        public const float DefaultRiverFill = 0.75f;
+        public const float DefaultCreekFill = 0.25f;
+
+        /// <summary>The most a big catchment can scale a spring by.</summary>
+        public const float MaxCatchmentScale = 1.25f;
+
+        [SerializeField] TerrainView _terrain;
+
+        [Tooltip("Metres of water a river's bed is filled with, as a share of the bed's depth.")]
+        [SerializeField, Range(0f, 1f)] float _riverFill = DefaultRiverFill;
+
+        [Tooltip("Metres of water a creek's bed is filled with. Under the crew's wading depth.")]
+        [SerializeField, Min(0f)] float _creekFill = DefaultCreekFill;
+
+        [Tooltip("Metres a second the water is taken to run down a channel: with the bed's width " +
+            "and the fill, that sets how much each spring gives. At 0.4 the springs could not keep " +
+            "the beds full; at 1.5 the biggest river flooded a flat basin (2026-09-21 play runs).")]
+        [SerializeField, Min(0.01f)] float _flowSpeed = 0.8f;
+
+        [Tooltip("Square metres of catchment at which a spring gives exactly its channel's flow. " +
+            "Bigger catchments give more, smaller ones less, by the square root, within half to a quarter more. " +
+            "Heads sit at the top of their valleys, so what drains to one is small: tens to hundreds of square metres.")]
+        [SerializeField, Min(1f)] float _referenceCatchment = 100f;
+
+        readonly List<WaterEffectorComponent> _springs = new List<WaterEffectorComponent>();
+        WaterZone _zone;
+        IslandMap _builtFor;
+        WaterSimulation _filled;
+
+        /// <summary>The springs, one per channel, in the island's channel order.</summary>
+        public IReadOnlyList<WaterEffectorComponent> Springs => _springs;
+
+        /// <summary>Bed cells the last pre-fill put water in.</summary>
+        public int LastFilledCells { get; private set; }
+
+        /// <summary>
+        /// Cubic metres a second for a channel's spring: its bed's width times the depth it runs
+        /// at times <paramref name="flowSpeed"/>, scaled by the square root of its catchment
+        /// against <paramref name="referenceCatchment"/>, kept within half to a quarter more: at
+        /// double, the creek with the biggest catchment overflowed its bed.
+        /// </summary>
+        public static float SpringRate(Channel channel, float fillDepth, float flowSpeed, float referenceCatchment)
+        {
+            if (channel == null)
+                throw new ArgumentNullException(nameof(channel));
+            var scale = Mathf.Clamp(Mathf.Sqrt(Mathf.Max(0f, channel.Catchment) / Mathf.Max(1f, referenceCatchment)), 0.5f, MaxCatchmentScale);
+            return channel.Width * fillDepth * flowSpeed * scale;
+        }
+
+        /// <summary>The depth a channel's bed is filled to.</summary>
+        public static float FillDepth(Channel channel, float riverFill, float creekFill) =>
+            channel.Kind == ChannelKind.River ? channel.Depth * riverFill : creekFill;
+
+        /// <summary>
+        /// Raises <paramref name="depths"/> (one per grid cell, row by row) so every cell of each
+        /// channel's bed holds water to its floor plus its fill depth, where it did not already.
+        /// Walks each path at half-cell steps and fills the cells within half the bed's width.
+        /// <paramref name="ground"/> is a cell's ground height, in the same heights as the path.
+        /// Returns how many cells it raised.
+        /// </summary>
+        public static int Prefill(float[] depths, int width, int depth, float cellSize, IReadOnlyList<Channel> channels,
+            Func<int, int, float> ground, float riverFill, float creekFill)
+        {
+            if (depths == null || depths.Length != width * depth)
+                throw new ArgumentException("One depth per cell.", nameof(depths));
+            var raised = 0;
+            foreach (var channel in channels)
+            {
+                var fill = FillDepth(channel, riverFill, creekFill);
+                var half = Mathf.Max(0.5f, channel.Width * 0.5f / cellSize);
+                var box = Mathf.CeilToInt(half);
+                var path = channel.Path;
+                for (var p = 1; p < path.Count; p++)
+                {
+                    var a = path[p - 1];
+                    var b = path[p];
+                    var steps = Mathf.Max(1, Mathf.CeilToInt(Vector2.Distance(new Vector2(a.x, a.z), new Vector2(b.x, b.z)) * 2f));
+                    for (var s = 0; s <= steps; s++)
+                    {
+                        var at = Vector3.Lerp(a, b, s / (float)steps);
+                        var surface = at.y + fill;
+                        var cx = Mathf.FloorToInt(at.x);
+                        var cz = Mathf.FloorToInt(at.z);
+                        for (var dz = -box; dz <= box; dz++)
+                        {
+                            var z = cz + dz;
+                            if (z < 0 || z >= depth)
+                                continue;
+                            for (var dx = -box; dx <= box; dx++)
+                            {
+                                var x = cx + dx;
+                                if (x < 0 || x >= width)
+                                    continue;
+                                if (Vector2.Distance(new Vector2(x + 0.5f, z + 0.5f), new Vector2(at.x, at.z)) > half)
+                                    continue;
+                                var cell = z * width + x;
+                                var wanted = surface - ground(x, z);
+                                if (wanted <= depths[cell])
+                                    continue;
+                                depths[cell] = wanted;
+                                raised++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return raised;
+        }
+
+        void Awake() => _zone = GetComponent<WaterZone>();
+
+        void Update()
+        {
+            var island = _terrain != null ? _terrain.Island : null;
+            if (island == null || _terrain.Grid == null)
+                return;
+            if (!ReferenceEquals(island, _builtFor))
+                Build(island);
+
+            // A new simulation (the first, or one rebuilt after the land was regenerated) starts
+            // as a flat sea: fill the channels once it exists.
+            var simulation = _zone.Simulation;
+            if (simulation != null && !ReferenceEquals(simulation, _filled))
+            {
+                _filled = simulation;
+                Fill(simulation, island);
+            }
+        }
+
+        void Build(IslandMap island)
+        {
+            Clear();
+            _builtFor = island;
+            var grid = _terrain.Grid;
+            foreach (var channel in island.Channels)
+            {
+                var spring = new GameObject($"Spring ({channel.Kind} {_springs.Count})").AddComponent<WaterEffectorComponent>();
+                spring.transform.SetParent(transform, false);
+                var x = channel.Spring.x;
+                var z = channel.Spring.y;
+                spring.transform.position = _terrain.transform.TransformPoint(new Vector3(
+                    (x + 0.5f) * grid.CellSize, grid.GetSurfaceHeight(x, z), (z + 0.5f) * grid.CellSize));
+                spring.Kind = WaterEffectorKind.Source;
+                spring.Radius = Mathf.Max(1f, channel.Width * 0.5f);
+                spring.Rate = SpringRate(channel, FillDepth(channel, _riverFill, _creekFill), _flowSpeed, _referenceCatchment);
+                _springs.Add(spring);
+            }
+
+            // The land changed under the simulation: fill again once the zone has rebuilt it.
+            _filled = null;
+        }
+
+        void Fill(WaterSimulation simulation, IslandMap island)
+        {
+            var grid = _terrain.Grid;
+            var desc = simulation.Desc;
+            if (desc.Width != grid.Width || desc.Height != grid.Height)
+            {
+                Debug.LogWarning("ChannelSprings: the water zone is not one cell to one cell over the grid; the channels start dry.", this);
+                return;
+            }
+
+            var depths = simulation.ReadDepthsImmediate();
+            LastFilledCells = Prefill(depths, grid.Width, grid.Height, grid.CellSize, island.Channels,
+                grid.GetSurfaceHeight, _riverFill, _creekFill);
+            simulation.SetDepths(depths);
+        }
+
+        void Clear()
+        {
+            foreach (var spring in _springs)
+                if (spring != null)
+                    Destroy(spring.gameObject);
+            _springs.Clear();
+        }
+
+        void OnDestroy() => Clear();
+    }
+}

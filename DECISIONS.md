@@ -2972,3 +2972,40 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   on its own. The suite passes the 1.6 s budget, and all 420 tests pass.
 - **Still open:** a creek bed 0.5 m deep is a single height step, so its "rounded" floor is
   flat. It is shallow enough to wade, as agreed.
+
+### Rivers and creeks, step 2: springs and pre-fill (2026-09-21)
+- **Ronan:** "yes go ahead with step 2".
+- **`ChannelSprings`** (Presentation/DynamicWater) is a thin MonoBehaviour on the Dynamic Water
+  object:
+  - It puts one Source effector at every channel head.
+  - When the zone builds a simulation, it reads the depths, raises each channel's bed cells to
+    their running depth (`Prefill`), and writes the depths back.
+  - A river runs at 0.75 of its bed's depth, so 0.75–1.1 m, over the 0.5 m wading depth. A creek
+    runs at 0.25 m.
+  - Spring rate = bed width × running depth × flow speed × √(catchment ÷ reference), with the
+    catchment factor kept within 0.5–1.25.
+- **Tuned in play**, on the scene's own island: 3 rivers, 7 creeks, about 10,000 bed cells
+  pre-filled.
+  - At 0.4 m/s and a 20,000 m² reference, the springs could not keep the beds full: upper
+    reaches drained, and every catchment clamped to the minimum. Heads sit at the tops of their
+    valleys, so what drains to one is only 27–308 m².
+  - At 1.5 m/s, a 100 m² reference and a 2× cap, the big river overflowed a flat basin in the
+    mountains. About 3,700 m² of land flooded outside the beds, and it was still growing.
+  - Final: 0.8 m/s, 100 m² reference, 1.25× cap. After 90 s, 920 m² is wet outside the beds and
+    only 2 m² of that is too deep to wade.
+- **Result after 90 s:**
+
+  | Channel | Wet | Too deep to wade |
+  |---|---|---|
+  | The two larger rivers | 81% and 93% | 60% and 85% |
+  | The steep river (51 m of fall in 76 m) | 65% | 3%: a torrent runs fast and thin |
+  | The longer creeks | 50–74% | 15–32% |
+  | The shortest creeks | 14–24% | none |
+
+  The creeks' deep points are pools at 0.53–0.56 m, only just over wading depth.
+- **Evidence:** `TinyDiggers/River Capture` writes `Screenshots/Rivers/`.
+- **Not right yet:**
+  - The water reads bright green, because the beds are still grass under clear water; channel
+    beds need a gravel or sand surface (phase 5).
+  - Thin films show pale on flat ground.
+  - The close-up camera poses frame badly.
