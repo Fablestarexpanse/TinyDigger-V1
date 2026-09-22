@@ -870,7 +870,7 @@ LOADED_STRIDE = 0.32
 LOADED_SWAY = 0.075
 
 
-def take_load(rig, legs, name="take_load", length=30):
+def take_load(rig, legs, name="take_load", length=30, scale=1.0):
     """
     A bucketful lands in the bed: the machine drops on its legs, the bed shudders, and it settles.
     One shot, played each time a digger loads it.
@@ -879,8 +879,9 @@ def take_load(rig, legs, name="take_load", length=30):
     body = rig.pose.bones["body"]
     tray = rig.pose.bones.get("tray")
 
-    marks = ((1, 0.0, 0.0), (4, -0.09, 2.5), (9, -0.05, -1.5), (15, -0.075, 0.8),
-             (22, -0.06, 0.0), (length, -0.05, 0.0))
+    marks = tuple((frame, drop * scale, shake) for frame, drop, shake in
+                  ((1, 0.0, 0.0), (4, -0.09, 2.5), (9, -0.05, -1.5), (15, -0.075, 0.8),
+                   (22, -0.06, 0.0), (length, -0.05, 0.0)))
     for frame, drop, shake in marks:
         _rest_pose(rig)
         offset = mathutils.Vector((0.0, 0.0, drop))
@@ -897,7 +898,7 @@ def take_load(rig, legs, name="take_load", length=30):
     return action
 
 
-def lean(rig, legs, name="start", length=12, into=True):
+def lean(rig, legs, name="start", length=12, into=True, scale=1.0):
     """
     Leaning into the walk, or settling out of it: the stride grows from nothing or fades to it, so
     the machine does not snap between standing still and full pace.
@@ -911,8 +912,8 @@ def lean(rig, legs, name="start", length=12, into=True):
         phase = (step / length) * 0.5 if into else 0.5 + (step / length) * 0.5
         _rest_pose(rig)
 
-        offset = mathutils.Vector((math.sin(phase * math.tau) * SWAY * share, 0.0,
-                                   -abs(math.sin(phase * math.tau)) * BOB * share))
+        offset = mathutils.Vector((math.sin(phase * math.tau) * SWAY * scale * share, 0.0,
+                                   -abs(math.sin(phase * math.tau)) * BOB * scale * share))
         body.location = body.bone.matrix_local.to_3x3().inverted() @ offset
         bpy.context.view_layer.update()
 
@@ -922,7 +923,7 @@ def lean(rig, legs, name="start", length=12, into=True):
                 leg = legs.get(corner)
                 if leg is None:
                     continue
-                step_offset = _foot_offset(legphase, STRIDE * share, LIFT * share,
+                step_offset = _foot_offset(legphase, STRIDE * scale * share, LIFT * scale * share,
                                            anchor=leg["contact"])
                 _solve_leg(rig, leg, leg["contact"] + step_offset, offset)
 
@@ -932,7 +933,7 @@ def lean(rig, legs, name="start", length=12, into=True):
     return action
 
 
-def stuck(rig, legs, name="stuck", length=48):
+def stuck(rig, legs, name="stuck", length=48, scale=1.0):
     """
     Sent somewhere it cannot reach, or holding a load with nowhere to tip: it paws the ground with
     one leg, rocks, and settles. Something to look at while the crew panel explains itself.
@@ -946,8 +947,8 @@ def stuck(rig, legs, name="stuck", length=48):
         phase = (step % length) / length
         _rest_pose(rig)
 
-        rock = math.sin(phase * math.tau * 2.0) * 0.02
-        offset = mathutils.Vector((rock, 0.0, -0.01))
+        rock = math.sin(phase * math.tau * 2.0) * 0.02 * scale
+        offset = mathutils.Vector((rock, 0.0, -0.01 * scale))
         body.location = body.bone.matrix_local.to_3x3().inverted() @ offset
         bpy.context.view_layer.update()
 
@@ -955,7 +956,7 @@ def stuck(rig, legs, name="stuck", length=48):
             target = leg["contact"]
             if leg is paw and phase < 0.5:
                 swing = math.sin(phase * 2.0 * math.pi)
-                target = target + mathutils.Vector((0.0, 0.10 * swing, 0.13 * swing))
+                target = target + mathutils.Vector((0.0, 0.10 * scale * swing, 0.13 * scale * swing))
             _solve_leg(rig, leg, target, offset)
 
         _key(rig, legs, frame)
@@ -964,23 +965,32 @@ def stuck(rig, legs, name="stuck", length=48):
     return action
 
 
-def clips(rig, legs, mesh=None):
+def clips(rig, legs, mesh=None, scale=1.0):
     """Stage 3. Every clip the dumper needs, each its own action."""
     bpy.context.scene.render.fps = FPS
+    # Every distance in a clip is in metres, so a machine built at a different size needs its
+    # stride, lift, bob and sway scaled with it or it walks like a toy.
+    stride = STRIDE * scale
+    lift = LIFT * scale
+    bob = BOB * scale
+    sway = SWAY * scale
+    sink = LOADED_SINK * scale
+
     made = {
-        "walk": walk(rig, legs),
-        "idle": idle(rig, legs),
+        "walk": walk(rig, legs, stride=stride, lift=lift, bob=bob, sway=sway),
+        "idle": idle(rig, legs, breath=bob),
         # One turn clip: Ronan's ruling is that the game mirrors it for the other way round, and
         # a crab shuffle reads the same either way.
-        "turn": walk(rig, legs, name="turn", stride=0.0, lift=LIFT * 0.8, turn=TURN),
+        "turn": walk(rig, legs, name="turn", stride=0.0, lift=lift * 0.8, turn=TURN,
+                     bob=bob, sway=sway),
         "tip": tip(rig, legs, mesh=mesh),
-        "walk_loaded": walk(rig, legs, name="walk_loaded", length=40, stride=LOADED_STRIDE,
-                            lift=LIFT * 0.85, sink=LOADED_SINK, sway=LOADED_SWAY),
-        "idle_loaded": idle(rig, legs, name="idle_loaded", sink=LOADED_SINK, breath=BOB * 0.6),
-        "take_load": take_load(rig, legs),
-        "start": lean(rig, legs, name="start", into=True),
-        "stop": lean(rig, legs, name="stop", into=False),
-        "stuck": stuck(rig, legs),
+        "walk_loaded": walk(rig, legs, name="walk_loaded", length=40, stride=LOADED_STRIDE * scale,
+                            lift=lift * 0.85, sink=sink, sway=LOADED_SWAY * scale, bob=bob),
+        "idle_loaded": idle(rig, legs, name="idle_loaded", sink=sink, breath=bob * 0.6),
+        "take_load": take_load(rig, legs, scale=scale),
+        "start": lean(rig, legs, name="start", into=True, scale=scale),
+        "stop": lean(rig, legs, name="stop", into=False, scale=scale),
+        "stuck": stuck(rig, legs, scale=scale),
     }
     rig.animation_data.action = None
     _rest_pose(rig)
@@ -1205,8 +1215,14 @@ def _fcurves(action):
     return curves
 
 
-def build():
-    """Everything: load the scan, tidy the rig, lay the clips, and leave it ready to render."""
+def build(height=None, crew=False):
+    """
+    Everything: load the scan, tidy the rig, size the machine, lay the clips.
+
+    `height` is metres to the top of the body shell. The clips are laid **after** the scaling and
+    with the same factor applied to every distance in them, so a smaller machine takes smaller
+    steps instead of striding like a big one.
+    """
     mesh, rig = load()
     weld(mesh)
     face_forward(mesh, rig)
@@ -1216,6 +1232,14 @@ def build():
     ribs_to_tray(mesh)
     add_ram(mesh, rig, bed["strays"] if bed else [])
     hinge_tray(mesh, rig)
+
+    scale = 1.0
+    if height:
+        scale = set_height(height) or 1.0
+
     legs = _rest(rig)
-    made = clips(rig, legs, mesh=mesh)
-    return {"bones": tidied["bones"], "legs": sorted(legs), "clips": made}
+    made = clips(rig, legs, mesh=mesh, scale=scale)
+    if crew:
+        bring_crew()
+    return {"bones": tidied["bones"], "legs": sorted(legs), "clips": made,
+            "scale": round(scale, 3)}
