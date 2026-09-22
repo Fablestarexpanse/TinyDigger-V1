@@ -79,13 +79,17 @@ namespace TinyDiggers.Presentation
 
         /// <summary>
         /// Raises <paramref name="depths"/> (one per grid cell, row by row) so every cell of each
-        /// channel's bed holds water to its floor plus its fill depth, where it did not already.
-        /// Walks each path at half-cell steps and fills the cells within half the bed's width.
-        /// <paramref name="ground"/> is a cell's ground height, in the same heights as the path.
-        /// Returns how many cells it raised.
+        /// channel's bed holds its channel's fill depth over its own ground, where it did not
+        /// already hold more. Walks each path at half-cell steps and fills the cells within half
+        /// the bed's width.
+        ///
+        /// Over each cell's own ground, not over a floor drawn along the path: on a steep reach
+        /// that line stands above the ground near the lower point, and a creek came out a metre
+        /// deep there, while a floor taken from the lower point left steep river reaches shallow
+        /// enough to walk across. Returns how many cells it raised.
         /// </summary>
         public static int Prefill(float[] depths, int width, int depth, float cellSize, IReadOnlyList<Channel> channels,
-            Func<int, int, float> ground, float riverFill, float creekFill)
+            float riverFill, float creekFill)
         {
             if (depths == null || depths.Length != width * depth)
                 throw new ArgumentException("One depth per cell.", nameof(depths));
@@ -104,7 +108,6 @@ namespace TinyDiggers.Presentation
                     for (var s = 0; s <= steps; s++)
                     {
                         var at = Vector3.Lerp(a, b, s / (float)steps);
-                        var surface = at.y + fill;
                         var cx = Mathf.FloorToInt(at.x);
                         var cz = Mathf.FloorToInt(at.z);
                         for (var dz = -box; dz <= box; dz++)
@@ -120,10 +123,9 @@ namespace TinyDiggers.Presentation
                                 if (Vector2.Distance(new Vector2(x + 0.5f, z + 0.5f), new Vector2(at.x, at.z)) > half)
                                     continue;
                                 var cell = z * width + x;
-                                var wanted = surface - ground(x, z);
-                                if (wanted <= depths[cell])
+                                if (fill <= depths[cell])
                                     continue;
-                                depths[cell] = wanted;
+                                depths[cell] = fill;
                                 raised++;
                             }
                         }
@@ -189,7 +191,7 @@ namespace TinyDiggers.Presentation
 
             var depths = simulation.ReadDepthsImmediate();
             LastFilledCells = Prefill(depths, grid.Width, grid.Height, grid.CellSize, island.Channels,
-                grid.GetSurfaceHeight, _riverFill, _creekFill);
+                _riverFill, _creekFill);
             simulation.SetDepths(depths);
         }
 

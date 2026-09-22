@@ -54,17 +54,32 @@ namespace TinyDiggers.Presentation.Tests
         {
             const int size = 20;
             var depths = new float[size * size];
-            // Flat ground at 5 m with a bed at 4 m along row 10, three cells across.
-            float Ground(int x, int z) => Mathf.Abs(z - 10) <= 1 ? 4f : 5f;
+            // A bed three cells across along row 10.
             var river = Straight(ChannelKind.River, 3f, 1f, 4f, 2, 16, 10);
 
-            var raised = ChannelSprings.Prefill(depths, size, size, 1f, new[] { river }, Ground, 0.75f, 0.25f);
+            var raised = ChannelSprings.Prefill(depths, size, size, 1f, new[] { river }, 0.75f, 0.25f);
 
             Assert.That(raised, Is.GreaterThan(0));
             Assert.That(depths[10 * size + 8], Is.EqualTo(0.75f).Within(1e-4f), "the middle of the bed");
             Assert.That(depths[9 * size + 8], Is.EqualTo(0.75f).Within(1e-4f), "its edge");
             Assert.That(depths[7 * size + 8], Is.Zero, "the bank beyond stays dry");
             Assert.That(depths[10 * size + 19], Is.Zero, "past the mouth stays dry");
+        }
+
+        [Test]
+        public void PrefillOnASteepReachNeverStandsDeeperThanTheFill()
+        {
+            // A creek dropping 4 m every two cells, its bed stepping down with it.
+            const int size = 20;
+            var depths = new float[size * size];
+            var creek = new Channel { Kind = ChannelKind.Creek, Width = 1f, Depth = 0.5f };
+            for (var x = 2; x <= 14; x += 2)
+                creek.Path.Add(new Vector3(x + 0.5f, 40f - x * 2f, 10.5f));
+
+            ChannelSprings.Prefill(depths, size, size, 1f, new[] { creek }, 0.75f, 0.25f);
+
+            for (var x = 0; x < size; x++)
+                Assert.That(depths[10 * size + x], Is.LessThanOrEqualTo(0.25f + 1e-4f), $"cell {x} was filled deeper than a creek runs");
         }
 
         [Test]
@@ -75,7 +90,7 @@ namespace TinyDiggers.Presentation.Tests
             depths[10 * size + 8] = 3f; // The sea, say.
             var creek = Straight(ChannelKind.Creek, 1f, 0.5f, 4f, 2, 16, 10);
 
-            ChannelSprings.Prefill(depths, size, size, 1f, new[] { creek }, (x, z) => 4f, 0.75f, 0.25f);
+            ChannelSprings.Prefill(depths, size, size, 1f, new[] { creek }, 0.75f, 0.25f);
 
             Assert.That(depths[10 * size + 8], Is.EqualTo(3f));
             Assert.That(depths[10 * size + 6], Is.EqualTo(0.25f).Within(1e-4f));

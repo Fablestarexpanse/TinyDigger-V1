@@ -3027,3 +3027,27 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
 - **Result:** in play the rivers read teal-blue over grey gravel instead of green. Water depths are
   unchanged from step 2. A new test fails if a bed is neither gravel nor rock, or if less than
   three quarters of it is gravel. All 425 tests pass.
+
+### Rivers and creeks, step 3: the crew and the channels (2026-09-22)
+- **`ChannelCrossingTests`** (Presentation.Tests, which now references Units):
+  1. Each generated island has its channels filled the way `ChannelSprings` fills them.
+  2. The grid is given those water surfaces.
+  3. The crew's `GridPathfinder` is asked to go from bank to bank at points along every river and
+     creek, clear of the sea and of other channels.
+- **What the tests require:**
+  - A river bed is deep water, and no path crosses the river directly: it fails, or detours more
+    than twice the direct distance.
+  - A creek bed has water in it but is wadeable, and at least three quarters of creek crossings
+    are waded straight over. A creek cut through a steep hillside can leave a bank too high to
+    climb; the water is never what stops the crew.
+- **The test found a pre-fill bug.** The pre-fill drew each bed's floor as a line between path
+  points two cells apart. On a creek dropping 4 m a point, that line stood a metre over the ground
+  near the lower point, and the creek came out 1.25 m deep there. Taking the lower point's floor
+  instead left steep river stretches shallow enough to cross. The pre-fill now gives every bed
+  cell its channel's fill over its own ground: 0.75–1.1 m for rivers, 0.25 m for creeks. A unit
+  test now covers the steep reach.
+- **Open question for Ronan:** the tests hold for the water as it starts. Once the simulation
+  settles, steep river reaches run fast and thin, as in the step 2 play run: the torrent was only
+  3–4% too deep, and the two larger rivers 59% and 85%. So in play the crew can ford rivers where
+  they run shallow. Either keep that (fords are natural and the rule stays "deep water blocks"),
+  or make river beds impassable to the crew whatever their depth.

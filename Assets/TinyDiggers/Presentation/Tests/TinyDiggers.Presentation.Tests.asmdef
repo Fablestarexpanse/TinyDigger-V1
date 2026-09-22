@@ -4,6 +4,7 @@
     "references": [
         "TinyDiggers.Terrain",
         "TinyDiggers.Presentation",
+        "TinyDiggers.Units",
         "PromptWaffle.DynamicWater",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
