@@ -3460,4 +3460,19 @@ to fix its legs as well". The scans now live in `Art/Blender~/Scans` under their
   video and export take the name from the rig in hand.
 - Seven clips (walk, idle, turn, start, stop, stuck, dig), 11 315 triangles, 0.37 x 0.68 x 0.70 m —
   the same 0.7 m shell as the dumper — with the crew palette and a prefab.
+- **Corrected the same day.** Ronan: "not correct at all ... the arm is three joints at bucket at
+  next joint up and at end of last arm, it should not move side to side ... also the walking is
+  distorting the main body like a blob".
+  - **Three joints, no swing.** The turret is gone: boom, stick and bucket, each hinging across
+    the machine so the arm works in its own plane. It turns its whole body to dump, the way a crab
+    would.
+  - **The arm is fitted by clustering, not by walking it.** Folded back on itself, a walk through
+    the vertices jumps the fold and comes out in nonsense order — that is how the first fit ended
+    with two joints bunched at the back and a bucket half the arm long. The three parts are found
+    as clusters seeded where they must be (shoulder, the bend, the far tip), and each joint is the
+    midpoint of the closest pair between neighbouring parts. The fit now puts them where the eye
+    does: boom up, stick forward, bucket hanging at the front.
+  - **The shell is one rigid piece.** `shell_to_body` gives the body's welded shell to the body
+    bone outright; with a leg bone holding part of it the machine wobbled like a blob as it
+    walked. Measured across a walk cycle the shell's bounds no longer change at all.
 

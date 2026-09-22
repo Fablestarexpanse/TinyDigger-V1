@@ -41,6 +41,10 @@ STEP = 0.075
 # Where the joints sit along the arm, as a share of its length, when the bends are not clear.
 FALLBACK = (0.38, 0.72)
 
+# The least of the arm any one segment may be. Ronan, 2026-09-22: three joints, "at bucket, at
+# next joint up, and at end of last arm" — so three segments that each amount to something.
+LEAST = 0.22
+
 # The digger's scan carries its arm along -X. An excavator faces the way it digs, so it is turned
 # a quarter the other way from the dumper to look along +Y (Unity's +Z) with the bucket out front.
 FACING = -90.0
@@ -113,8 +117,11 @@ def _spine(points, shoulder, step=STEP, bands=14):
 
 def _joints(spine):
     """
-    The two hardest bends in the spine: an excavator's elbow and wrist. Falls back to fixed shares
-    of the arm's length if it comes out straight.
+    Where the arm's two hinges are: boom to stick, and stick to bucket.
+
+    The hardest bends in the spine, but each of the three segments has to be a real part of the
+    arm — at least `LEAST` of its length — or the fit hands the whole arm to the boom and leaves
+    a stub for the bucket, which is what happened first time out.
     """
     if len(spine) < 5:
         return None
@@ -124,18 +131,74 @@ def _joints(spine):
         back = (spine[i] - spine[i - 1]).normalized()
         on = (spine[i + 1] - spine[i]).normalized()
         bends.append((back.angle(on), i))
-    bends.sort(reverse=True)
 
-    picks = sorted(index for _, index in bends[:2])
-    if len(picks) < 2 or picks[1] - picks[0] < 2 or bends[0][0] < math.radians(12.0):
-        picks = [max(1, int(len(spine) * FALLBACK[0])), min(len(spine) - 2, int(len(spine) * FALLBACK[1]))]
-    return picks
+    least = max(1, int(len(spine) * LEAST))
+    best = None
+    for first in range(least, len(spine) - 2 * least + 1):
+        for second in range(first + least, len(spine) - least + 1):
+            score = sum(angle for angle, index in bends if index in (first, second))
+            if best is None or score > best[0]:
+                best = (score, [first, second])
+
+    if best is None:
+        return [max(1, int(len(spine) * FALLBACK[0])),
+                min(len(spine) - 2, int(len(spine) * FALLBACK[1]))]
+    return best[1]
+
+
+def _three_parts(points, shoulder):
+    """
+    Splits the arm into its three parts — boom, stick, bucket — and returns them with the joints
+    between them.
+
+    The arm is folded back on itself in the scan, so walking out through the vertices jumps the
+    fold and the order comes out nonsense. Instead the three parts are found as clusters, seeded
+    where they must be: one at the shoulder, one at the far tip, one at the bend between them.
+    The joint is where two parts meet — the midpoint of their closest pair.
+    """
+    tip = max(points, key=lambda c: (c - shoulder).length)
+    axis = (tip - shoulder).normalized()
+    bend = max(points, key=lambda c: ((c - shoulder) - axis * (c - shoulder).dot(axis)).length)
+    seeds = [shoulder.copy(), bend.copy(), tip.copy()]
+
+    groups = [[], [], []]
+    for _ in range(12):
+        groups = [[], [], []]
+        for point in points:
+            groups[min(range(3), key=lambda i: (point - seeds[i]).length)].append(point)
+        moved = 0.0
+        for i, group in enumerate(groups):
+            if not group:
+                continue
+            middle = sum(group, mathutils.Vector()) / len(group)
+            moved = max(moved, (middle - seeds[i]).length)
+            seeds[i] = middle
+        if moved < 1e-4:
+            break
+
+    # Order them along the arm: the part holding the shoulder first, the one holding the tip last.
+    order = sorted(range(3), key=lambda i: min((p - shoulder).length for p in groups[i]) if groups[i] else 9e9)
+    groups = [groups[i] for i in order]
+
+    joints = []
+    for first, second in zip(groups, groups[1:]):
+        if not first or not second:
+            joints.append((seeds[0] + seeds[1]) * 0.5)
+            continue
+        pair = min(((a - b).length, a, b) for a in first for b in second)
+        joints.append((pair[1] + pair[2]) * 0.5)
+
+    far = max(groups[2], key=lambda c: (c - joints[-1]).length) if groups[2] else tip
+    return groups, [shoulder.copy()] + joints + [far]
 
 
 def rebuild_arm(mesh, rig):
     """
-    Replaces the auto-rig's single arm bone with the four an excavator needs: turret, boom, stick
-    and bucket, measured off the arm's own spine, and gives each the geometry beside it.
+    Replaces the auto-rig's single arm bone with the three an excavator actually has: a boom off
+    the body, a stick, and a bucket, each a hinge in the arm's own plane.
+
+    Ronan, 2026-09-22: "the arm is three joints at bucket at next joint up and at end of last arm,
+    it should not move side to side it should move like an excavator".
     """
     ball = _ball(mesh)
     owner = {v.index: max(((g.weight, g.group) for g in v.groups), default=(0.0, -1))[1]
@@ -151,17 +214,7 @@ def rebuild_arm(mesh, rig):
 
     points = [mesh.data.vertices[i].co.copy() for i in arm_indices]
     shoulder = min(points, key=lambda c: (c - ball["centre"]).length)
-    spine, along = _spine(points, shoulder)
-    picks = _joints(spine)
-    if picks is None:
-        return None
-
-    elbow_at, wrist_at = picks
-    heads = [spine[0], spine[elbow_at], spine[wrist_at], spine[-1]]
-
-    # The turret stands on the shell under the shoulder, so the arm can swing round.
-    turret_head = mathutils.Vector((ball["centre"].x, ball["centre"].y, ball["top"] - 0.02))
-    turret_tail = mathutils.Vector((ball["centre"].x, ball["centre"].y, ball["top"] + 0.06))
+    groups, heads = _three_parts(points, shoulder)
 
     with bpy.context.temp_override(**_window_override(), active_object=rig, object=rig,
                                    selected_objects=[rig], selected_editable_objects=[rig]):
@@ -169,55 +222,43 @@ def rebuild_arm(mesh, rig):
         bpy.ops.object.mode_set(mode='EDIT')
         bones = rig.data.edit_bones
 
-        # Out with whatever the auto-rigger called the arm.
-        for bone in [b for b in list(bones) if b.name.startswith(("arm_", "turret", "boom", "stick", "bucket"))]:
+        for bone in [b for b in list(bones) if b.name in ("turret", "boom", "stick", "bucket")]:
             bones.remove(bone)
 
-        body = bones.get("body")
-        turret = bones.new("turret")
-        turret.head = turret_head
-        turret.tail = turret_tail
-        turret.parent = body
-
-        parent = turret
+        parent = bones.get("body")
         for label, head, tail in (("boom", heads[0], heads[1]),
                                   ("stick", heads[1], heads[2]),
                                   ("bucket", heads[2], heads[3])):
             bone = bones.new(label)
             bone.head = head
             bone.tail = tail
+            # Every joint hinges across the machine, so the arm works in its own plane and never
+            # swings sideways.
+            bone.roll = 0.0
             bone.parent = parent
             bone.use_connect = label != "boom"
             parent = bone
 
         bpy.ops.object.mode_set(mode='OBJECT')
 
-    # Weights: every arm vertex goes to the segment it lies along.
-    groups = {}
-    for label in ("turret", "boom", "stick", "bucket"):
-        groups[label] = mesh.vertex_groups.get(label) or mesh.vertex_groups.new(name=label)
+    labels = ("boom", "stick", "bucket")
+    vertex_groups = {label: (mesh.vertex_groups.get(label) or mesh.vertex_groups.new(name=label))
+                     for label in labels}
+    seeds = [sum(group, mathutils.Vector()) / len(group) if group else mathutils.Vector()
+             for group in groups]
 
-    longest = max(along.values()) if along else 1.0
-    cuts = (longest * elbow_at / max(1, len(spine) - 1), longest * wrist_at / max(1, len(spine) - 1))
-    counts = {label: 0 for label in groups}
-    for position, index in enumerate(arm_indices):
-        reach = along.get(position)
-        if reach is None:
-            label = "boom"
-        elif reach < cuts[0]:
-            label = "boom"
-        elif reach < cuts[1]:
-            label = "stick"
-        else:
-            label = "bucket"
+    counts = {label: 0 for label in labels}
+    for index in arm_indices:
+        point = mesh.data.vertices[index].co
+        label = labels[min(range(3), key=lambda i: (point - seeds[i]).length)]
         for group in mesh.vertex_groups:
             if group.name != label:
                 group.remove([index])
-        groups[label].add([index], 1.0, 'REPLACE')
+        vertex_groups[label].add([index], 1.0, 'REPLACE')
         counts[label] += 1
 
-    _log("arm rebuilt: " + ", ".join(f"{label} {count}" for label, count in counts.items() if count)
-         + f"; joints at {[round(v, 2) for v in heads[1]]} and {[round(v, 2) for v in heads[2]]}")
+    _log("arm rebuilt: " + ", ".join(f"{label} {count}" for label, count in counts.items())
+         + "; joints at " + " and ".join(str([round(v, 2) for v in head]) for head in heads[1:3]))
     return {"heads": [[round(v, 3) for v in head] for head in heads], "weights": counts}
 
 
@@ -310,20 +351,20 @@ def name_parts(mesh, rig):
 # the geometry, not from here (see `_turn_signs`). Reach out, drop in, curl through the ground,
 # lift clear, swing round, open, come back.
 DIG = (
-    (1, {"turret": 0.0, "boom": 0.0, "stick": 0.0, "bucket": 0.0}),
-    (12, {"turret": 0.0, "boom": 30.0, "stick": 26.0, "bucket": 10.0}),
-    (24, {"turret": 0.0, "boom": 44.0, "stick": 34.0, "bucket": 20.0}),
-    (36, {"turret": 0.0, "boom": 40.0, "stick": 10.0, "bucket": 58.0}),
-    (48, {"turret": 0.0, "boom": 14.0, "stick": 0.0, "bucket": 62.0}),
-    (60, {"turret": 62.0, "boom": 12.0, "stick": 4.0, "bucket": 60.0}),
-    (72, {"turret": 62.0, "boom": 18.0, "stick": 10.0, "bucket": -20.0}),
-    (82, {"turret": 24.0, "boom": 8.0, "stick": 4.0, "bucket": 0.0}),
-    (90, {"turret": 0.0, "boom": 0.0, "stick": 0.0, "bucket": 0.0}),
+    (1, {"boom": 0.0, "stick": 0.0, "bucket": 0.0}),
+    (12, {"boom": 26.0, "stick": 30.0, "bucket": 8.0}),
+    (26, {"boom": 44.0, "stick": 40.0, "bucket": 18.0}),
+    (40, {"boom": 40.0, "stick": 16.0, "bucket": 56.0}),
+    (54, {"boom": 12.0, "stick": 2.0, "bucket": 64.0}),
+    (68, {"boom": 16.0, "stick": 8.0, "bucket": -22.0}),
+    (80, {"boom": 8.0, "stick": 4.0, "bucket": 0.0}),
+    (90, {"boom": 0.0, "stick": 0.0, "bucket": 0.0}),
 )
 
-# Which axis each joint turns about, in its own space: the turret swings, the rest hinge.
-AXES = {"turret": (0.0, 0.0, 1.0), "boom": (1.0, 0.0, 0.0),
-        "stick": (1.0, 0.0, 0.0), "bucket": (1.0, 0.0, 0.0)}
+# Every joint is a hinge in the arm's own plane. There is no swing: Ronan, 2026-09-22, "it should
+# not move side to side it should move like an excavator". The machine turns its whole body to
+# dump, the way a crab would.
+AXES = {"boom": (1.0, 0.0, 0.0), "stick": (1.0, 0.0, 0.0), "bucket": (1.0, 0.0, 0.0)}
 
 
 def _bucket_tip(rig):
@@ -341,12 +382,12 @@ def _turn_signs(rig):
     ways and judged on what it does to the bucket — the boom should lower it, the stick should
     push it away from the machine, the bucket should curl it back in.
     """
-    signs = {"turret": 1.0}
+    signs = {}
     rest = _bucket_tip(rig)
     if rest is None:
         return {name: 1.0 for name in AXES}
 
-    turret = rig.pose.bones["turret"].head.copy()
+    turret = rig.pose.bones["boom"].head.copy()
     wants = {
         "boom": lambda tip: -tip.z,                                  # lower it
         "stick": lambda tip: (tip - turret).length,                  # push it out

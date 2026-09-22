@@ -491,6 +491,30 @@ def harden(mesh):
     return changed
 
 
+def shell_to_body(mesh):
+    """
+    Gives the body shell to the body bone, whole.
+
+    The shell is one welded piece; letting a leg bone hold any part of it makes the machine wobble
+    like a blob as it walks (Ronan, 2026-09-22: "the walking is distorting the main body like a
+    blob"). A machine's hull is rigid: one bone, no argument.
+    """
+    shells = _shells_of(mesh)
+    if not shells:
+        return 0
+    hull = shells[0]
+    indices = [index for index, _ in hull]
+
+    body = mesh.vertex_groups.get("body") or mesh.vertex_groups.new(name="body")
+    for group in mesh.vertex_groups:
+        if group.name != "body":
+            group.remove(indices)
+    body.add(indices, 1.0, 'REPLACE')
+    mesh.data.update()
+    _log(f"body shell locked to the body bone: {len(indices)} vertices")
+    return len(indices)
+
+
 def settle_weights(mesh, rig):
     """
     Makes sure every vertex is on a bone that still exists.
@@ -1502,6 +1526,7 @@ def build(name="dumper", height=None, crew=False):
     if height:
         scale = set_height(height) or 1.0
 
+    shell_to_body(mesh)
     settle_weights(mesh, rig)
     paint(mesh, rig)
     legs = _rest(rig)
