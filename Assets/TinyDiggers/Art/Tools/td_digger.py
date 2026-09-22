@@ -343,7 +343,11 @@ def rebuild_arm(mesh, rig, parts=None):
             bone.tail = bone_tail
             bone.roll = 0.0
             bone.parent = parent
-            bone.use_connect = label != "boom"
+            # Parented but not *connected*. A connected bone's head is slaved to its parent's
+            # tail, and resizing the machine then scales each one again on top of its already
+            # scaled parent: the stick's pivot landed at 0.288 m instead of 0.700, the bucket's
+            # at 0.180 instead of 0.438, and the arm swung about points inside the hull.
+            bone.use_connect = False
             parent = bone
 
         bpy.ops.object.mode_set(mode='OBJECT')

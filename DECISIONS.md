@@ -3578,3 +3578,20 @@ by **faces, whole**:
 Verified by measuring every edge's length against its rest length across the dig: zero edges
 stretch by more than twice, at frames 26, 50, 62 and 80. Before: 37 to 62 of them, all
 bucket-to-stick.
+
+## 2026-09-22 — Digger: the arm's pivots were collapsing when the machine was resized
+
+Marking each joint with a coloured ball and rendering it side-on showed the arm's pivots sitting
+in mid-air beside the hull, not on the machine. The bones were built in the right places and then
+moved: `stick` and `bucket` were **connected** bones, whose head is slaved to the parent's tail,
+so `set_height` scaled each one again on top of its already-scaled parent. The stick's pivot
+landed at 0.288 m instead of 0.700 and the bucket's at 0.180 instead of 0.438, and the arm swung
+about points inside the hull — which is why the dig looked wrong however well the geometry was
+divided up.
+
+They are parented now but not connected. Each bone's head still sits exactly on its parent's tail;
+it simply is not recomputed from it. Checked after scaling: boom 0.413, stick 0.700, bucket 0.438,
+teeth 0.158, all as fitted.
+
+Rendering for Ronan to draw on is orthographic and dead side-on, so anything marked on the image
+maps straight back onto the rig.
