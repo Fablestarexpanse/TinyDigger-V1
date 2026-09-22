@@ -3555,3 +3555,26 @@ back to vertical while the bucket curls and the boom eases up to hold grade, buc
 time the stick stands upright, and the bucket never opening between the fill and the dump.
 Sources: https://www.cat.com/en_US/articles/for-owners/tips-for-digging-and-trenching-with-your-excavator.html
 and https://www.sanyglobal.com/blog/how-to-operate-excavator/
+
+## 2026-09-22 — Digger: parts of the bucket were on a front leg, and faces spanned the joints
+
+Ronan: "still parts of the bucket that are not attached and maybe connected to front leg".
+Measuring found 127 vertices of the scoop held by `leg_front_left_foot`, so the front foot walked
+off with a piece of the bucket; and 37 faces spanning the bucket/stick join, stretching up to ten
+times their rest length as the bucket curled — the green spikes across the scoop.
+
+Both come from the same mistake: going by the scan's own groups, and by vertices. It is now done
+by **faces, whole**:
+
+* Every welded piece goes to whichever bone is actually nearest it — arm, leg or hull — so the
+  scoop's rim cannot stay on a foot and two bumps of the shell cannot ride on the stick.
+* The one piece that must be split is the stick-and-scoop, which the scan welds together; it is
+  cut at the pin, which is what a real bucket pivot does. The bucket's own rams and links straddle
+  that pin and go whole, or they end up stretched across the machine like spikes.
+* Then the mesh is **cut open** along every join: each face belongs to one bone, and every edge
+  between faces of different bones is split. A real machine has a seam at each joint. Claim, cut,
+  claim again, until nothing needs cutting — cutting changes which piece is which.
+
+Verified by measuring every edge's length against its rest length across the dig: zero edges
+stretch by more than twice, at frames 26, 50, 62 and 80. Before: 37 to 62 of them, all
+bucket-to-stick.

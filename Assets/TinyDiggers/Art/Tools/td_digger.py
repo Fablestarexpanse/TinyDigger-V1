@@ -218,6 +218,34 @@ def _near_segment(point, head, tail):
     return (point - (head + span * share)).length
 
 
+def _split_between(mesh, label_of):
+    """
+    Cuts the mesh open wherever two bones meet, so each part is a part of its own.
+
+    `label_of` maps a face's index to the bone that holds it.
+
+    The scan welds the whole machine into one continuous surface. Once two bones hold two ends of
+    that surface, every face across the join stretches between them — great spikes across the
+    scoop as the bucket curls. A real machine has a seam at each joint, so this puts them in:
+    each face goes to the bone most of its corners belong to, and every edge between faces of
+    different bones is split. Afterwards each part is its own piece and moves rigidly.
+    """
+    bm = bmesh.new()
+    bm.from_mesh(mesh.data)
+    bm.verts.ensure_lookup_table()
+
+    seam = [edge for edge in bm.edges
+            if len(edge.link_faces) >= 2
+            and len({label_of.get(face.index) for face in edge.link_faces}) > 1]
+    if seam:
+        bmesh.ops.split_edges(bm, edges=seam)
+        bm.to_mesh(mesh.data)
+        mesh.data.update()
+    bm.free()
+    _log(f"cut open at the joints: {len(seam)} edges")
+    return len(seam)
+
+
 def _set_bone(rig, name, head, tail):
     """Moves one bone in edit mode, leaving the rig back in object mode."""
     with bpy.context.temp_override(**_window_override(), active_object=rig, object=rig,
@@ -264,6 +292,27 @@ def rebuild_arm(mesh, rig, parts=None):
         return None
 
     shells = _shells_of(mesh)
+
+    # A welded piece belongs to one part, whole. The scan had handed pieces of the scoop to a
+    # front leg and to the body, and dropping those (they are not arm bones) left them behind:
+    # the scoop then walked about with the foot (Ronan: "parts of the bucket ... maybe connected
+    # to front leg"). Where the arm holds most of a piece, it takes all of it. The majority is
+    # what keeps a real leg a leg.
+    hull = {index for index, _ in shells[0]} if shells else set()
+    held = set(arm_indices)
+    adopted = 0
+    for shell in shells:
+        indices = [index for index, _ in shell]
+        if any(index in hull for index in indices):
+            continue
+        mine = sum(1 for index in indices if index in held)
+        if mine and mine * 2 >= len(indices) and mine < len(indices):
+            adopted += len(indices) - mine
+            held.update(indices)
+    if adopted:
+        _log(f"arm took in {adopted} vertices of its own pieces held elsewhere")
+    arm_indices = sorted(held)
+
     points = [mesh.data.vertices[i].co.copy() for i in arm_indices]
     if parts:
         # O1 is the mount on the crown of the hull, where this machine carries its arm. The
@@ -299,37 +348,87 @@ def rebuild_arm(mesh, rig, parts=None):
 
         bpy.ops.object.mode_set(mode='OBJECT')
 
-    # The bucket is cut at the pin, vertex by vertex, and only the bucket is. The scoop is welded
-    # into the same piece as the stick on this scan, so no piece-level rule separates them; and
-    # a real bucket pivot makes exactly this cut, everything past the pin turning with the
-    # bucket. Boom and stick stay piece-level, where welded parts must not be torn apart.
+    def claim_faces():
+        """
+        Hands every face of the machine to one bone: the one actually nearest the part it is in.
+
+        Faces, not vertices. Going by the scan's own groups left the scoop's rim on a front foot,
+        which walked off with it (Ronan: "parts of the bucket ... maybe connected to front leg"),
+        and put two bumps of the hull on the stick; going by vertices let a face span two bones,
+        and those faces stretch across the machine as the arm works.
+        """
+        shells = _shells_of(mesh)
+        hull = {index for index, _ in shells[0]} if shells else set()
+        piece_of = {}
+        for number, shell in enumerate(shells):
+            for index, _ in shell:
+                piece_of[index] = number
+
+        links = [("boom", heads[0], heads[1]), ("stick", heads[1], heads[2]),
+                 ("bucket", heads[2], heads[3])]
+        legs = [(bone.head_local.copy(), bone.tail_local.copy())
+                for bone in rig.data.bones if bone.name.startswith("leg_")]
+        hull_tree = mathutils.kdtree.KDTree(max(len(hull), 1))
+        for index in (hull or {0}):
+            hull_tree.insert(mesh.data.vertices[index].co, index)
+        hull_tree.balance()
+
+        # Which part each welded piece belongs to, decided once for the whole piece.
+        part = {}
+        for number, shell in enumerate(shells):
+            if any(index in hull for index, _ in shell):
+                part[number] = "hull"
+                continue
+            centre = sum((co for _, co in shell), mathutils.Vector()) / len(shell)
+            to_arm = min(_near_segment(centre, head, tail) for _, head, tail in links)
+            to_leg = min((_near_segment(centre, head, tail) for head, tail in legs),
+                         default=float("inf"))
+            to_hull = hull_tree.find(centre)[2]
+            part[number] = ("leg" if to_leg < to_arm and to_leg < to_hull
+                            else "hull" if to_hull < to_arm else "arm")
+
+        # The scoop is welded into the same piece as the stick, so that piece is cut at the pin:
+        # everything past it turns with the bucket, which is what a real bucket pivot does.
+        down = (heads[2] - heads[1]).normalized()
+        reach = (heads[2] - heads[1]).length
+
+        labels = {}
+        for face in mesh.data.polygons:
+            where = part.get(piece_of.get(face.vertices[0]), "hull")
+            if where == "leg":
+                labels[face.index] = None                      # a leg keeps its own skinning
+                continue
+            if where == "hull":
+                labels[face.index] = "body"
+                continue
+            centre = face.center
+            offset = centre - heads[2]
+            if offset.dot(down) > 0.0 and offset.length <= reach:
+                labels[face.index] = "bucket"
+            else:
+                labels[face.index] = min(links[:2],
+                                         key=lambda link: _near_segment(centre, link[1],
+                                                                        link[2]))[0]
+        return labels
+
+    # Claim, cut every joint open, claim again on the cut mesh: cutting changes which piece is
+    # which, so this repeats until nothing more needs cutting. Without the cut, the faces across
+    # a joint stretch between the two bones as the arm works.
+    for _ in range(4):
+        labels = claim_faces()
+        if not _split_between(mesh, labels):
+            break
+    labels = claim_faces()
+
+    claimed = {"boom": [], "stick": [], "bucket": [], "body": []}
+    for face in mesh.data.polygons:
+        label = labels.get(face.index)
+        if label in claimed:
+            claimed[label].extend(face.vertices)
+    claimed = {label: sorted(set(indices)) for label, indices in claimed.items()}
     links = [("boom", heads[0], heads[1]), ("stick", heads[1], heads[2]),
              ("bucket", heads[2], heads[3])]
-    wanted = set(arm_indices)
-    pieces = []
-    for shell in shells:
-        inside = [(index, co) for index, co in shell if index in wanted]
-        if inside:
-            pieces.append(inside)
 
-    down = (heads[2] - heads[1]).normalized()
-    # Past the pin **and** within reach of it. The scan's arm group also holds odd fittings low
-    # down the front of the machine, and "everything below the pin" swept those in, stretching
-    # the bucket a metre down to take them with it. Measured on this scan, the arm below the pin
-    # runs a stick's length and no further; the strays are far beyond that.
-
-    claimed = {"boom": [], "stick": [], "bucket": []}
-    for piece in pieces:
-        bucket_side = {index for index, co in piece
-                       if (co - heads[2]).dot(down) > 0.0
-                       and (co - heads[2]).length <= (heads[2] - heads[1]).length}
-        claimed["bucket"].extend(bucket_side)
-        rest = [index for index, _ in piece if index not in bucket_side]
-        if not rest:
-            continue
-        centre = sum((mesh.data.vertices[i].co for i in rest), mathutils.Vector()) / len(rest)
-        label = min(links[:2], key=lambda link: _near_segment(centre, link[1], link[2]))[0]
-        claimed[label].extend(rest)
 
     # Now the scoop is known, the bucket bone is aimed down it: along the line from the pin to the
     # middle of the scoop, reaching its farthest corner, and kept in the arm's own plane because a
@@ -346,6 +445,7 @@ def rebuild_arm(mesh, rig, parts=None):
         _set_bone(rig, "bucket", heads[2], heads[3])
         links = [links[0], links[1], ("bucket", heads[2], heads[3])]
 
+
     vertex_groups = {label: (mesh.vertex_groups.get(label) or mesh.vertex_groups.new(name=label))
                      for label in claimed}
     counts = {}
@@ -357,8 +457,9 @@ def rebuild_arm(mesh, rig, parts=None):
         counts[label] = len(indices)
 
     lengths = {label: round((tail - head).length, 3) for label, head, tail in links}
-    _log("arm rebuilt: " + ", ".join(f"{label} {count} verts, {lengths[label]} m"
-                                     for label, count in counts.items()))
+    _log("arm rebuilt: " + ", ".join(f"{label} {counts[label]} verts, {length} m"
+                                     for label, length in lengths.items())
+         + f"; {counts['body']} vertices of the shell put back on the body")
     return {"heads": [[round(v, 3) for v in head] for head in heads],
             "weights": counts, "lengths": lengths}
 
