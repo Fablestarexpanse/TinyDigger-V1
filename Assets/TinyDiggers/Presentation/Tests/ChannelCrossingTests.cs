@@ -39,7 +39,7 @@ namespace TinyDiggers.Presentation.Tests
         public void TearDown() => Object.DestroyImmediate(_settings);
 
         /// <summary>The island with its channels filled as <see cref="ChannelSprings"/> fills them, and the sea at sea level.</summary>
-        (TerrainGrid grid, IslandMap map) Filled(int seed)
+        (TerrainGrid grid, IslandMap map) Filled(int seed, float riverFill = ChannelSprings.DefaultRiverFill)
         {
             _settings.Seed = seed;
             var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f, _settings.Datum);
@@ -50,7 +50,7 @@ namespace TinyDiggers.Presentation.Tests
                     if (grid.IsGround(x, z))
                         depths[z * Size + x] = Mathf.Max(0f, World.SeaLevel - grid.GetSurfaceHeight(x, z));
             ChannelSprings.Prefill(depths, Size, Size, grid.CellSize, map.Channels,
-                ChannelSprings.DefaultRiverFill, ChannelSprings.DefaultCreekFill);
+                riverFill, ChannelSprings.DefaultCreekFill);
 
             var surfaces = new float[Size * Size];
             for (var z = 0; z < Size; z++)
@@ -107,12 +107,14 @@ namespace TinyDiggers.Presentation.Tests
         }
 
         [Test]
-        public void TheCrewCannotWalkStraightAcrossARiver()
+        public void TheCrewCannotWalkStraightAcrossARiver([Values(ChannelSprings.DefaultRiverFill, 0.1f)] float riverFill)
         {
+            // At 0.1 of its bed's depth a river runs a few centimetres deep, as its steep reaches
+            // do once the water settles; it still blocks (Ronan, 2026-09-22: "rivers always block").
             var probes = 0;
             for (var seed = 1; seed <= 3; seed++)
             {
-                var (grid, map) = Filled(seed);
+                var (grid, map) = Filled(seed, riverFill);
                 var pathfinder = new GridPathfinder(grid);
                 var path = new List<Vector2Int>();
                 foreach (var river in map.Channels.FindAll(c => c.Kind == ChannelKind.River))

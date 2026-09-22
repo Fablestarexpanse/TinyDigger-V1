@@ -475,6 +475,20 @@ namespace TinyDiggers.Terrain
                 }
             }
 
+            // Rivers always block the crew, however shallow they run (Ronan, 2026-09-22).
+            if (map.ChannelBeds != null)
+            {
+                var riverBeds = new bool[cells];
+                for (var cell = 0; cell < cells; cell++)
+                    riverBeds[cell] = map.ChannelBeds[cell] == 1;
+                grid.SetRiverBeds(riverBeds);
+            }
+            else
+            {
+                // The same grid regenerated: the last island's rivers are not this one's.
+                grid.SetRiverBeds(ReadOnlySpan<bool>.Empty);
+            }
+
             map.Mark("strata+ore", stopwatch, ref lastMark);
 
             if (peak >= 0)

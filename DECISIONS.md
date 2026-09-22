@@ -3051,3 +3051,14 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   3–4% too deep, and the two larger rivers 59% and 85%. So in play the crew can ford rivers where
   they run shallow. Either keep that (fords are natural and the rule stays "deep water blocks"),
   or make river beds impassable to the crew whatever their depth.
+- **Ruling (Ronan, 2026-09-22, AskUserQuestion): "Rivers always block".** River beds are
+  impassable to the crew however shallow they run; creeks still go by depth.
+  - `TerrainGrid.SetRiverBeds` marks the river bed cells. With live water, a marked cell holding
+    any water at all counts as water: blocked for walking, and not dug.
+  - A river bed that drains completely dry is ground again, so a dammed or diverted river opens up.
+  - The generator marks river beds (not creek beds) when it builds the grid, and clears the marks
+    when it regenerates the same grid.
+  - Tests:
+    - `RiverBedTests`: 10 cm of river blocks while 10 cm elsewhere is waded; a dried bed is
+      ground again, and the change is reported to passability caches.
+    - `ChannelCrossingTests` now also runs with rivers filled to only a tenth of their depth.

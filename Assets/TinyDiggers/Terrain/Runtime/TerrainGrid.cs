@@ -43,6 +43,7 @@ namespace TinyDiggers.Terrain
         readonly bool[] _void;
         readonly bool[] _blocked;
         float[] _waterSurfaces;
+        bool[] _riverBeds;
 
         public TerrainGrid(int width, int height, MaterialTable materials, float heightStep = 0f, float datum = 0f,
             float cellSize = 1f)
@@ -170,6 +171,34 @@ namespace TinyDiggers.Terrain
             return RefreshBlocked(start, start + rows.Length);
         }
 
+        /// <summary>
+        /// Marks the cells that are river bed (Ronan, 2026-09-22: "rivers always block"). With live
+        /// water, a river bed holding any water at all counts as water (<see cref="IsWater"/>),
+        /// however shallow it runs, so a river's steep, fast, thin reaches are no ford. Drained dry,
+        /// the bed is ground again. Creeks are not river bed: they go by depth like anything else.
+        /// Indexed <c>z * Width + x</c>, or null for none. Raises <see cref="WaterChanged"/> for every
+        /// cell that changes. Returns how many did.
+        /// </summary>
+        public int SetRiverBeds(ReadOnlySpan<bool> riverBeds)
+        {
+            if (riverBeds.Length == 0)
+            {
+                _riverBeds = null;
+            }
+            else
+            {
+                if (riverBeds.Length != _surfaceHeights.Length)
+                    throw new ArgumentException("Needs one flag per cell.", nameof(riverBeds));
+                _riverBeds ??= new bool[_surfaceHeights.Length];
+                riverBeds.CopyTo(_riverBeds);
+            }
+
+            return RefreshBlocked(0, _blocked.Length);
+        }
+
+        /// <summary>Whether the cell was marked river bed (<see cref="SetRiverBeds"/>).</summary>
+        public bool IsRiverBed(int x, int z) => _riverBeds != null && InBounds(x, z) && _riverBeds[z * Width + x];
+
         /// <summary>Goes back to the sea-level rule. Returns how many cells changed.</summary>
         public int ClearWaterSurfaces()
         {
@@ -195,9 +224,13 @@ namespace TinyDiggers.Terrain
             return changed;
         }
 
-        bool IsDeep(int cell) => _waterSurfaces != null
-            ? _waterSurfaces[cell] - _surfaceHeights[cell] >= DeepWater
-            : _surfaceHeights[cell] < LandAt;
+        bool IsDeep(int cell)
+        {
+            if (_waterSurfaces == null)
+                return _surfaceHeights[cell] < LandAt;
+            var depth = _waterSurfaces[cell] - _surfaceHeights[cell];
+            return depth >= DeepWater || depth > 0f && _riverBeds != null && _riverBeds[cell];
+        }
 
         /// <summary>The height a surface must reach to count as land rather than seabed.</summary>
         float LandAt => World.SeaLevel + LandStep;
