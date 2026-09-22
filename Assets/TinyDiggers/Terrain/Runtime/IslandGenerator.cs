@@ -42,8 +42,18 @@ namespace TinyDiggers.Terrain
         /// <summary>The main river. Empty when the land made none.</summary>
         public List<Vector3> River => Rivers.Count > 0 ? Rivers[0] : NoRiver;
 
-        /// <summary>Cells the rivers' channels cover, for the sim to treat as water.</summary>
+        /// <summary>Cells the rivers' beds cover, for the sim to treat as water.</summary>
         public readonly List<Vector2Int> RiverCells = new List<Vector2Int>();
+
+        /// <summary>Every river and creek, in the order they were cut: rivers first (see <see cref="RiverChannels"/>).</summary>
+        public readonly List<Channel> Channels = new List<Channel>();
+
+        /// <summary>Rivers and creeks the seed drew. Fewer are cut when the land has no room for them.</summary>
+        public int RiversWanted;
+        public int CreeksWanted;
+
+        /// <summary>Where the channels' time went, for perf reporting.</summary>
+        public string ChannelStats = "";
 
         /// <summary>Milliseconds the land took to generate.</summary>
         public double Milliseconds;
@@ -87,7 +97,8 @@ namespace TinyDiggers.Terrain
     ///    a shallow shelf out from the shore before the sea drops away.
     /// 7. Quantise to the height step and relax until no two neighbouring land cells differ by more
     ///    than one step. Cliffs are for later.
-    /// 8. Rivers — from the outlet with the most land draining through it, carved as a channel.
+    /// 8. Rivers and creeks — routed from heads on high ground down to water and cut as winding
+    ///    channels (see <see cref="RiverChannels"/>).
     /// 9. Strata — bedrock base, granite under the high ground, rock, clay in the valleys, dirt,
     ///    sand on beaches and under water, topsoil above them.
     ///
@@ -316,9 +327,7 @@ namespace TinyDiggers.Terrain
 
             map.Mark("relax", stopwatch, ref lastMark);
 
-            // --- 8: rivers -------------------------------------------------------------------
-            CarveRivers(map, heights, land, accumulation, width, depth, grid, settings, step);
-
+            // --- 8: shores ------------------------------------------------------------------
             for (var cell = 0; cell < cells; cell++)
                 isLand[cell] = land[cell] && heights[cell] >= World.SeaLevel;
             sweeps = Mathf.Max(sweeps, Relax(heights, isLand, cliff, width, depth, step, settings.MaxCliffStep));
@@ -332,6 +341,9 @@ namespace TinyDiggers.Terrain
             // Once more, dropping specks only: relaxing lowers cells, which can cut a corner of
             // land off from the rest, and a one-cell island is not somewhere to play.
             CleanUpShores(heights, inDisc, width, depth, settings, map.Shape, step, fillPockets: false);
+            var downstream = new int[cells];
+            var fillLandCopy = settings.FillPits ? null : new bool[cells];
+            var outletsCopy = settings.FillPits ? null : new bool[cells];
             if (settings.FillPits)
             {
                 // Every hollow on land is filled to where it spills, working up from the water
@@ -344,12 +356,37 @@ namespace TinyDiggers.Terrain
                     outlets[cell] = inDisc[cell] && heights[cell] < World.SeaLevel;
                 }
 
-                map.PitsFilled = TerrainErosion.FillDepressions(heights, width, depth, fillLand, outlets, step);
+                map.PitsFilled = TerrainErosion.FillDepressions(heights, width, depth, fillLand, outlets, step, downstream);
+            }
+            else
+            {
+                // The channels still need the way water leaves each cell: flood a copy.
+                var copy = (float[])heights.Clone();
+                for (var cell = 0; cell < cells; cell++)
+                {
+                    fillLandCopy[cell] = inDisc[cell] && copy[cell] >= World.SeaLevel;
+                    outletsCopy[cell] = inDisc[cell] && copy[cell] < World.SeaLevel;
+                }
+
+                TerrainErosion.FillDepressions(copy, width, depth, fillLandCopy, outletsCopy, step, downstream);
             }
 
-            ReadRiverFloors(map, heights, width);
+            map.Mark("shores", stopwatch, ref lastMark);
 
-            map.Mark("rivers+shores", stopwatch, ref lastMark);
+            // --- 8b: rivers and creeks -------------------------------------------------------
+            // Cut into land that already drains: every hollow is filled, so a route from a head
+            // runs downhill all the way, down the flow the fill worked out. A channel falls all the
+            // way to its mouth, so cutting it makes no hollow of its own, bar a pool at its head,
+            // which is where the spring goes.
+            RiverChannels.Carve(map, heights, inDisc, accumulation, downstream, width, depth, settings, step, shift);
+            for (var cell = 0; cell < cells; cell++)
+                isLand[cell] = heights[cell] >= World.SeaLevel;
+            sweeps = Mathf.Max(sweeps, Relax(heights, isLand, cliff, width, depth, step, settings.MaxCliffStep));
+            // A mouth cut through a narrow neck can leave a scrap of coast on its own.
+            CleanUpShores(heights, inDisc, width, depth, settings, map.Shape, step, fillPockets: false);
+            RiverChannels.ReadFloors(map, heights, width);
+
+            map.Mark("channels", stopwatch, ref lastMark);
 
             // --- 9: surface materials --------------------------------------------------------
             // Its own pass over the finished heights, so what a hillside is made of is decided by
@@ -1484,186 +1521,6 @@ namespace TinyDiggers.Terrain
             }
 
             return count == 0 ? 0f : sum / count;
-        }
-
-        // --- 8: rivers -------------------------------------------------------------------------
-
-        /// <summary>
-        /// Rivers run where the water already does: the outlet with the most land draining through
-        /// it becomes the main river, and the best outlet well away from it, if there is one,
-        /// becomes a second. Each is walked back upstream along the wettest cells and cut.
-        /// </summary>
-        static void CarveRivers(IslandMap map, float[] heights, bool[] land, float[] accumulation,
-            int width, int depth, TerrainGrid grid, TerrainGenSettings settings, float step)
-        {
-            var outlets = new List<int>();
-            for (var z = 1; z < depth - 1; z++)
-            {
-                for (var x = 1; x < width - 1; x++)
-                {
-                    var cell = z * width + x;
-                    if (!land[cell] || accumulation[cell] < ValleyThreshold * 4f)
-                        continue;
-                    var meetsSea = false;
-                    for (var n = 0; n < 4 && !meetsSea; n++)
-                        meetsSea = !land[(z + StepZ[n]) * width + x + StepX[n]];
-                    if (meetsSea)
-                        outlets.Add(cell);
-                }
-            }
-
-            if (outlets.Count == 0)
-                return;
-            outlets.Sort((a, b) => accumulation[b].CompareTo(accumulation[a]));
-
-            var chosen = new List<int> { outlets[0] };
-            foreach (var outlet in outlets)
-            {
-                if (chosen.Count >= 2)
-                    break;
-                var far = true;
-                foreach (var taken in chosen)
-                {
-                    var dx = outlet % width - taken % width;
-                    var dz = outlet / width - taken / width;
-                    if (dx * dx + dz * dz < 60 * 60)
-                        far = false;
-                }
-
-                // A second river only if it drains a decent share of the island: two trickles side
-                // by side read as a mistake rather than as a second river.
-                if (far && accumulation[outlet] > accumulation[outlets[0]] * 0.35f)
-                    chosen.Add(outlet);
-            }
-
-            foreach (var outlet in chosen)
-            {
-                var path = Upstream(outlet, accumulation, land, width, depth);
-                if (path.Count < 6)
-                    continue;
-                Carve(map, path, heights, width, grid, settings, step);
-            }
-        }
-
-        /// <summary>Walks from an outlet back up the wettest neighbours to the head of the valley.</summary>
-        static List<Vector2Int> Upstream(int outlet, float[] accumulation, bool[] land, int width, int depth)
-        {
-            var path = new List<int> { outlet };
-            var seen = new HashSet<int> { outlet };
-            var at = outlet;
-            while (true)
-            {
-                var x = at % width;
-                var z = at / width;
-                var best = -1;
-                // Low enough to follow a river up to its headwaters: a stream carrying four cells
-                // is still a stream, and stopping at a dozen leaves rivers that are stubs.
-                var bestFlow = 4f;
-                for (var n = 0; n < 8; n++)
-                {
-                    var nx = x + StepX[n];
-                    var nz = z + StepZ[n];
-                    if (nx < 1 || nz < 1 || nx >= width - 1 || nz >= depth - 1)
-                        continue;
-                    var next = nz * width + nx;
-                    if (!land[next] || seen.Contains(next) || accumulation[next] <= bestFlow)
-                        continue;
-                    // Upstream means less water than here: this is the biggest feeder, not the sea.
-                    if (accumulation[next] >= accumulation[at])
-                        continue;
-                    bestFlow = accumulation[next];
-                    best = next;
-                }
-
-                if (best < 0)
-                    break;
-                seen.Add(best);
-                path.Add(best);
-                at = best;
-            }
-
-            path.Reverse();
-            var points = new List<Vector2Int>(path.Count);
-            foreach (var cell in path)
-                points.Add(new Vector2Int(cell % width, cell / width));
-            return points;
-        }
-
-        /// <summary>
-        /// Cuts a flat-floored channel along the path, its banks stepping up a metre a cell so the
-        /// cut keeps the neighbour-step guarantee, with the floor held monotonically descending and
-        /// stopped at the waterline while there is still land around it.
-        /// </summary>
-        static void Carve(IslandMap map, List<Vector2Int> path, float[] heights, int width,
-            TerrainGrid grid, TerrainGenSettings settings, float step)
-        {
-            var halfWidth = Mathf.Max(1, settings.RiverWidth) * 0.5f;
-            var reach = Mathf.CeilToInt(halfWidth + settings.RiverDepth / step) + 1;
-            var floor = float.MaxValue;
-            var river = new List<Vector3>();
-
-            foreach (var point in path)
-            {
-                var here = heights[point.y * width + point.x];
-                var target = Mathf.Min(floor, here - settings.RiverDepth);
-                // While there is still land around it, the channel floor stops at the waterline:
-                // otherwise a river coming down a hillside cuts itself a trench below sea level
-                // halfway across the island, and what should be a river becomes an inlet.
-                if (here > World.SeaLevel)
-                    target = Mathf.Max(target, World.SeaLevel - 0.5f);
-                target = Mathf.Round(target / step) * step;
-                floor = target;
-
-                for (var dz = -reach; dz <= reach; dz++)
-                {
-                    for (var dx = -reach; dx <= reach; dx++)
-                    {
-                        var nx = point.x + dx;
-                        var nz = point.y + dz;
-                        if (!grid.InBounds(nx, nz) || grid.IsVoid(nx, nz))
-                            continue;
-                        var distance = Mathf.Sqrt(dx * dx + dz * dz);
-                        var bank = Mathf.Max(0f, distance - halfWidth) * step;
-                        var cut = target + bank;
-                        var cell = nz * width + nx;
-                        if (cut < heights[cell])
-                            heights[cell] = Mathf.Round(cut / step) * step;
-                        if (distance <= halfWidth)
-                            map.RiverCells.Add(new Vector2Int(nx, nz));
-                    }
-                }
-
-                river.Add(new Vector3(point.x + 0.5f, target, point.y + 0.5f));
-                // The river ends where the land does.
-                if (here <= World.SeaLevel)
-                    break;
-            }
-
-            if (river.Count >= 2)
-                map.Rivers.Add(river);
-        }
-
-        /// <summary>
-        /// Reads every river's floor back out of the land as it finally stands, held monotonically
-        /// descending, so a river mesh laid on the line sits in the channel that is really there and
-        /// never runs uphill. The last point goes under the surface, because that is where a river
-        /// ends.
-        /// </summary>
-        static void ReadRiverFloors(IslandMap map, float[] heights, int width)
-        {
-            foreach (var river in map.Rivers)
-            {
-                var floor = float.MaxValue;
-                for (var i = 0; i < river.Count; i++)
-                {
-                    var point = river[i];
-                    floor = Mathf.Min(floor, heights[Mathf.FloorToInt(point.z) * width + Mathf.FloorToInt(point.x)]);
-                    var last = i == river.Count - 1;
-                    river[i] = new Vector3(point.x, last ? Mathf.Min(floor, World.SeaLevel - 0.5f) : floor, point.z);
-                }
-            }
-
-            map.Rivers.Sort((a, b) => b.Count.CompareTo(a.Count));
         }
 
         // --- 9: strata -------------------------------------------------------------------------

@@ -104,6 +104,25 @@ MonoBehaviour:
   RiverWidth: 4
   RiverDepth: 2.5
   RiverWander: 1.4
+  RiverCountMin: 1
+  RiverCountMax: 3
+  CreekCountMin: 4
+  CreekCountMax: 10
+  RiverWidthMin: 3
+  RiverWidthMax: 6
+  RiverDepthMin: 1
+  RiverDepthMax: 1.5
+  CreekWidthMin: 1
+  CreekWidthMax: 2
+  CreekDepth: 0.5
+  RiverHeadSpacing: 150
+  CreekHeadSpacing: 60
+  MinRiverLength: 80
+  MinCreekLength: 30
+  MeanderStrength: 3
+  MeanderWavelength: 14
+  MeanderMinSwing: 6
+  ChannelBankSlope: 0.5
   SlopeSmoothing: 2
   SlopeGrass: 25
   SlopeMixed: 44

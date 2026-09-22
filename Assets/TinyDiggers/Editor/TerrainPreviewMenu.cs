@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using System.Text;
 using TinyDiggers.Presentation;
 using TinyDiggers.Terrain;
@@ -66,11 +67,11 @@ namespace TinyDiggers.EditorTools
                 var seconds = Time.realtimeSinceStartupAsDouble - started;
 
                 var card = TerrainScorecard.Measure(grid);
-                var line = $"{label} seed {seeds[i]} ({island.Shape}; {island.Mix}; cliff coast {island.CliffCoastShare:P0} at {island.CliffCoastHeight:0.0} m; crest {island.MountainCrest:0} m; erosion moved {island.ErosionMeanChange:0.00} m on average, {island.PitsFilled} cells filled), {seconds:0.00} s: {card}";
+                var line = $"{label} seed {seeds[i]} ({island.Shape}; {island.Mix}; cliff coast {island.CliffCoastShare:P0} at {island.CliffCoastHeight:0.0} m; crest {island.MountainCrest:0} m; erosion moved {island.ErosionMeanChange:0.00} m on average, {island.PitsFilled} cells filled; {Channels(island)}), {seconds:0.00} s: {card}";
                 report.AppendLine(line);
                 Debug.Log("Terrain preview: " + line);
 
-                var (shade, slope) = Draw(grid, copy);
+                var (shade, slope) = Draw(grid, copy, island);
                 File.WriteAllBytes(Path.Combine(Folder, $"{label}_seed{seeds[i]}_shade.png"), shade.EncodeToPNG());
                 File.WriteAllBytes(Path.Combine(Folder, $"{label}_seed{seeds[i]}_slope.png"), slope.EncodeToPNG());
                 var ox = i % 2 * Pixels;
@@ -92,7 +93,7 @@ namespace TinyDiggers.EditorTools
         }
 
         /// <summary>The island's frame, square, <see cref="Pixels"/> across, shaded and by slope.</summary>
-        static (Texture2D shade, Texture2D slope) Draw(TerrainGrid grid, TerrainGenSettings settings)
+        static (Texture2D shade, Texture2D slope) Draw(TerrainGrid grid, TerrainGenSettings settings, IslandMap island)
         {
             var half = (settings.LandRadius > 0f ? settings.LandRadius : grid.Width * grid.CellSize * 0.5f) + 20f;
             var centre = new Vector2(grid.Width, grid.Height) * 0.5f;
@@ -180,11 +181,51 @@ namespace TinyDiggers.EditorTools
                     slopeRow[py * Pixels + px] = new Color(1f, 0f, 1f);
                 }
 
+            // Rivers dark blue and creeks light blue over the shaded map, each head a white dot, so
+            // what the water will run down can be read without the water.
+            foreach (var channel in island.Channels)
+            {
+                var colour = channel.Kind == ChannelKind.River ? new Color(0.05f, 0.2f, 0.75f) : new Color(0.3f, 0.75f, 1f);
+                for (var p = 1; p < channel.Path.Count; p++)
+                {
+                    var a = channel.Path[p - 1];
+                    var b = channel.Path[p];
+                    var steps = Mathf.Max(1, Mathf.CeilToInt(Vector2.Distance(new Vector2(a.x, a.z), new Vector2(b.x, b.z)) / perPixel * 2f));
+                    for (var k = 0; k <= steps; k++)
+                    {
+                        var point = Vector3.Lerp(a, b, k / (float)steps);
+                        var px = Mathf.FloorToInt((point.x - x0) / perPixel);
+                        var py = Mathf.FloorToInt((point.z - z0) / perPixel);
+                        if (px >= 0 && py >= 0 && px < Pixels && py < Pixels)
+                            shadeRow[py * Pixels + px] = colour;
+                    }
+                }
+
+                var sx = Mathf.FloorToInt((channel.Spring.x - x0) / perPixel);
+                var sy = Mathf.FloorToInt((channel.Spring.y - z0) / perPixel);
+                for (var dy = -1; dy <= 1; dy++)
+                    for (var dx = -1; dx <= 1; dx++)
+                        if (sx + dx >= 0 && sy + dy >= 0 && sx + dx < Pixels && sy + dy < Pixels)
+                            shadeRow[(sy + dy) * Pixels + sx + dx] = Color.white;
+            }
+
             shade.SetPixels(shadeRow);
             shade.Apply();
             slope.SetPixels(slopeRow);
             slope.Apply();
             return (shade, slope);
+        }
+
+        /// <summary>"rivers 2 of 3 (410, 260 m), creeks 7 of 7 (3 join rivers, 40-180 m)".</summary>
+        static string Channels(IslandMap island)
+        {
+            var rivers = island.Channels.FindAll(c => c.Kind == ChannelKind.River);
+            var creeks = island.Channels.FindAll(c => c.Kind == ChannelKind.Creek);
+            var riverLengths = string.Join(", ", rivers.ConvertAll(c => c.Length.ToString("0")));
+            var creekRange = creeks.Count == 0 ? "none"
+                : $"{creeks.Min(c => c.Length):0}-{creeks.Max(c => c.Length):0} m";
+            var joins = creeks.Count(c => c.EndsInRiver);
+            return $"rivers {rivers.Count} of {island.RiversWanted} ({riverLengths} m), creeks {creeks.Count} of {island.CreeksWanted} ({joins} join rivers, {creekRange})";
         }
     }
 }

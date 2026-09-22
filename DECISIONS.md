@@ -2916,3 +2916,59 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   - 1–3 rivers and 4–10 creeks, random per seed;
   - rivers block the crew (deeper than wading), and creeks wade;
   - the water is simulated from springs at each head, not drawn as ribbons.
+
+### Rivers and creeks, step 1: channels in the generator (2026-09-21) — agreed plan
+- **Ronan approved the design** ("yes go ahead with step 1"). Step 1 is the generator only.
+  Springs and pre-filling are step 2; the crew crossing test is step 3.
+- **Correction to the entry above.** Its speed-up numbers were read while the speed-up edit had
+  not compiled: a CS0136 duplicate local in `FlowAccumulation` left the old dll in place. The
+  fixed build gives the same land to the cell, and the suite is green at 415/415. The timings are
+  re-measured below.
+- **The plan:**
+  - `CarveRivers`, the D8 upstream walk, is replaced by `RiverChannels` (Terrain/Runtime):
+    1. Heads are picked from high ground with water running into them: rivers from the upper
+       ground, creeks from the middle. River heads are at least 150 m apart; creek heads are at
+       least 60 m from any other head. A small island could not fit 13 heads 150 m apart, so
+       creeks use the tighter spacing. If a map cannot fit the drawn count at that spacing, the
+       spacing is halved once.
+    2. Each head is routed to water by A*. A step costs its length, plus a heavy penalty per
+       metre of climb. The heuristic is the straight-line distance to water.
+    3. The route is smoothed (Chaikin), and a meander is added that grows as the ground flattens
+       and tapers to zero at the head and the mouth.
+    4. The channel is cut with a rounded bed and 0.5 m-per-metre banks. The floor is held
+       monotonically descending, and while it runs over land it stops 0.5 m under sea level.
+  - Rivers are cut first; a creek may end where it meets a river.
+  - Counts are drawn from their own random stream (the seed mixed with a constant), so no
+    existing seed's ores or anything else drawn later move.
+  - `IslandMap.Channels` is the new record. `Rivers` stays filled from the river channels, so
+    `WaterView` and the old tests keep working.
+- **Built, and what changed from the plan while building it:**
+  - **Routes follow the pit fill's flow, not A*.** A* with a climb penalty and a noise cost
+    needed 250–570 ms at 1024², and half its searches ran out of budget a few cells from the
+    shore. `TerrainErosion.FillDepressions` now optionally records, for every cell, the neighbour
+    the flood reached it from. Following that from a head runs down the valley water would
+    really take, it costs only the route's own length, and creeks run into rivers the way the
+    drainage does. Channels are therefore cut after the pit fill, followed by one relaxation and
+    one more speck cleanup, because a mouth cut through a narrow neck can strand a scrap of coast.
+    The noise-cost settings were removed.
+  - **The bed is cut from the lowest ground beside it, not the ground under it.** Across a
+    hillside the downhill bank stood below the bed's rim and the water would have run out. A
+    levee pass was tried and dropped: the slope relaxation shaved the raised bank back down.
+  - **Kinks and loops are cut out.** A meander laid round a tight bend folded back on itself,
+    leaving a bed right beside its own downstream reach with no bank between them. Where the
+    line comes back within a bed width, the loop is cut out, as a river cuts off a meander. The
+    line is then averaged over a bed and a half, so no bend is tighter than the bed is wide.
+  - **Heads are picked in the island's frame.** The same island on a bigger disc gets the same
+    channels, which `LandRadiusTests` requires.
+  - **Fallback for small land.** If the drawn count doesn't fit, the second pass uses half the
+    spacing and a quarter of the minimum length, and river heads may be as low as 15% of the
+    peak height. The 256 m test maps need this.
+- **Result, preview seeds 11, 23, 37 and 58:**
+  - every river and creek drawn was cut: rivers 3, 3, 1 and 3; creeks 7, 7, 8 and 9;
+  - rivers run 76–262 m and creeks 35–356 m; one or two creeks per map join a river;
+  - the land scorecard is unchanged: pits 3–9, beaches 51–63%;
+  - preview maps take about 7.2 s each, the same as before channels.
+- **Budget:** at 1024² and 0.5 m the channels take about 100 ms and the whole map 1,141–1,169 ms
+  on its own. The suite passes the 1.6 s budget, and all 420 tests pass.
+- **Still open:** a creek bed 0.5 m deep is a single height step, so its "rounded" floor is
+  flat. It is shallow enough to wade, as agreed.

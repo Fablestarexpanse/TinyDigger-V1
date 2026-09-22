@@ -283,6 +283,52 @@ namespace TinyDiggers.Terrain
         [Tooltip("How far the river is allowed to wander off the steepest way down, in cells.")]
         [Min(0f)] public float RiverWander = 1.4f;
 
+        [Header("Rivers and creeks (2026-09-21)")]
+        [Tooltip("Rivers drawn per seed, from Min to Max inclusive. Rivers are deeper than the crew can wade.")]
+        [Min(0)] public int RiverCountMin = 1;
+        [Min(0)] public int RiverCountMax = 3;
+
+        [Tooltip("Creeks drawn per seed, from Min to Max inclusive. Creeks are shallow enough to wade.")]
+        [Min(0)] public int CreekCountMin = 4;
+        [Min(0)] public int CreekCountMax = 10;
+
+        [Tooltip("Metres across a river's bed, drawn per river.")]
+        [Min(0.5f)] public float RiverWidthMin = 3f;
+        [Min(0.5f)] public float RiverWidthMax = 6f;
+
+        [Tooltip("Metres a river's bed sits below the ground either side, drawn per river.")]
+        [Min(0f)] public float RiverDepthMin = 1f;
+        [Min(0f)] public float RiverDepthMax = 1.5f;
+
+        [Tooltip("Metres across a creek's bed, drawn per creek.")]
+        [Min(0.5f)] public float CreekWidthMin = 1f;
+        [Min(0.5f)] public float CreekWidthMax = 2f;
+
+        [Tooltip("Metres a creek's bed sits below the ground either side.")]
+        [Min(0f)] public float CreekDepth = 0.5f;
+
+        [Tooltip("Metres between river heads.")]
+        [Min(1f)] public float RiverHeadSpacing = 150f;
+
+        [Tooltip("Metres between a creek's head and any other head.")]
+        [Min(1f)] public float CreekHeadSpacing = 60f;
+
+        [Tooltip("Straight-line metres from a head to the nearest water, at the least.")]
+        [Min(1f)] public float MinRiverLength = 80f;
+        [Min(1f)] public float MinCreekLength = 30f;
+
+        [Tooltip("How far a channel swings side to side on flat ground, in bed widths either way.")]
+        [Min(0f)] public float MeanderStrength = 3f;
+
+        [Tooltip("Length of one full swing of a meander, in bed widths.")]
+        [Min(2f)] public float MeanderWavelength = 14f;
+
+        [Tooltip("Metres either way a meander swings on flat ground, at the least, however narrow the bed.")]
+        [Min(0f)] public float MeanderMinSwing = 6f;
+
+        [Tooltip("Metres a channel's bank rises per metre out from the bed.")]
+        [Min(0.05f)] public float ChannelBankSlope = 0.5f;
+
         [Header("Surface materials")]
         [Tooltip("Cells either side of a cell that its slope is measured over. Slope is read from a " +
             "smoothed heightfield: on quantised land a uniform hillside is a staircase, and a " +
@@ -440,6 +486,9 @@ namespace TinyDiggers.Terrain
             s.PlainsFeatureSize *= k; s.HillsFeatureSize *= k;
             s.ErosionCellSize *= k;
             s.CliffCoastSize *= k; s.CliffCoastInland *= k;
+            s.RiverWidthMin *= k; s.RiverWidthMax *= k; s.CreekWidthMin *= k; s.CreekWidthMax *= k;
+            s.RiverHeadSpacing *= k; s.CreekHeadSpacing *= k; s.MinRiverLength *= k; s.MinCreekLength *= k;
+            s.MeanderMinSwing *= k;
 
             s.RimWaterCells = Count(RimWaterCells); s.BeachCells = BeachCells == 0 ? 0 : Count(BeachCells);
             s.ShallowCells = Count(ShallowCells); s.ShelfCells = Count(ShelfCells); s.ChannelCells = Count(ChannelCells);

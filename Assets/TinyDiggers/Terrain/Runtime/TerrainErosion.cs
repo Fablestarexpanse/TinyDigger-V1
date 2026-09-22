@@ -261,9 +261,17 @@ namespace TinyDiggers.Terrain
         /// edge) by a priority flood over height levels of <paramref name="step"/>. Heights are
         /// expected to be on those levels, and stay on them. Cells that are neither land nor
         /// outlet are walls. Returns how many cells were raised.
+        ///
+        /// If <paramref name="downstream"/> is given, it gets the way water leaves every cell:
+        /// the neighbour the flood reached it from, which is never higher, so following it from
+        /// any land cell runs down to an outlet. Outlets and walls get -1.
         /// </summary>
-        public static int FillDepressions(float[] heights, int width, int depth, bool[] land, bool[] outlets, float step)
+        public static int FillDepressions(float[] heights, int width, int depth, bool[] land, bool[] outlets, float step,
+            int[] downstream = null)
         {
+            if (downstream != null)
+                for (var cell = 0; cell < downstream.Length; cell++)
+                    downstream[cell] = -1;
             var cells = heights.Length;
             var min = int.MaxValue;
             var max = int.MinValue;
@@ -311,6 +319,8 @@ namespace TinyDiggers.Terrain
                         if (visited[other] || !land[other])
                             continue;
                         visited[other] = true;
+                        if (downstream != null)
+                            downstream[other] = cell;
                         var level = Level(heights[other], step) - min;
                         if (level < b)
                         {
