@@ -173,7 +173,99 @@ def bed_to_tray(mesh, rig):
     hi = [round(max(co[i] for _, co in bed), 2) for i in range(3)]
     _log(f"dump bed given to the tray bone: {len(bed)} vertices, {lo} to {hi}; "
          f"{len(strays)} strays handed back to the body")
-    return {"verts": len(bed), "lo": lo, "hi": hi, "strays": len(strays)}
+    return {"verts": len(bed), "lo": lo, "hi": hi, "strays": strays}
+
+
+def ribs_to_tray(mesh):
+    """
+    Takes the bed's ribs up with it.
+
+    The scan models the ribs as their own pieces standing a few centimetres clear of the bed, so
+    nothing joins them to it; left on the body they stayed behind while the bed tipped. Anything
+    inside the bed's own footprint and above the hips, that the rig does not already call a leg,
+    is part of the bed (Ronan: "the ribs need to be welded to the dump bed").
+    """
+    tray = mesh.vertex_groups["tray"]
+    legs = {g.index for g in mesh.vertex_groups if g.name.startswith("leg_")}
+    owner = {v.index: max(((g.weight, g.group) for g in v.groups), default=(0.0, -1))[1]
+             for v in mesh.data.vertices}
+
+    bed = [v.co for v in mesh.data.vertices if owner[v.index] == tray.index]
+    if not bed:
+        return None
+    lo = mathutils.Vector((min(c.x for c in bed), min(c.y for c in bed), min(c.z for c in bed)))
+    hi = mathutils.Vector((max(c.x for c in bed), max(c.y for c in bed), max(c.z for c in bed)))
+    hips = min(c.z for c in bed) - 0.18
+
+    shells = _shells_of(mesh)
+    ball = shells[0]
+    picked = set()
+    for shell in shells:
+        if shell is ball or len(shell) < 8:
+            continue
+        indices = [index for index, _ in shell]
+        if sum(1 for index in indices if owner[index] in legs) > len(indices) * 0.15:
+            continue
+        points = [co for _, co in shell]
+        centre = sum(points, mathutils.Vector()) / len(points)
+        if (lo.x - 0.03 <= centre.x <= hi.x + 0.03
+                and lo.y - 0.03 <= centre.y <= hi.y + 0.03
+                and centre.z > hips):
+            picked.update(indices)
+
+    fresh = [index for index in picked if owner[index] != tray.index]
+    for group in mesh.vertex_groups:
+        if group.name != "tray":
+            group.remove(fresh)
+    tray.add(fresh, 1.0, 'REPLACE')
+    _log(f"ribs welded to the bed: {len(fresh)} more vertices on the tray")
+    return len(fresh)
+
+
+def add_ram(mesh, rig, strays):
+    """
+    Gives the machine a working hydraulic ram.
+
+    The rams are the pieces the auto-rigger had the tray bone driving. They get a bone of their
+    own, standing on the body where they are mounted and pointing at the bed. The tip clip aims
+    and stretches it, so the ram follows the bed up instead of sitting there (Ronan: "it needs a
+    ram").
+    """
+    if not strays:
+        return None
+
+    points = [mesh.data.vertices[index].co.copy() for index in strays]
+    base = min(points, key=lambda c: c.z)
+    top = max(points, key=lambda c: c.z)
+    middle_x = sum(c.x for c in points) / len(points)
+    head = mathutils.Vector((middle_x, base.y, base.z))
+    tail = mathutils.Vector((middle_x, top.y, top.z))
+    if (tail - head).length < 0.05:
+        return None
+
+    with bpy.context.temp_override(**_window_override(), active_object=rig, object=rig,
+                                   selected_objects=[rig], selected_editable_objects=[rig]):
+        bpy.context.view_layer.objects.active = rig
+        bpy.ops.object.mode_set(mode='EDIT')
+        bones = rig.data.edit_bones
+        if "ram" in bones:
+            bones.remove(bones["ram"])
+        bone = bones.new("ram")
+        bone.head = head
+        bone.tail = tail
+        bone.parent = bones["body"]
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+    group = mesh.vertex_groups.get("ram") or mesh.vertex_groups.new(name="ram")
+    for other in mesh.vertex_groups:
+        if other.name != "ram":
+            other.remove(list(strays))
+    group.add(list(strays), 1.0, 'REPLACE')
+
+    _log(f"ram bone from {[round(v, 2) for v in head]} to {[round(v, 2) for v in tail]}, "
+         f"{len(strays)} vertices")
+    return {"head": [round(v, 3) for v in head], "tail": [round(v, 3) for v in tail],
+            "verts": len(strays)}
 
 
 def weighted_centres(mesh, floor=0.4):
@@ -569,12 +661,44 @@ def _play(rig, action):
     return action
 
 
+def _ease(share):
+    """Smooth start and stop, so the bed does not snap into motion."""
+    return share * share * (3.0 - 2.0 * share)
+
+
 def _new_action(rig, name):
     if rig.animation_data is None:
         rig.animation_data_create()
     action = bpy.data.actions.new(f"dumper|{name}")
     action.use_fake_user = True
     return _play(rig, action)
+
+
+def _follow_ram(rig):
+    """
+    Points the ram at the bed and stretches it to reach.
+
+    Its foot stays where it is mounted on the body; its head is the point on the bed it was
+    attached to at rest, carried by the tray bone. A real ram extends, so the bone is scaled along
+    its length rather than pretending to be rigid.
+    """
+    ram = rig.pose.bones.get("ram")
+    tray = rig.pose.bones.get("tray")
+    if ram is None or tray is None:
+        return
+
+    rest = rig.data.bones["ram"]
+    foot = rest.head_local.copy()
+    attach_rest = rest.tail_local.copy()
+    carried = tray.matrix @ rig.data.bones["tray"].matrix_local.inverted() @ attach_rest
+
+    span = carried - foot
+    if span.length < 1e-4:
+        return
+    _aim(ram, rest.matrix_local, foot, span)
+    bpy.context.view_layer.update()
+    ram.scale = (1.0, span.length / max(rest.length, 1e-4), 1.0)
+    bpy.context.view_layer.update()
 
 
 def _key(rig, legs, frame, keyed_tray=False):
@@ -588,6 +712,11 @@ def _key(rig, legs, frame, keyed_tray=False):
             bone.keyframe_insert("rotation_quaternion", frame=frame)
     if keyed_tray and "tray" in rig.pose.bones:
         rig.pose.bones["tray"].keyframe_insert("rotation_quaternion", frame=frame)
+        ram = rig.pose.bones.get("ram")
+        if ram is not None:
+            ram.keyframe_insert("rotation_quaternion", frame=frame)
+            ram.keyframe_insert("location", frame=frame)
+            ram.keyframe_insert("scale", frame=frame)
 
 
 def _rest_pose(rig):
@@ -712,9 +841,20 @@ def tip(rig, legs, name="tip", length=54, angle=TIP, mesh=None):
 
     sign = _tip_sign(mesh, rig) if mesh is not None else 1.0
     marks = ((1, 0.0), (16, angle * sign), (34, angle * sign), (length, 0.0))
-    for frame, lift in marks:
+
+    # Keyed every other frame between the marks, because the ram has to be aimed and stretched at
+    # each step: it cannot be interpolated from four poses without pulling out of its mounts.
+    frames = []
+    for (frame, lift), (next_frame, next_lift) in zip(marks, marks[1:]):
+        for step in range(frame, next_frame, 2):
+            share = (step - frame) / max(1, next_frame - frame)
+            frames.append((step, lift + (next_lift - lift) * _ease(share)))
+    frames.append(marks[-1])
+
+    for frame, lift in frames:
         tray.rotation_quaternion = mathutils.Quaternion((1.0, 0.0, 0.0), math.radians(lift))
         bpy.context.view_layer.update()
+        _follow_ram(rig)
         _key(rig, legs, frame, keyed_tray=True)
 
     _log(f"{name}: tray front lifts {angle:.0f} degrees (sign {sign:+.0f}) over {length} frames")
@@ -781,7 +921,28 @@ def stage(mesh, distance=5.0, height=2.0):
     return camera
 
 
-def video(rig, mesh, clip="walk", folder=None, repeats=2, size=(960, 540)):
+def orbit(camera, mesh, start, end, turn=150.0, distance=5.2, height=2.1):
+    """
+    Swings the camera round the machine over the clip, so one take shows it from several angles
+    (Ronan: "when showing mer video of dump or walk shopw multiple anbgles").
+    """
+    target = mathutils.Vector((0.0, 0.0, mesh.dimensions.z * 0.45))
+    camera.animation_data_clear()
+    for frame, share in ((start, 0.0), ((start + end) // 2, 0.5), (end, 1.0)):
+        angle = math.radians(-120.0 + turn * share)
+        camera.location = target + mathutils.Vector((distance * math.cos(angle),
+                                                     distance * math.sin(angle),
+                                                     height))
+        camera.rotation_euler = (target - camera.location).to_track_quat('-Z', 'Y').to_euler()
+        camera.keyframe_insert("location", frame=frame)
+        camera.keyframe_insert("rotation_euler", frame=frame)
+    for curve in camera.animation_data.action.fcurves if hasattr(camera.animation_data.action, "fcurves")             else _fcurves(camera.animation_data.action):
+        for point in curve.keyframe_points:
+            point.interpolation = 'LINEAR'
+    return camera
+
+
+def video(rig, mesh, clip="walk", folder=None, repeats=2, size=(960, 540), turning=True):
     """
     Stage 4. Renders one clip to an MP4 to look at before anything goes near Unity. Loops the
     walk a couple of times so the gait can be judged rather than guessed at.
@@ -806,7 +967,11 @@ def video(rig, mesh, clip="walk", folder=None, repeats=2, size=(960, 540)):
             if modifier is None:
                 curve.modifiers.new('CYCLES')
 
-    stage(mesh)
+    camera = stage(mesh)
+    if turning:
+        orbit(camera, mesh, scene.frame_start, scene.frame_end)
+    else:
+        camera.animation_data_clear()
     scene.render.fps = FPS
     scene.render.resolution_x, scene.render.resolution_y = size
     # Blender 5 splits stills from video: FFMPEG only appears as a file format once the output
@@ -850,7 +1015,9 @@ def build():
     face_forward(mesh, rig)
     tidied = tidy(mesh, rig)
     harden(mesh)
-    bed_to_tray(mesh, rig)
+    bed = bed_to_tray(mesh, rig)
+    ribs_to_tray(mesh)
+    add_ram(mesh, rig, bed["strays"] if bed else [])
     hinge_tray(mesh, rig)
     legs = _rest(rig)
     made = clips(rig, legs, mesh=mesh)
