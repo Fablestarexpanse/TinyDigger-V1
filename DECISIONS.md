@@ -3314,3 +3314,40 @@ Proposed to Ronan, not yet built:
 - Marking a quarry warns when its floor is in rock, with the volume that is actually available.
 - A unit with a Fill waiting and a quarry dug out to rock says so instead of going idle.
 
+## 2026-09-22 — Two machines: the digger and the hauler
+
+Ronan brought two Meshy scans — an orbital excavator and a tipper walker, both in the crew robot's
+family (cream shell, yellow band, cyan lens, four clawed legs) — and asked for them "finished
+cleaned up and rigged in blender ... they need animations for the legs walking and scooping and
+anything else they might need".
+
+**Rulings (AskUserQuestion):** the machines stand **1.8 m to the top of the shell** (the crew robot
+is 0.43 m and sets human scale, so a machine is about four robots high); **keep the baked look but
+ease the rust**; and they need **walk, idle, turn in place, the digger's scoop and the hauler's
+tip**.
+
+**What the scans were:** one mesh each, about 10k triangles, one baked material with three JPEGs,
+no rig, no parts — and roughly 750 disconnected shells apiece, 600 of them shards of a few
+vertices.
+
+**`Art/Tools/td_machines.py`** does the work in stages so a re-scan can be re-run rather than
+hand-fixed:
+- **clean:** weld at 2.5 mm (750 shells -> 121 and 110), drop shards under 20 vertices, dissolve
+  degenerates, normals out, smooth shading, scale so the ball's top stands 1.8 m over the feet,
+  centre it and stand it on z = 0. Digger 9959 triangles, hauler 9796.
+- **skeleton:** turn the machine to look along +Y (Unity's +Z), then build the armature from
+  joints measured off the cleaned mesh: body, four legs of upper, lower and foot, and then the
+  digger's turret, boom, stick and bucket or the hauler's tray. 18 and 15 bones.
+- **skin:** rigid weights, one bone per **welded shell**. A shell is a panel: it belongs to one
+  part and turns with it.
+
+**Three things bit, all recorded in the file:**
+- `object.transform_apply` does nothing over the MCP bridge (no window, no selection), so the
+  machines stayed at scale 3.2 and every measurement after it was in scan units. The transform is
+  baked into the mesh by hand now.
+- Nearest-bone weighting gave the body ball away to whichever leg or turret bone was closer, and
+  the first posed frame tore the machine to pieces. The body claims its own shell first, by the
+  ball's radius.
+- Deciding per vertex split long panels: the hauler's tray came apart into slabs, half following
+  the tray and half staying put. Weighting decides per shell now.
+
