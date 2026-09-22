@@ -150,7 +150,20 @@ def bed_to_tray(mesh, rig):
               * (max(co.y for _, co in shell) - min(co.y for _, co in shell)))
 
     tray = mesh.vertex_groups.get("tray") or mesh.vertex_groups.new(name="tray")
+    body = mesh.vertex_groups.get("body") or mesh.vertex_groups.new(name="body")
     indices = [index for index, _ in bed]
+
+    # The tray keeps the bed and nothing else. Whatever it held before — the auto-rigger gave it
+    # the two hydraulic rams, which are drawn out of the shell — goes back to the body, or the
+    # ball stretches up after the bed as it tips (Ronan: "we dont need the sphere body section
+    # going with it").
+    held = [v.index for v in mesh.data.vertices
+            if any(g.group == tray.index and g.weight > 0.0 for g in v.groups)]
+    strays = [index for index in held if index not in set(indices)]
+    if strays:
+        tray.remove(strays)
+        body.add(strays, 1.0, 'REPLACE')
+
     for group in mesh.vertex_groups:
         if group.name != tray.name:
             group.remove(indices)
@@ -158,8 +171,9 @@ def bed_to_tray(mesh, rig):
 
     lo = [round(min(co[i] for _, co in bed), 2) for i in range(3)]
     hi = [round(max(co[i] for _, co in bed), 2) for i in range(3)]
-    _log(f"dump bed given to the tray bone: {len(bed)} vertices, {lo} to {hi}")
-    return {"verts": len(bed), "lo": lo, "hi": hi}
+    _log(f"dump bed given to the tray bone: {len(bed)} vertices, {lo} to {hi}; "
+         f"{len(strays)} strays handed back to the body")
+    return {"verts": len(bed), "lo": lo, "hi": hi, "strays": len(strays)}
 
 
 def weighted_centres(mesh, floor=0.4):
