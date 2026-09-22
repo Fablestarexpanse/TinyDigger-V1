@@ -146,6 +146,36 @@ namespace TinyDiggers.Terrain.Tests
         }
 
         [Test]
+        public void ChannelBedsAreGravel()
+        {
+            // Ronan, 2026-09-22: grass under clear running water read as green water.
+            var (grid, map) = Generate(3);
+            // Where a channel drops through a rock step, the bed is that rock: a cliff stays stone.
+            int points = 0, gravel = 0, stone = 0;
+            foreach (var channel in map.Channels)
+            {
+                foreach (var point in channel.Path)
+                {
+                    var x = Mathf.FloorToInt(point.x);
+                    var z = Mathf.FloorToInt(point.z);
+                    if (grid.GetSurfaceHeight(x, z) < World.SeaLevel)
+                        continue;
+                    points++;
+                    var top = grid.GetTopMaterial(x, z);
+                    if (top == MaterialTable.RockLoose)
+                        gravel++;
+                    else if (IslandGenerator.IsStone(top))
+                        stone++;
+                }
+            }
+
+            Assert.That(points, Is.GreaterThan(50));
+            Assert.That(gravel + stone, Is.EqualTo(points), $"{points - gravel - stone} of {points} bed points are neither gravel nor rock");
+            Assert.That(gravel, Is.GreaterThanOrEqualTo(points * 3 / 4), $"{gravel} of {points} bed points are gravel");
+            Assert.That(map.ChannelBeds, Is.Not.Null);
+        }
+
+        [Test]
         public void TheSameSeedCutsTheSameChannels()
         {
             var (_, a) = Generate(5);

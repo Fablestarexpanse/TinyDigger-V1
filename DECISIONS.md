@@ -3009,3 +3009,21 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
     beds need a gravel or sand surface (phase 5).
   - Thin films show pale on flat ground.
   - The close-up camera poses frame badly.
+
+### Channel beds are gravel (2026-09-22)
+- **Ronan:** "do the gravel beds first then step 3". Grass beds under clear running water read as
+  bright green water.
+- **The bed material is the existing "Loose rock", not a new one.** It is grey-beige gravel that
+  settles at 38°, so there's no new material and no palette change for STYLE. A bed's floor is
+  nearly flat, and the topsoil banks beside it don't slump, so a loose top only on bed cells holds.
+- **How it's built:**
+  - `RiverChannels` keeps its bed mask on the map as `IslandMap.ChannelBeds`.
+  - After the surface pass and its tidying, bed cells get Loose rock on top, except cells that
+    are already stone. Where a channel drops through a rock step, that step is a cliff face and
+    must stay rock; the cliff tests caught gravel standing as a cliff.
+  - `BuildColumn` lays a gravel layer `ChannelGravelThickness` thick (0.4 m) over dirt.
+  - The bed mask is marked at least 0.75 of a cell either side of the line, or a creek one or two
+    cells wide missed cells the line crossed between points.
+- **Result:** in play the rivers read teal-blue over grey gravel instead of green. Water depths are
+  unchanged from step 2. A new test fails if a bed is neither gravel nor rock, or if less than
+  three quarters of it is gravel. All 425 tests pass.

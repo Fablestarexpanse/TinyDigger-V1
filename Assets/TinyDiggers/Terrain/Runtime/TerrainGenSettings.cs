@@ -326,6 +326,9 @@ namespace TinyDiggers.Terrain
         [Tooltip("Metres either way a meander swings on flat ground, at the least, however narrow the bed.")]
         [Min(0f)] public float MeanderMinSwing = 6f;
 
+        [Tooltip("Metres of gravel (loose rock) on top of a channel's bed.")]
+        [Min(0f)] public float ChannelGravelThickness = 0.4f;
+
         [Tooltip("Metres a channel's bank rises per metre out from the bed.")]
         [Min(0.05f)] public float ChannelBankSlope = 0.5f;
 

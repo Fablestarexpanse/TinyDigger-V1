@@ -52,6 +52,12 @@ namespace TinyDiggers.Terrain
         public int RiversWanted;
         public int CreeksWanted;
 
+        /// <summary>
+        /// Which cells are channel bed, one per grid cell: 0 none, 1 river, 2 creek. Null when
+        /// the island has no channels. Beds are gravel on top (<see cref="MaterialTable.RockLoose"/>).
+        /// </summary>
+        public byte[] ChannelBeds;
+
         /// <summary>Where the channels' time went, for perf reporting.</summary>
         public string ChannelStats = "";
 
@@ -403,6 +409,15 @@ namespace TinyDiggers.Terrain
             // them is the expensive part of generating a map and the budget is half a second.
             SurfaceMaterials.PromoteCliffFaces(surfaceMaterials, heights, inDisc, width, depth, step);
             SurfaceMaterials.Tidy(surfaceMaterials, heights, inDisc, toWater, width, depth, settings);
+
+            // Channel beds are gravel (Ronan, 2026-09-22): grass under clear running water read as
+            // bright green water. Last, so no tidying folds a narrow creek bed back into the grass
+            // either side of it. Not over stone: where a channel runs down through a rock step,
+            // the step is a cliff face and stays rock, or loose gravel would stand as a cliff.
+            if (map.ChannelBeds != null)
+                for (var cell = 0; cell < cells; cell++)
+                    if (map.ChannelBeds[cell] != 0 && inDisc[cell] && !IsStone(surfaceMaterials[cell]))
+                        surfaceMaterials[cell] = MaterialTable.RockLoose;
 
             map.Mark("materials", stopwatch, ref lastMark);
 
@@ -1528,8 +1543,8 @@ namespace TinyDiggers.Terrain
         /// <summary>
         /// Builds one column bottom-up for a surface at <paramref name="surface"/>: bedrock from
         /// the datum, granite under the high ground, rock, clay in the valleys, then the cap —
-        /// sand on beaches and under water, bare rock where it is too steep to hold soil, dirt and
-        /// topsoil everywhere else.
+        /// sand on beaches and under water, gravel in channel beds, bare rock where it is too steep
+        /// to hold soil, dirt and topsoil everywhere else.
         /// </summary>
         static int BuildColumn(Span<Layer> column, float surface, MaterialId top, float high, float valley,
             float datum, TerrainGenSettings settings)
@@ -1547,12 +1562,13 @@ namespace TinyDiggers.Terrain
             // like it is made of, and one decision covers both.
             var topsoil = top == MaterialTable.Topsoil ? settings.TopsoilThickness : 0f;
             var sand = top == MaterialTable.Sand ? settings.SandThickness : 0f;
+            var gravel = top == MaterialTable.RockLoose ? settings.ChannelGravelThickness : 0f;
             float dirt;
             if (top == MaterialTable.Topsoil)
                 dirt = settings.DirtOnPlains;
             else if (top == MaterialTable.Dirt)
                 dirt = settings.DirtOnSlopes * 2f;
-            else if (top == MaterialTable.Sand)
+            else if (top == MaterialTable.Sand || top == MaterialTable.RockLoose)
                 dirt = settings.DirtOnSlopes;
             else
                 dirt = 0f; // Bare rock: nothing lying over it.
@@ -1563,18 +1579,19 @@ namespace TinyDiggers.Terrain
             // there is no soil to be under, so there is no clay either — otherwise a clay band
             // surfaces on a rocky slope in the middle of a valley, which is both wrong and the
             // source of single-cell material islands.
-            var clay = valley > 0.35f && !underwater && topsoil + sand + dirt >= MinLayerThickness
+            var clay = valley > 0.35f && !underwater && topsoil + sand + gravel + dirt >= MinLayerThickness
                 ? settings.ClayInValleys * valley
                 : 0f;
             var granite = high > 0.05f ? high * settings.RidgeHeight * settings.GraniteShare : 0f;
 
-            var cap = topsoil + sand + dirt + clay;
+            var cap = topsoil + sand + gravel + dirt + clay;
             var maxCap = Mathf.Max(0f, total - MinLayerThickness);
             if (cap > maxCap)
             {
                 var scale = maxCap / Mathf.Max(cap, 1e-4f);
                 topsoil *= scale;
                 sand *= scale;
+                gravel *= scale;
                 dirt *= scale;
                 clay *= scale;
                 cap = maxCap;
@@ -1596,6 +1613,7 @@ namespace TinyDiggers.Terrain
                 rock *= scale;
                 topsoil *= scale;
                 sand *= scale;
+                gravel *= scale;
                 dirt *= scale;
                 clay *= scale;
             }
@@ -1607,6 +1625,7 @@ namespace TinyDiggers.Terrain
             count = Add(column, count, MaterialTable.Clay, clay);
             count = Add(column, count, MaterialTable.Dirt, dirt);
             count = Add(column, count, MaterialTable.Sand, sand);
+            count = Add(column, count, MaterialTable.RockLoose, gravel);
             count = Add(column, count, MaterialTable.Topsoil, topsoil);
 
             // The surface must land exactly where the height field says: whatever rounding the

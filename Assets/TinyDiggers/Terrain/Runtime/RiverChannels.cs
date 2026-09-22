@@ -127,6 +127,8 @@ namespace TinyDiggers.Terrain
             for (var cell = 0; cell < cells; cell++)
                 if (channelMask[cell] == 1)
                     map.RiverCells.Add(new Vector2Int(cell % width, cell / width));
+            if (map.Channels.Count > 0)
+                map.ChannelBeds = channelMask;
 
             map.ChannelStats = $"{stats.Routes} routes followed ({stats.Short} too short, {stats.Dropped} dropped), " +
                 $"{clock.Elapsed.TotalMilliseconds:0} ms";
@@ -569,7 +571,9 @@ namespace TinyDiggers.Terrain
                         cut = Mathf.Round(cut / step) * step;
                         if (cut < heights[cell])
                             heights[cell] = cut;
-                        if (distance < half && channelMask[cell] == 0)
+                        // At least three quarters of a cell either side: a bed a cell or two wide
+                        // would otherwise miss cells the line runs between points over.
+                        if (distance < Mathf.Max(half, 0.75f) && channelMask[cell] == 0)
                             channelMask[cell] = mark;
                     }
                 }
