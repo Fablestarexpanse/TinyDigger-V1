@@ -2876,3 +2876,14 @@ The old static sea's Gerstner waves are now in the package, drawn on top of the 
   is 32–36 m, against 30.5–34.5 m at the start. They cover only the drawn 13–20% of the land now,
   and erosion rounds them. Taller peaks are offered as an option.
 - **Tests:** 415/415.
+- **Mountains taller, drawn per seed** (Ronan, AskUserQuestion: "40–60 m, per seed").
+  - With land types the crest's height is drawn per seed from `MountainCrestMin`–`Max`, 35–70 m
+    (`IslandMap.MountainCrest`). `RidgeHeight` stays the old single value.
+  - Peaks do not follow the crest one for one: a crest of 47 m gave 50 m, 62 m gave 57.5 m. The
+    first range, 45–70, put every seed at 50 m or more, so it was widened. Peaks are now 45,
+    42.5, 55 and 42.5 m on the four seeds, against 32–36 m before.
+  - Steep ground is 13–19%, cliff steps 4.5–9%, pits 1–7, and generation about 7.3–8.2 s a seed.
+- **Unity gotcha:** a new field's default does not reach a settings asset that never saved it.
+  The loaded asset kept an in-memory value from an earlier build (crest minimum 45 where the code
+  said 35) until it was set and saved (`SetDirty` + `SaveAssets`). New settings now go into the
+  asset.

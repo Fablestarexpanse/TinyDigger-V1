@@ -36,10 +36,38 @@ MonoBehaviour:
   ShoreHeight: 1
   InlandRise: 5
   InlandRiseDistance: 120
+  MountainCrestMin: 35
+  MountainCrestMax: 70
   PlainsFeatureSize: 180
   PlainsRelief: 1.5
   HillsFeatureSize: 140
   HillsRelief: 8
+  CliffCoastShareMin: 0.15
+  CliffCoastShareMax: 0.35
+  CliffCoastHeightMin: 5
+  CliffCoastHeightMax: 10
+  CliffCoastSize: 180
+  CliffCoastInland: 35
+  CliffCoastBlend: 0.3
+  CliffUplandBias: 0.4
+  Erosion: 1
+  ErosionCellSize: 2
+  ErosionDropletsPerKm2: 400000
+  Droplets:
+    Lifetime: 40
+    Inertia: 0.05
+    Capacity: 4
+    MinCapacity: 0.01
+    Erode: 0.3
+    Deposit: 0.3
+    Evaporate: 0.02
+    Gravity: 4
+    Radius: 3
+  ThermalIterations: 40
+  TalusSoil: 38
+  TalusRock: 75
+  SettleIterations: 16
+  FillPits: 1
   Shape: 1
   LandRadius: 447
   LandFeatureSize: 150

@@ -20,6 +20,9 @@ namespace TinyDiggers.Terrain
         /// <summary>The mix of plains, hills and mountains this island was drawn with (phase 2).</summary>
         public LandMix Mix;
 
+        /// <summary>Metres the mountains' crest was drawn to add at most (phase 4).</summary>
+        public float MountainCrest;
+
         /// <summary>Share of the coast drawn to be cliff, and how high those cliffs stand (phase 4).</summary>
         public float CliffCoastShare;
         public float CliffCoastHeight;
@@ -456,6 +459,7 @@ namespace TinyDiggers.Terrain
             map.Mix = LandTypes.Draw(random, settings);
             map.CliffCoastShare = Mathf.Lerp(settings.CliffCoastShareMin, settings.CliffCoastShareMax, (float)random.NextDouble());
             map.CliffCoastHeight = Mathf.Lerp(settings.CliffCoastHeightMin, settings.CliffCoastHeightMax, (float)random.NextDouble());
+            map.MountainCrest = Mathf.Lerp(settings.MountainCrestMin, settings.MountainCrestMax, (float)random.NextDouble());
             var toSea = Distance(land, inDisc, width, depth, from: false);
 
             // The type field over the land.
@@ -544,7 +548,7 @@ namespace TinyDiggers.Terrain
                     var peak = Mathf.Clamp01(crest) * (0.55f + 0.45f * Smooth(alongRidge));
                     var roughness = (Noise(warped, mediumOffset, settings.MediumSize) - 0.5f) * settings.MediumRelief
                         + Fbm(warped, mediumOffset + new Vector2(313f, 77f), settings.DetailSize, 2) * 2f * settings.DetailRelief;
-                    var mountain = hill + peak * settings.RidgeHeight + roughness;
+                    var mountain = hill + peak * map.MountainCrest + roughness;
 
                     var height = plains * plain + hills * hill + mountains * mountain;
                     highGround[cell] = mountains * peak;

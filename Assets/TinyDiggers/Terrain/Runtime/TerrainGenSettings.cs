@@ -106,6 +106,10 @@ namespace TinyDiggers.Terrain
         [Tooltip("Metres inland over which most of that rise happens.")]
         [Min(1f)] public float InlandRiseDistance = 120f;
 
+        [Tooltip("Metres the mountains' crest adds at most: each seed draws between these (Ronan, 2026-09-21: peaks of 40-60 m, random per generation). Used with land types; RidgeHeight is the old single value.")]
+        [Min(0f)] public float MountainCrestMin = 35f;
+        [Min(0f)] public float MountainCrestMax = 70f;
+
         [Tooltip("Metres across the swells of a plain.")]
         [Min(10f)] public float PlainsFeatureSize = 180f;
 
