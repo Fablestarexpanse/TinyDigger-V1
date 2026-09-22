@@ -345,7 +345,10 @@ SWAY = 0.05
 TURN = 11.0
 
 # The tray tips like a dump truck: hinged at the back, the front lifts and the load runs off.
-TIP = 52.0
+# Ronan, 2026-09-22: "it needs to tip backwards to near vertical". The tray already sits about
+# 18 degrees nose-up at rest, so the bone turns rather less than the tray ends up at: 68 on the
+# bone puts the bed at about 86 degrees, near vertical without going over.
+TIP = 68.0
 
 
 def _rest(rig):
@@ -460,15 +463,28 @@ def _foot_offset(phase, stride, lift, turn=0.0, anchor=None):
     return offset
 
 
+def _play(rig, action):
+    """
+    Puts an action on the rig and binds it.
+
+    Blender 5's actions are slotted, and assigning a new action leaves the **old** slot bound: the
+    rig then stands still while the curves sit there unused. The tip video of 2026-09-22 rendered
+    a motionless tray for exactly this reason. Binding the slot every time is the fix.
+    """
+    if rig.animation_data is None:
+        rig.animation_data_create()
+    rig.animation_data.action = action
+    if action is not None and hasattr(rig.animation_data, "action_slot") and action.slots:
+        rig.animation_data.action_slot = action.slots[0]
+    return action
+
+
 def _new_action(rig, name):
     if rig.animation_data is None:
         rig.animation_data_create()
     action = bpy.data.actions.new(f"dumper|{name}")
     action.use_fake_user = True
-    rig.animation_data.action = action
-    if getattr(rig.animation_data, "action_slot", None) is None and action.slots:
-        rig.animation_data.action_slot = action.slots[0]
-    return action
+    return _play(rig, action)
 
 
 def _key(rig, legs, frame, keyed_tray=False):
@@ -688,12 +704,7 @@ def video(rig, mesh, clip="walk", folder=None, repeats=2, size=(960, 540)):
     os.makedirs(folder, exist_ok=True)
 
     scene = bpy.context.scene
-    action = bpy.data.actions[f"dumper|{clip}"]
-    if rig.animation_data is None:
-        rig.animation_data_create()
-    rig.animation_data.action = action
-    if getattr(rig.animation_data, "action_slot", None) is None and action.slots:
-        rig.animation_data.action_slot = action.slots[0]
+    action = _play(rig, bpy.data.actions[f"dumper|{clip}"])
 
     start, end = (int(v) for v in action.frame_range)
     scene.frame_start = start
