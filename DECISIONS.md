@@ -3373,3 +3373,32 @@ hand-fixed:
 **Not done yet:** the machines are art and prefabs only. Nothing in the game spawns them, and the
 `Digger` and `Hauler` roles still run with the crew robot's look and numbers.
 
+## 2026-09-22 — The dumper, one machine at a time
+
+Ronan pulled the first two machines ("lets remove them and do one at a time the animations are
+poor") and brought a dumper that was already auto-rigged, asking to see a video of it moving. His
+notes as it went: it is "a 4 legged crab like mech so it should walk like one and the dumper dumps
+like a dump truck"; then "the walk looks backwards"; then "the dump goes the other direction it
+should tilt backwards the eyes are the front"; then "the legs are missing joints".
+
+The digger and hauler assets are deleted. `Art/Tools/td_dumper.py` does this one:
+
+- **The scan:** 15 456 triangles, no UVs, no materials, a UniRig armature of 37 bones — a tray
+  bone that was also the root, a body, four legs, one leg cut into two rival chains, a claw left
+  hanging off the body, and a dozen one-centimetre stubs.
+- **Facing:** the machine is turned 180 degrees on the way in, so it looks along +Y (Unity's +Z).
+  Without it the gait pushed it out of its own back.
+- **Every joint is kept.** The stubs are the hinge knuckles — two thousand vertices apiece on the
+  back legs — and they are folded into the *nearest leg bone*, not their parent: folding them into
+  the parent welded the knuckle to the shell, which is the missing hinge. The dangling claw is
+  re-parented onto the end of its leg. Legs now drive three to five segments each.
+- **Weights are hardened**: one bone a vertex. The auto-rigger blended them like flesh, so the
+  tray came up at half the angle its bone turned.
+- **The tray hinges at its rear bottom edge**, pointing forward, so tipping lifts the front and
+  the load runs off over the tail — a dump truck. The rotation's sign is worked out by trying it
+  and watching the tray's front, because the auto-rigger's bone axes are arbitrary.
+- **Clips:** walk, idle, turn on the spot and tip, with the feet **planted** — a two-bone solve
+  puts the ankle where it needs to be and everything past it is aimed at the contact point, so a
+  foot on the ground stays on the ground while the machine rolls over it.
+- Videos land in `Screenshots/Units`.
+
