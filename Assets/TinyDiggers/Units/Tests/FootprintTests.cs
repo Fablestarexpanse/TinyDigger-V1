@@ -131,6 +131,65 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
+        public void AMachineCutsDeeperFromWhereItStandsThanARobotCan()
+        {
+            var robot = new CrewUnit(_dispatcher, 4, 4, UnitRole.Worker, UnitLoads.Barrow);
+            var machine = Spawn(8, 4, UnitRole.Digger);
+            Assert.That(machine.DigDepthLevels, Is.GreaterThan(robot.DigDepthLevels));
+
+            // A face three steps below the rim: the machine works it from where it stands and the
+            // robot has to be given a way down (Ronan: "dig into the side instead of stepping up").
+            var rim = _grid.GetSurfaceHeight(4, 4);
+            var face = rim - 3f * _grid.HeightStep;
+            Assert.That(machine.WithinReach(rim, face), Is.True);
+            Assert.That(robot.WithinReach(rim, face), Is.False);
+        }
+
+        [Test]
+        public void ReachingUpIsUnchangedByHowDeepAUnitCanCut()
+        {
+            var machine = Spawn(8, 4, UnitRole.Digger);
+            var rim = _grid.GetSurfaceHeight(8, 4);
+            var overhead = rim + (machine.DigReachLevels + 1) * _grid.HeightStep;
+            Assert.That(machine.WithinReach(rim, overhead), Is.False,
+                "a deeper arm does not let it work higher over its head");
+        }
+
+        [Test]
+        public void AMachineDigsIntoAMoundFromTheFootOfIt()
+        {
+            // A heap of dirt three steps proud of the ground beside it.
+            var foot = _grid.GetSurfaceHeight(6, 6);
+            _grid.SetColumn(7, 6, new[]
+            {
+                new Layer(MaterialTable.Bedrock, 2f),
+                new Layer(MaterialTable.Dirt, 4f + 3f * _grid.HeightStep),
+            });
+
+            var machine = Spawn(6, 6, UnitRole.Digger);
+            var robot = new CrewUnit(_dispatcher, 5, 6, UnitRole.Worker, UnitLoads.Barrow);
+            Assert.That(machine.WithinDigReach(foot, 7, 6), Is.True,
+                "a machine digs into the pile rather than climbing it");
+            Assert.That(robot.WithinDigReach(foot, 7, 6), Is.False,
+                "a robot still works what it can reach, and a soil face that tall slumps anyway");
+        }
+
+        [Test]
+        public void ARockFaceIsStillWorkableByAnybody()
+        {
+            var foot = _grid.GetSurfaceHeight(10, 6);
+            _grid.SetColumn(11, 6, new[]
+            {
+                new Layer(MaterialTable.Bedrock, 2f),
+                new Layer(MaterialTable.Rock, 4f + 5f * _grid.HeightStep),
+            });
+
+            var robot = new CrewUnit(_dispatcher, 10, 6, UnitRole.Worker, UnitLoads.Barrow);
+            Assert.That(robot.WithinDigReach(foot, 11, 6), Is.True,
+                "the cliff rule is for everyone, or a hill with a cliff can never come down");
+        }
+
+        [Test]
         public void AUnitAlreadyTooCloseMayStillMoveAway()
         {
             var parked = Spawn(8, 8, UnitRole.Digger);

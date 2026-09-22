@@ -135,6 +135,52 @@ namespace TinyDiggers.Units
         public int DigReachLevels = 2;
 
         /// <summary>
+        /// How far *below* its own feet a unit can cut, in height steps.
+        ///
+        /// A machine standing on the rim works the face in front of it rather than driving down
+        /// into the hole (Ronan, 2026-09-22: "the digger should be able to stand there at the
+        /// edge and keep digging through it without needing a ramp"). How deep is the arm's
+        /// business: the digger's reaches about two metres below its feet, four steps, where a
+        /// robot with a shovel manages the same couple of steps it can reach up.
+        /// </summary>
+        public int DigDepthLevels = 2;
+
+        /// <summary>The digger machine's arm, in height steps below its feet.</summary>
+        public const int MachineDigDepth = 4;
+
+        /// <summary>
+        /// How far up a face of *any* material a unit can work from its foot, in height steps.
+        ///
+        /// A machine does not climb a mound to take it down; it stands at the bottom and digs
+        /// into the pile (Ronan, 2026-09-22: "if it's digging into a mound or wall or face it
+        /// doesn't need to be on top"). Nought for a robot, which works what it can reach.
+        /// </summary>
+        public int FaceReachLevels;
+
+        /// <summary>How far up a face the digger's arm reaches, in height steps.</summary>
+        public const int MachineFaceReach = 3;
+
+        /// <summary>
+        /// How far out the unit can work, in cells. One is arm's length — the eight cells round
+        /// it. The digger machine reaches further, because it has a boom (Ronan, 2026-09-22: "the
+        /// excavator bot has a long excavator arm so it should be able to reach out a certain
+        /// distance to dig").
+        /// </summary>
+        public int WorkReachCells = 1;
+
+        /// <summary>
+        /// The digger's arm, in cells: a metre on half-metre cells. Three looked too far for the
+        /// machine's own arm (Ronan, 2026-09-22: "its reach might be too far").
+        /// </summary>
+        public const int MachineWorkReach = 2;
+
+        /// <summary>Places to stand to work a cell, nearest first; reused so the scan allocates nothing.</summary>
+        readonly List<Vector2Int> _stands = new List<Vector2Int>();
+
+        /// <summary>The last cell this unit cut, so it carries on along the same face.</summary>
+        Vector2Int _lastCut = new Vector2Int(-1, -1);
+
+        /// <summary>
         /// How far up a rock face a unit can work from its foot, in height steps. Taller than the
         /// ordinary dig reach on purpose: see <see cref="WithinDigReach"/>.
         /// </summary>
@@ -418,36 +464,77 @@ namespace TinyDiggers.Units
         /// <summary>m³ in one height step on one cell: what a load has to hold to tip a step.</summary>
         float StepVolume => Step * _grid.CellArea;
 
-        /// <summary>Whether a unit standing at height <paramref name="standHeight"/> can dig or fill a cell at <paramref name="cellHeight"/>.</summary>
-        public bool WithinReach(float standHeight, float cellHeight) =>
-            Math.Abs(cellHeight - standHeight) <= DigReachLevels * Step + Epsilon;
+        /// <summary>
+        /// Whether a unit standing at height <paramref name="standHeight"/> can dig or fill a cell
+        /// at <paramref name="cellHeight"/>: up to <see cref="DigReachLevels"/> above it, and down
+        /// to <see cref="DigDepthLevels"/> below, which is as far as its arm goes.
+        /// </summary>
+        public bool WithinReach(float standHeight, float cellHeight)
+        {
+            var difference = cellHeight - standHeight;
+            return difference >= -(DigDepthLevels * Step + Epsilon)
+                && difference <= DigReachLevels * Step + Epsilon;
+        }
 
         /// <summary>
         /// Whether a unit standing at <paramref name="standHeight"/> can dig the cell at
         /// (<paramref name="x"/>, <paramref name="z"/>).
         ///
-        /// Ordinary reach, plus one exception: a **rock face** standing over the unit can be worked
-        /// from its foot, up to <see cref="CliffReachLevels"/> above it, taking the top step off at
-        /// a time. Without that a cliff is not merely unclimbable, which it should be, but
-        /// unworkable, and a hill with a cliff on it can never be taken down at all. Soil is not
-        /// worked this way: a soil face that tall cannot exist, because it slumps.
+        /// Ordinary reach, plus two ways of working a face that stands over the unit, taking the
+        /// top step off at a time:
+        ///
+        /// - **any face**, up to <see cref="FaceReachLevels"/>: a machine digs into a mound from
+        ///   the bottom rather than climbing it to work from the top;
+        /// - a **rock face**, up to <see cref="CliffReachLevels"/>, for anybody. Without that a
+        ///   cliff is not merely unclimbable, which it should be, but unworkable, and a hill with
+        ///   a cliff on it could never be taken down. Soil needs no such allowance for a robot: a
+        ///   soil face that tall cannot stand up, because it slumps.
         /// </summary>
         public bool WithinDigReach(float standHeight, int x, int z)
         {
             var cellHeight = _grid.GetSurfaceHeight(x, z);
             if (WithinReach(standHeight, cellHeight))
                 return true;
-            return cellHeight - standHeight <= CliffReachLevels * Step + Epsilon
+            var above = cellHeight - standHeight;
+            if (above <= FaceReachLevels * Step + Epsilon)
+                return true;
+            return above <= CliffReachLevels * Step + Epsilon
                 && MaterialTable.IsStone(_grid.GetTopMaterial(x, z));
         }
 
-        /// <summary>Whether a unit on (standX, standZ) can work the adjacent cell (targetX, targetZ).</summary>
+        /// <summary>
+        /// Every cell this unit could stand on to work (<paramref name="x"/>, <paramref name="z"/>),
+        /// out to its arm's reach and nearest first, so it works from where it already is rather
+        /// than walking round the pit to a far side it could have reached.
+        /// </summary>
+        List<Vector2Int> StandsAround(int x, int z)
+        {
+            _stands.Clear();
+            var reach = Math.Max(1, WorkReachCells);
+            for (var ring = 1; ring <= reach; ring++)
+                for (var dz = -ring; dz <= ring; dz++)
+                    for (var dx = -ring; dx <= ring; dx++)
+                    {
+                        if (Math.Max(Math.Abs(dx), Math.Abs(dz)) != ring)
+                            continue;
+                        var sx = x + dx;
+                        var sz = z + dz;
+                        if (_grid.InBounds(sx, sz))
+                            _stands.Add(new Vector2Int(sx, sz));
+                    }
+
+            return _stands;
+        }
+
+        /// <summary>Whether a unit on (standX, standZ) can work the cell (targetX, targetZ).</summary>
         public bool CanWork(int standX, int standZ, int targetX, int targetZ)
         {
             if (!_grid.InBounds(standX, standZ) || !_grid.InBounds(targetX, targetZ))
                 return false;
-            var adjacent = Math.Abs(standX - targetX) <= 1 && Math.Abs(standZ - targetZ) <= 1 && (standX != targetX || standZ != targetZ);
-            return adjacent && WithinReach(_grid.GetSurfaceHeight(standX, standZ), _grid.GetSurfaceHeight(targetX, targetZ));
+            var out_x = Math.Abs(standX - targetX);
+            var out_z = Math.Abs(standZ - targetZ);
+            var inReach = Math.Max(out_x, out_z) <= Math.Max(1, WorkReachCells) && (out_x != 0 || out_z != 0);
+            return inReach && WithinReach(_grid.GetSurfaceHeight(standX, standZ), _grid.GetSurfaceHeight(targetX, targetZ));
         }
 
         /// <summary>
@@ -462,6 +549,12 @@ namespace TinyDiggers.Units
         public CrewUnit AsMachine()
         {
             CutsStone = Role == UnitRole.Digger;
+            if (Role == UnitRole.Digger)
+            {
+                DigDepthLevels = MachineDigDepth;
+                FaceReachLevels = MachineFaceReach;
+                WorkReachCells = MachineWorkReach;
+            }
             Radius = Role == UnitRole.Digger ? DiggerRadius
                 : Role == UnitRole.Hauler ? HaulerRadius : CrewRadius;
             return this;
@@ -770,22 +863,39 @@ namespace TinyDiggers.Units
                 if (!CanStandHere(standX, standZ))
                     return false;
                 var standHeight = _grid.GetSurfaceHeight(standX, standZ);
-                var bestHeight = float.MaxValue;
-                for (var n = 0; n < 8; n++)
+                var digging = kind == CrewJobKind.Dig || kind == CrewJobKind.Quarry;
+                var best = float.MaxValue;
+                foreach (var cell in StandsAround(standX, standZ))
                 {
-                    var x = standX + NeighbourX[n];
-                    var z = standZ + NeighbourZ[n];
-                    if (!_grid.InBounds(x, z) || !IsJobCell(kind, standX, standZ, standHeight, x, z))
+                    if (!IsJobCell(kind, standX, standZ, standHeight, cell.x, cell.y))
                         continue;
-                    // Tipping fills the lowest cell in reach first.
-                    var height = kind == CrewJobKind.Dig || kind == CrewJobKind.Quarry ? 0f : _grid.GetSurfaceHeight(x, z);
-                    if (height >= bestHeight)
+
+                    float score;
+                    if (!digging)
+                    {
+                        // Tipping fills the lowest cell in reach first.
+                        score = _grid.GetSurfaceHeight(cell.x, cell.y);
+                    }
+                    else
+                    {
+                        // Keep to one face. Taking whichever cell came first walked a unit round
+                        // and round the edge of a block (Ronan, 2026-09-22: "why it walks in a
+                        // square around dig site instead of approaching and digging into it from
+                        // one side to the other"), so the cut beside the last one wins, and where
+                        // there is no last one, the nearest.
+                        var fromLast = _lastCut.x < 0 ? Vector2.zero
+                            : new Vector2(cell.x - _lastCut.x, cell.y - _lastCut.y);
+                        var fromHere = new Vector2(cell.x - standX, cell.y - standZ);
+                        score = fromLast.sqrMagnitude + 0.01f * fromHere.sqrMagnitude;
+                    }
+
+                    if (score >= best)
                         continue;
-                    bestHeight = height;
-                    target = new Vector2Int(x, z);
+                    best = score;
+                    target = cell;
                 }
 
-                return bestHeight < float.MaxValue;
+                return best < float.MaxValue;
             }, _path);
             if (!found)
                 return false;
@@ -943,14 +1053,12 @@ namespace TinyDiggers.Units
             {
                 var x = cells[i] % width;
                 var z = cells[i] / width;
-                for (var n = 0; n < 8; n++)
+                foreach (var stand in StandsAround(x, z))
                 {
-                    var standX = x + NeighbourX[n];
-                    var standZ = z + NeighbourZ[n];
-                    if (!_grid.InBounds(standX, standZ) || !CanStandHere(standX, standZ)
-                        || !_dispatcher.Regions.CanReach(me.x, me.y, standX, standZ))
+                    if (!CanStandHere(stand.x, stand.y)
+                        || !_dispatcher.Regions.CanReach(me.x, me.y, stand.x, stand.y))
                         continue;
-                    if (IsJobCell(kind, standX, standZ, _grid.GetSurfaceHeight(standX, standZ), x, z))
+                    if (IsJobCell(kind, stand.x, stand.y, _grid.GetSurfaceHeight(stand.x, stand.y), x, z))
                         return true;
                 }
             }
@@ -1045,7 +1153,7 @@ namespace TinyDiggers.Units
             if (!_designations.IsQuarry(x, z) || _grid.IsWater(x, z))
                 return false;
             var after = _grid.GetSurfaceHeight(x, z) - Step;
-            if (after < _designations.QuarryFloor(x, z) - Epsilon || after < standHeight - DigReachLevels * Step - Epsilon)
+            if (after < _designations.QuarryFloor(x, z) - Epsilon || after < standHeight - DigDepthLevels * Step - Epsilon)
                 return false;
             Span<Layer> diggable = stackalloc Layer[1];
             return _grid.PeekRemove(x, z, Step, diggable) > 0;
@@ -1065,7 +1173,7 @@ namespace TinyDiggers.Units
             if (_grid.IsWater(x, z))
                 return false;
             var after = _grid.GetSurfaceHeight(x, z) - Step;
-            if (after < _dispatcher.DigFloor(x, z) - Epsilon || after < standHeight - DigReachLevels * Step - Epsilon)
+            if (after < _dispatcher.DigFloor(x, z) - Epsilon || after < standHeight - DigDepthLevels * Step - Epsilon)
                 return false;
             Span<Layer> diggable = stackalloc Layer[1];
             return _grid.PeekRemove(x, z, Step, diggable) > 0;
@@ -1099,7 +1207,15 @@ namespace TinyDiggers.Units
             {
                 var nx = x + NeighbourX[n];
                 var nz = z + NeighbourZ[n];
-                if (_grid.InBounds(nx, nz) && _designations.GetKind(nx, nz) != DesignationKind.Dig && _grid.GetSurfaceHeight(nx, nz) > height + Epsilon)
+                // Standing a bench below the ground outside is how a cut is worked: the unit steps
+                // down into it and takes the next step off in front of it. What it must not do is
+                // get in where it cannot climb back out, so the ground outside may stand over it
+                // by a climb and no more (Ronan, 2026-09-22: "eventually it will need a way down
+                // ... at a point you can't reach and need to either move down or have a ramp").
+                // Held to the same height, a flat block stalls after its first ring: the rim is
+                // cut one step, nothing can be reached from outside, and nobody may stand in it.
+                if (_grid.InBounds(nx, nz) && _designations.GetKind(nx, nz) != DesignationKind.Dig
+                    && _grid.GetSurfaceHeight(nx, nz) > height + _dispatcher.Climb + Epsilon)
                     return false;
             }
 
@@ -1171,16 +1287,15 @@ namespace TinyDiggers.Units
             _tipHighRimsOnly = false;
             try
             {
-                for (var n = 0; n < 8; n++)
+                foreach (var stand in StandsAround(x, z))
                 {
-                    var standX = x + NeighbourX[n];
-                    var standZ = z + NeighbourZ[n];
-                    if (!_grid.InBounds(standX, standZ) || !_dispatcher.Regions.CanReach(me.x, me.y, standX, standZ) || !CanStandHere(standX, standZ))
+                    if (!_dispatcher.Regions.CanReach(me.x, me.y, stand.x, stand.y)
+                        || !CanStandHere(stand.x, stand.y))
                         continue;
-                    var standHeight = _grid.GetSurfaceHeight(standX, standZ);
+                    var standHeight = _grid.GetSurfaceHeight(stand.x, stand.y);
                     if (kind == DesignationKind.Dig
                         ? Digs && WithinDigReach(standHeight, x, z) && CanDigStep(standHeight, x, z)
-                        : CanTipOnto(standX, standZ, standHeight, x, z, FillCap(x, z)))
+                        : CanTipOnto(stand.x, stand.y, standHeight, x, z, FillCap(x, z)))
                         return true;
                 }
 
@@ -1469,6 +1584,7 @@ namespace TinyDiggers.Units
                 return;
             }
 
+            _lastCut = target;
             var report = Excavation.Dig(_grid, Inventory, target.x, target.y, 0, Step);
             _dispatcher.Ledger.Record(report.InPlaceBySource);
             if (report.WasFull)

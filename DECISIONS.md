@@ -3729,3 +3729,34 @@ loaded — the suite missed this because those tests use crew-sized units. Partn
 Not done, and worth knowing: a machine is still one cell to the crew logic, so it can walk down a
 one-cell trench and clip the walls. True multi-cell occupancy waits until something in the game
 needs a machine kept out of tight ground.
+
+## 2026-09-22 — Dirt moves: what it took, and what stopped it
+
+`TinyDiggers/Dig Capture` marks a block, gives it a Dump Zone, lets the crew work and counts the
+cubic metres. The first run moved nothing at all, and the reason was not the machines:
+
+**Benching stalls a flat block after one ring.** A cell may only be cut to within a climb of its
+Dig neighbours, so the rim comes down one step and then nothing can be reached from outside —
+while the rule against standing on a Dig cell kept everybody out of the cut. Standing a bench
+below the ground outside is *how* a cut is worked, so that rule now allows it, refusing only
+where the ground outside stands more than a climb above: get in where you cannot climb out and
+you are stuck (Ronan: "eventually it will need a way down ... at a point you can't reach").
+
+Three rulings from Ronan went in alongside it:
+
+* **Reach down.** `DigDepthLevels`, how far below its feet a unit cuts: two for a robot, four for
+  the machine, which is its arm. A machine on the rim takes a three-step cut the robots cannot.
+* **Dig into a face.** `FaceReachLevels`: the machine works a mound of any material from the foot
+  of it rather than climbing on top. The old rule allowed that for rock only.
+* **Reach out.** `WorkReachCells`: one cell for a robot, two for the machine — three was too far
+  for the arm it has. Stands are searched out to that ring, so the machine can stand back.
+* **Work a face, not a circle.** The planner took whichever cell came first and walked a unit
+  round and round a block; the cut beside the last one now wins, so a unit eats into one side.
+
+With those in, a 24 m³ block: **7 m³ moved** in one run, dug, loaded, hauled and tipped, the heap
+standing 1.5 m proud. After the face rule it was 3.75 m³ in the same time — the digger fills its
+scoop and waits, because one hauler cannot keep up with one digger. That is a balance question
+(more haulers, or a bigger bed), not a fault.
+
+The workers are unreachable throughout, which is right: the cut is three steps and their reach is
+two. They need a ramp, and the auto-ramp says "nowhere to stand" on open ground — still to chase.
