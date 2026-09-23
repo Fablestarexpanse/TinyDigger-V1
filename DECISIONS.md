@@ -4159,3 +4159,34 @@ And the jam is *not* the heap, which is the second guess in a row about it to be
 end up round (21, 20) to (22, 23) — **south of the dump zone, not on it** — so whatever holds them
 is on the way between the pit and the tip, not on the spoil. The next person to look at this should
 start by tracing those four cells rather than believing either of the last two explanations.
+
+### Found it: four units in a two-by-two, each blocked by the other's radius
+
+With the status line in the trace, the jam is plain:
+
+```
+[0 at (22.45, 22.55) cell (22, 22) :: Waiting for a unit at (21, 23)]
+[2 at (21.77, 22.77) cell (21, 22) :: Waiting for a unit at (22, 23)]
+[1 at (21.80, 21.20) cell (21, 21) :: Waiting for a unit at (22, 20)]
+[3 at (22.47, 21.47) cell (22, 21) :: Waiting for a unit at (21, 20)]
+```
+
+Four units packed into a two-by-two block, each wanting to step diagonally out of it — and **every
+one of the four cells they name is empty.** Nobody is standing on (21, 23), (22, 23), (22, 20) or
+(21, 20). So the message is wrong about its own cause: what stops them is the other half of the
+test, `JobDispatcher.CanMoveTo(..., Radius)`. A crew robot's radius is 0.35, so two of them need
+0.7 between their centres; units 0 and 2 are **0.68** apart. Each one's probe clips the other, each
+gives way, and none of them ever gets out.
+
+The wait does run out and they do re-plan — and re-form the same square. A livelock, and its engine
+is the keep-apart radius (Ronan, 2026-09-22: "footprint will be important"), not the traffic rule
+and not the heap. That is the third explanation for these twelve cells and the first with evidence
+that names itself.
+
+Two ways out, for whoever picks it up:
+
+1. **Say the right thing.** A unit blocked by a radius rather than by an occupied cell should say
+   so. Half the trouble here was a status line confidently naming an empty cell.
+2. **Let a unit move apart.** The radius check refuses any move that would put two units too close;
+   it should allow a move that *increases* the distance between them, which is exactly what all
+   four of these are trying to do. A cluster would then unwind itself in one step.
