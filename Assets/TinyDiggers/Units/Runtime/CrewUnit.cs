@@ -1401,6 +1401,54 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
+        /// A cell this unit could work (x, z) from if only it could get there — the same test as
+        /// <see cref="CanWorkFromSomewhereReachable"/> with the "can drive to it" part left out,
+        /// and the nearest one at that.
+        ///
+        /// This is what a ramp should be aimed at. Aimed at the work itself, the planner looked
+        /// for a step too steep to drive somewhere along the way; in a pit there is no such step,
+        /// because the undug middle stands level with the ground outside and a corridor runs
+        /// straight over the top of it. The way in is barred at the edge of what has already been
+        /// cut, which is where a unit would have to stand.
+        /// </summary>
+        public bool TryFindStand(int x, int z, out Vector2Int stand)
+        {
+            stand = new Vector2Int(-1, -1);
+            var kind = _designations.GetKind(x, z);
+            if (kind == DesignationKind.None)
+                return false;
+
+            var best = float.MaxValue;
+            var wasHighOnly = _tipHighRimsOnly;
+            _tipHighRimsOnly = false;
+            try
+            {
+                foreach (var candidate in StandsAround(x, z))
+                {
+                    if (!CanStandHere(candidate.x, candidate.y))
+                        continue;
+                    var standHeight = _grid.GetSurfaceHeight(candidate.x, candidate.y);
+                    var works = kind == DesignationKind.Dig
+                        ? Digs && WithinDigReach(standHeight, x, z) && CanDigStep(standHeight, x, z)
+                        : CanTipOnto(candidate.x, candidate.y, standHeight, x, z, FillCap(x, z));
+                    if (!works)
+                        continue;
+                    var distance = (new Vector2(candidate.x + 0.5f, candidate.y + 0.5f) - Position).sqrMagnitude;
+                    if (distance >= best)
+                        continue;
+                    best = distance;
+                    stand = candidate;
+                }
+
+                return best < float.MaxValue;
+            }
+            finally
+            {
+                _tipHighRimsOnly = wasHighOnly;
+            }
+        }
+
+        /// <summary>
         /// Whether this unit could work the designation on (x, z) from somewhere it can drive to.
         /// The dispatcher asks this to know when a ramp has done its job.
         /// </summary>

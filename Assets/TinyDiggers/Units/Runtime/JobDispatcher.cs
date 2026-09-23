@@ -563,6 +563,13 @@ namespace TinyDiggers.Units
         {
             var target = ToCell(targetCell);
             var start = unit.Cell;
+            // Aim at somewhere the unit could stand to work it, not at the work. In a pit the work
+            // is in the middle of a block that still stands level with the ground outside, so a
+            // corridor to it crosses nothing steep and there is nothing to cut; the way in is
+            // barred at the edge of what has already been cut, and that is where a unit would have
+            // to stand. Where there is no such place yet, the work itself is the best guess.
+            if (unit.TryFindStand(target.x, target.y, out var wants))
+                target = wants;
             var found = _pathfinder.TryFindCorridor(start.x, start.y, target.x, target.y, _corridor, RampSteepPenalty,
                 (x, z) => _designations.GetKind(x, z) == DesignationKind.None || Regions.CanReach(start.x, start.y, x, z));
             if (!found)

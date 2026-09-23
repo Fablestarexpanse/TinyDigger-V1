@@ -4079,3 +4079,36 @@ regions, not about where a unit may put its feet.
 So the next piece of work is to make the corridor honest: a cell the unit may not stand on is not
 passable, which forces the corridor round to the ring it has already cut, where there *is* a metre
 step to take down — and that is the ramp.
+
+## 2026-09-22 — A ramp is aimed at somewhere to stand, not at the work
+
+`PlaceRampStep` planned its corridor to the cell that could not be reached and looked along it for
+the first step too steep to drive. In a pit there is no such step: the undug middle stands level
+with the ground outside, so the corridor runs straight over the top of the block and the planner
+answers "nowhere to stand beside". The way in is barred at the edge of what has *already* been cut
+— which is where a unit would have to put its feet.
+
+So a ramp now aims at a **stand**: `CrewUnit.TryFindStand` is `CanWorkFromSomewhereReachable`
+with the "can drive to it" part taken out, returning the nearest place the unit could work the cell
+from if only it could get there. Where there is no such place yet, the work itself is still the
+guess.
+
+The two-step pit, four robots, 12.25 m³:
+
+| | before the bench fix | after it | with the ramp aimed at a stand |
+| --- | --- | --- | --- |
+| m³ moved | 2.88 | 4 | **9.75** |
+| cells left of 49 | 49 | 33 | **12** |
+| cuts landed | 23 | 32 | **79** |
+| middle of the pit | 6 m | 6 m | **5 m** (what it was asked for) |
+
+`AutoRampTests.TheRampCorridorClimbsMonotonicallyOnceCut` asserted the corridor ended exactly on
+the target; it now ends on the target or beside it, which is what the test was really about.
+
+### What is left: the last twelve cells
+
+All four robots finish in pairs by the dump zone saying "Waiting for a unit", and are still saying
+it six hundred seconds later. A stuck timer — a traffic wait that re-planning could not reset —
+was written **twice** and changed the result not one byte either time, so whatever holds them is
+not the wait in `CrewUnit.Move`. That is where to pick it up: find out what a unit in that state is
+actually doing each tick before writing another fix for it.

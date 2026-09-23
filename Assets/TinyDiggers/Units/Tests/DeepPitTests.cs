@@ -175,21 +175,20 @@ namespace TinyDiggers.Units.Tests
         /// cleverness. If this one does not finish, nothing else in here means anything.
         /// </summary>
         [Test]
-        [Ignore("Known fault, 2026-09-22. With BenchDepth the outer ring now reaches its target — "
-                + "sixteen of forty-nine cells cleared, no refused cuts — and then it stops: the "
-                + "ring is a metre below the ground outside, which is more than a climb, so nobody "
-                + "can drive in to work the next ring, and no auto ramp is ever cut. The crew does "
-                + "not ask for one because it is never short of a job: it shuttles spoil instead, "
-                + "and three of the four end up 'Waiting for a unit' on each other near the tip. "
-                + "Two things to chase: units that wait on each other for ever, and a ramp that is "
-                + "only asked for when a unit has nothing else to do. "
+        [Ignore("Known fault, 2026-09-22. The pit is now four fifths dug — 9.75 of 12.25 m³, 79 "
+                + "cuts, no refusals, rim and middle both down to the 5 m they were asked for — "
+                + "and then the last twelve cells never go, because all four robots end up in "
+                + "pairs by the dump zone saying 'Waiting for a unit' and stay there for the six "
+                + "hundred seconds the trial gives them. A stuck timer that could not be reset by "
+                + "re-planning was written twice and changed the result not one byte either time, "
+                + "so whatever holds them is not the traffic wait in CrewUnit.Move. "
                 + "See DECISIONS.md, 2026-09-22.")]
         public void AShallowPitIsDug()
         {
             Crew(4);
             MarkThePit(2);
 
-            var (done, seconds, moved) = Work(cap: 900f, patience: 120f);
+            var (done, seconds, moved) = Work(cap: 6000f, patience: 600f);
             Assert.That(done, Is.True,
                 $"a two-step pit should finish; {moved:0.##} m³ moved in {seconds:0} s. " + Roll());
         }
@@ -236,7 +235,7 @@ namespace TinyDiggers.Units.Tests
             Crew(4);
             MarkThePit(2);
 
-            var (done, seconds, moved) = Work(cap: 2400f, patience: 400f);
+            var (done, seconds, moved) = Work(cap: 6000f, patience: 600f);
             var rim = _grid.GetSurfaceHeight(Middle.x - Half, Middle.y);
             var middle = _grid.GetSurfaceHeight(Middle.x, Middle.y);
             Debug.Log($"two-step pit: done={done} after {seconds:0} s, {moved:0.##} m³ "

@@ -197,7 +197,13 @@ namespace TinyDiggers.Units.Tests
             });
 
             Assert.That(corridor, Is.Not.Null, "a ramp was planned");
-            Assert.That(corridor[corridor.Count - 1], Is.EqualTo(new Vector2Int(16, 10)));
+            // The corridor ends where the unit would stand to work the cell, which is the cell
+            // itself only when there is nowhere beside it to stand from (2026-09-22: a ramp aimed
+            // at the work has nothing to cut when the work stands level with the ground outside,
+            // as it does in the middle of a pit).
+            var end = corridor[corridor.Count - 1];
+            Assert.That(Mathf.Max(Mathf.Abs(end.x - 16), Mathf.Abs(end.y - 10)), Is.LessThanOrEqualTo(1),
+                $"the corridor should end at (16, 10) or beside it, not at ({end.x}, {end.y})");
             // Up to the cell before the target: never down, never more than one step up.
             for (var i = 1; i < corridor.Count - 1; i++)
             {
