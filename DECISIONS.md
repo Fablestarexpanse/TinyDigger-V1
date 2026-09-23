@@ -4343,3 +4343,24 @@ Two things to do with that, neither urgent:
 a name clash (`Tip` the field against `Tip()` the new method) meant Unity kept running the previous
 assembly, and the new trace simply never appeared in the log. A green line is not proof the code
 under it ran. After editing a test, check for `error CS` in the log before believing the result.
+
+### Saying the right thing, and what that uncovered
+
+Two status lines that named the wrong cause, both fixed:
+
+- **"No room it can reach in any Dump Zone"** covered two different troubles. `AnyRoomInZones`
+  now tells them apart: *"no room left in any Dump Zone"* only when the zones really are at their
+  caps, and *"cannot reach anywhere to tip from where it stands"* when there is room and the unit
+  simply cannot get to it. They want opposite things from the player — another tip, or a ramp.
+  (`CrewTests.AFullDumpZoneIsReportedAndTheUnitStops` caught the first attempt, which had thrown
+  the true case away with the false one.)
+- **"Waiting for a unit at (21, 23)"** was printed about cells nobody stood on. A unit held up by
+  another one's body rather than by an occupied cell now says *"Squeezing past a unit"*.
+
+The trial also stops calling a ramp a stall — but only for twice its patience, because a ramp still
+"being cut" after that long is not being cut. That is exactly what it found:
+
+> **`[0: Moving to ramp (14, 13) to 5.5 m, toward (11, 14)]` — for 1337 game seconds.**
+
+The ramp is planned, the step is designated, and the unit that should cut it never arrives. That is
+the next fault, and it is a clean one: a single unit with a single job that it does not finish.

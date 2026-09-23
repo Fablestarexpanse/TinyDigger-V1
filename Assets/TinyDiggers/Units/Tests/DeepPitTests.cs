@@ -143,6 +143,15 @@ namespace TinyDiggers.Units.Tests
                     best = now;
                     idle = 0f;
                 }
+                else if (_dispatcher.HasRamp && idle < patience * 2f)
+                {
+                    // Cutting a way in is progress, and it is slow progress by nature: one unit
+                    // takes the step while the rest of the crew has nothing it can reach. Counting
+                    // that as a stall ends the trial in the middle of the very thing it waits for.
+                    // But only twice over: a ramp that is still "being cut" after that long is not
+                    // being cut at all, and the trial should say so rather than run to its cap.
+                    idle += TickSeconds;
+                }
                 else
                 {
                     idle += TickSeconds;

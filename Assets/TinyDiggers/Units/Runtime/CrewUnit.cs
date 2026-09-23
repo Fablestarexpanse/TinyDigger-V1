@@ -964,7 +964,16 @@ namespace TinyDiggers.Units
             Job = CrewJobKind.None;
             _dispatcher.Release(Id);
             SetState(CrewUnitState.NeedsSomewhereToTip, "Needs a Dump Zone or Fill designation"
-                + (DumpZoneFull ? " (no room it can reach in any Dump Zone)" : ""));
+                // Two different troubles wore the same words. A zone with every one of its
+                // forty-nine cells open and drivable reported "no room", because the unit saying
+                // so was down in the cut under a face it could not climb — which is a reach
+                // problem, and the player's answer to it is a ramp, not another dump zone. Only
+                // say "no room" when the zones really are at their caps.
+                + (DumpZoneFull
+                    ? AnyRoomInZones()
+                        ? " (cannot reach anywhere to tip from where it stands)"
+                        : " (no room left in any Dump Zone)"
+                    : ""));
         }
 
         void WaitForHauler(string who)
@@ -1074,6 +1083,28 @@ namespace TinyDiggers.Units
             }
 
             DumpZoneFull = true;
+            return false;
+        }
+
+        /// <summary>
+        /// Whether any dump zone cell is still under its cap — room somewhere, whether or not this
+        /// unit can get to it. It is the difference between "the tips are full" and "I am stuck in
+        /// a hole", which want opposite things from the player.
+        /// </summary>
+        bool AnyRoomInZones()
+        {
+            var cells = _designations.DumpZoneCells;
+            var width = _grid.Width;
+            for (var i = 0; i < cells.Count; i++)
+            {
+                var x = cells[i] % width;
+                var z = cells[i] / width;
+                if (_designations.GetKind(x, z) != DesignationKind.None)
+                    continue;
+                if (_grid.GetSurfaceHeight(x, z) + Step <= _designations.DumpZoneCap(x, z) + Epsilon)
+                    return true;
+            }
+
             return false;
         }
 
@@ -1566,17 +1597,23 @@ namespace TinyDiggers.Units
 
             var jammed = _stuckTimer >= TrafficWaitSeconds;
             var next = NextCell();
-            var blocked = next.x >= 0
-                && (_dispatcher.IsOccupiedByOther(next.x, next.y, Id)
-                    || (!jammed && !_dispatcher.CanMoveTo(Position, Probe(deltaTime), Id, Radius)));
+            var occupied = next.x >= 0 && _dispatcher.IsOccupiedByOther(next.x, next.y, Id);
+            var tooClose = next.x >= 0 && !occupied && !jammed
+                && !_dispatcher.CanMoveTo(Position, Probe(deltaTime), Id, Radius);
+            var blocked = occupied || tooClose;
             if (blocked)
             {
                 _waitTimer += deltaTime;
                 _stuckTimer += deltaTime;
                 if (_waitTimer < TrafficWaitSeconds)
                 {
+                    // Say which of the two it is. "Waiting for a unit at (21, 23)" was printed
+                    // over and over about a cell nobody was standing on, because the thing in the
+                    // way was another unit's body a little to the side, not a unit on that cell.
                     if (State != CrewUnitState.Waiting)
-                        SetState(CrewUnitState.Waiting, $"Waiting for a unit at ({next.x}, {next.y})");
+                        SetState(CrewUnitState.Waiting, occupied
+                            ? $"Waiting for a unit at ({next.x}, {next.y})"
+                            : "Squeezing past a unit");
                     return;
                 }
 
