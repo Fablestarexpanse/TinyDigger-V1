@@ -77,6 +77,7 @@ namespace TinyDiggers.Interaction
 
         RectTransform _settingsPanel;
         InputField _seedField;
+        Toggle _markers;
         Text _settingsSummary;
 
         /// <summary>The canvas the toolbar and its panels are drawn on.</summary>
@@ -177,7 +178,7 @@ namespace TinyDiggers.Interaction
         /// </summary>
         void BuildSettingsPanel(Transform parent)
         {
-            _settingsPanel = UiKit.NewPanel(parent, "Settings", new Vector2(1f, 1f), new Vector2(-12f, -12f), new Vector2(320f, 132f));
+            _settingsPanel = UiKit.NewPanel(parent, "Settings", new Vector2(1f, 1f), new Vector2(-12f, -12f), new Vector2(320f, 162f));
             var title = UiKit.NewText(_settingsPanel, "Island  (F2)", 16, TextAnchor.UpperLeft);
             title.rectTransform.offsetMax = new Vector2(-6f, -6f);
 
@@ -189,6 +190,11 @@ namespace TinyDiggers.Interaction
             regenerate.GetComponent<Image>().color = UiKit.Accent;
             regenerate.GetComponentInChildren<Text>().color = Color.black;
             UiKit.Place((RectTransform)regenerate.transform, 198f, 34f, 112f, 28f);
+
+            // What the map draws over the ground, so a finished cut can be looked at.
+            _markers = UiKit.NewToggle(_settingsPanel, "Show markers  (M)", true, on => _tools.ShowMarkers = on);
+            UiKit.Place((RectTransform)_markers.transform, 10f, 70f, 300f, 24f);
+            UiKit.AddTooltip(_markers, () => "The dig, fill, dump zone and quarry sheets. They lie exactly where the work is, so hide them to see what the crew built");
 
             _settingsSummary = UiKit.NewText(_settingsPanel, "", 14, TextAnchor.LowerLeft);
             _settingsSummary.rectTransform.offsetMin = new Vector2(10f, 8f);
@@ -227,6 +233,10 @@ namespace TinyDiggers.Interaction
 
             if (_tools == null || _status == null)
                 return;
+
+            // The M key changes it too, so the box follows the switch rather than owning it.
+            if (_markers != null)
+                _markers.SetIsOnWithoutNotify(_tools.ShowMarkers);
 
             foreach (var (mode, image, icon) in _toolImages)
             {

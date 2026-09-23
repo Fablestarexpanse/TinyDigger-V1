@@ -144,6 +144,22 @@ namespace TinyDiggers.Interaction
         public DesignationMap Map => _designations.Map;
 
         /// <summary>
+        /// Whether the coloured sheets over designated and zoned ground are drawn (Ronan,
+        /// 2026-09-23: "a way to hide our road designation and dump markers"). They sit exactly
+        /// where the work is, so any look at what the crew have actually built is a look at bright
+        /// green instead.
+        /// </summary>
+        public bool ShowMarkers
+        {
+            get => _designations == null || _designations.ShowOverlay;
+            set
+            {
+                if (_designations != null)
+                    _designations.ShowOverlay = value;
+            }
+        }
+
+        /// <summary>
         /// A screen point (Input System pixels) the tools aim at instead of the mouse, for scripted
         /// captures; null for the mouse. Aims only: it clicks nothing.
         /// </summary>
@@ -340,6 +356,12 @@ namespace TinyDiggers.Interaction
                 Resize(1);
 
             var ctrl = keyboard.ctrlKey.isPressed;
+            if (keyboard.mKey.wasPressedThisFrame && !ctrl)
+            {
+                ShowMarkers = !ShowMarkers;
+                Say(ShowMarkers ? "Markers shown" : "Markers hidden");
+            }
+
             if (ctrl && keyboard.zKey.wasPressedThisFrame)
             {
                 if (keyboard.shiftKey.isPressed)
