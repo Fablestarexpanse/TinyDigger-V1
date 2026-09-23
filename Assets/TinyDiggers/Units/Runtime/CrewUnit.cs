@@ -430,6 +430,9 @@ namespace TinyDiggers.Units
         /// <summary>How many cuts it has actually taken out of the ground.</summary>
         public int LandedCuts;
 
+        /// <summary>Why the last cut it planned would not go when it got there.</summary>
+        public string LastRefusal = "";
+
         /// <summary>
         /// Loose m³ of room the last cut that would not fit needed, or nought when the last cut
         /// landed. A unit is full for as long as it has less room than this, whatever a step
@@ -1691,6 +1694,7 @@ namespace TinyDiggers.Units
             if (!WithinDigReach(standHeight, target.x, target.y) || !canCut)
             {
                 RefusedCuts++;
+                LastRefusal = WhyNotCut(standHeight, target.x, target.y);
                 if (_designations.GetKind(target.x, target.y) == DesignationKind.Dig && !HasDiggableTop(target.x, target.y))
                 {
                     // Bedrock: the designation can never be met. Drop it rather than loop on it.
@@ -1726,6 +1730,30 @@ namespace TinyDiggers.Units
                 : _designations.GetKind(target.x, target.y) != DesignationKind.Dig;
             if (done)
                 _rethink = true;
+        }
+
+        /// <summary>
+        /// Why the cut the unit had planned would not go, in the words of the rule that stopped
+        /// it. A refusal on arrival is ordinary once in a while and a fault when it is the norm,
+        /// and the difference is impossible to see without the reason.
+        /// </summary>
+        string WhyNotCut(float standHeight, int x, int z)
+        {
+            if (_designations.GetKind(x, z) != DesignationKind.Dig)
+                return $"({x}, {z}) is no longer marked to dig";
+            if (_grid.IsWater(x, z))
+                return $"({x}, {z}) is under water";
+            if (!WithinDigReach(standHeight, x, z))
+                return $"({x}, {z}) at {_grid.GetSurfaceHeight(x, z):0.##} m is out of reach from "
+                       + $"{standHeight:0.##} m";
+            var after = _grid.GetSurfaceHeight(x, z) - Step;
+            var floor = _dispatcher.DigFloor(x, z);
+            if (after < floor - Epsilon)
+                return $"({x}, {z}) is at its bench floor: {after:0.##} m would be under {floor:0.##} m";
+            if (after < standHeight - DigDepthLevels * Step - Epsilon)
+                return $"({x}, {z}) would go {standHeight - after:0.##} m below its feet, past "
+                       + $"{DigDepthLevels * Step:0.##} m of reach";
+            return $"({x}, {z}) has nothing diggable left on top";
         }
 
         bool HasDiggableTop(int x, int z)

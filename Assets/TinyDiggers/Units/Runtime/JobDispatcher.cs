@@ -40,10 +40,28 @@ namespace TinyDiggers.Units
 
         /// <summary>
         /// Metres of rock face a unit may take off from its foot. Benching holds a soil neighbour
-        /// within one climbable step; rock only has to stay within this, because a face of it can
-        /// be worked from below. See <see cref="CrewUnit.WithinDigReach"/>.
+        /// within <see cref="BenchDepth"/>; rock only has to stay within this, because a face of it
+        /// can be worked from below. See <see cref="CrewUnit.WithinDigReach"/>.
         /// </summary>
         public float CliffWorkDepth = 6f;
+
+        /// <summary>
+        /// Metres a soil cell may be taken below its highest dig-designated neighbour: the height
+        /// of one bench.
+        ///
+        /// This was one climbable step, and a step is not a bench. On a half-metre grid at
+        /// forty-five degrees a climb is a single step, so every cell in a marked block was held
+        /// within half a metre of every other one, and a flat block came down in lock-step: its
+        /// outer ring was cut once, the ring could then go no further because the ground inside it
+        /// was higher, and the middle could not be reached from anywhere a unit was allowed to
+        /// stand. Four robots managed twenty-four cuts on a seven by seven pit and stopped, with
+        /// every one of them saying "is at its bench floor" (2026-09-22).
+        ///
+        /// A metre — two steps — is a bench a unit can work a face off, and it leaves the cut
+        /// standing over the ground beside it by more than a climb, which is exactly the state the
+        /// ramp planner is built to fix: it cuts a way down instead of nobody being able to move.
+        /// </summary>
+        public float BenchDepth = 1f;
 
         /// <summary>Extra corridor cost per metre a step is over the climb limit.</summary>
         public float RampSteepPenalty = 20f;
@@ -429,9 +447,9 @@ namespace TinyDiggers.Units
 
         /// <summary>
         /// The lowest a dig cell may be taken right now: its target, or with <see cref="Benching"/>
-        /// on, one climbable step below its highest dig-designated neighbour if that is higher.
-        /// Keeps a designated hill a drivable staircase while it comes down, so its upper cells
-        /// always have somewhere within reach to be worked from.
+        /// on, one <see cref="BenchDepth"/> below its highest dig-designated neighbour if that is
+        /// higher. Keeps a designated hill coming down in benches rather than as a cliff, so its
+        /// upper cells always have somewhere within reach to be worked from.
         /// </summary>
         public float DigFloor(int x, int z)
         {
@@ -452,7 +470,9 @@ namespace TinyDiggers.Units
                 // than within a climbable step. Holding it to a step is what deadlocks a cliffed
                 // hill — the face cannot come down until its neighbour does, and the neighbour
                 // cannot be reached until the face comes down.
-                var depth = MaterialTable.IsStone(_grid.GetTopMaterial(nx, nz)) ? CliffWorkDepth : climb;
+                var depth = MaterialTable.IsStone(_grid.GetTopMaterial(nx, nz))
+                    ? CliffWorkDepth
+                    : Math.Max(climb, BenchDepth);
                 floor = Math.Max(floor, _grid.GetSurfaceHeight(nx, nz) - depth);
             }
 

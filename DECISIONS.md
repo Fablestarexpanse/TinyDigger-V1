@@ -4000,3 +4000,45 @@ a rule about the cell it is standing on and its neighbours, not about whether th
 standing on is at its final floor. That is the next piece of work, and it is what the auto ramp has
 been waiting for: no ramp is ever cut because no unit is ever short of a *job*, only short of a way
 to the middle.
+
+## 2026-09-22 — A bench is not a step
+
+The deep-pit fault above had a single line behind it, and the fast tests found it in a minute once
+each refusal said why: **"(9, 13) is at its bench floor: 5 m would be under 5.5 m"**.
+
+`JobDispatcher.DigFloor` held a soil cell within **one climbable step** of its highest
+dig-designated neighbour. On a half-metre grid at forty-five degrees a climb *is* one step —
+`GridPathfinder` derives `MaxStepHeight` from the slope, so setting 45° turns a metre of step into
+half a metre — so every cell in a marked block was pinned within half a metre of every other one.
+A flat block therefore came down in lock-step: the outer ring was cut once, could go no further
+because the ground inside it was higher, and the middle could not be worked from anywhere a unit
+was allowed to stand. Four robots, twenty-four cuts, stop.
+
+Benching is meant to keep a hill coming down in **benches** a unit can work a face off, not to hold
+a block flat. So the depth is now its own number, `JobDispatcher.BenchDepth`, a metre — two steps —
+and rock keeps its own deeper `CliffWorkDepth`.
+
+Measured, on the two-step pit in `DeepPitTests`:
+
+| | before | after |
+| --- | --- | --- |
+| cells cleared of forty-nine | 0 | **16** |
+| cuts landed | 23 | **32** |
+| cuts refused on arrival | 23 | **0** |
+| rim height, wanted 5 m | 5.5 m | **5 m** |
+
+Suite green at 512 throughout.
+
+### What stops it now, and it is two things
+
+The ring is a metre below the ground outside — more than a climb — so nothing can drive in to work
+the next ring. That is the state the auto ramp exists for, and **no ramp is ever cut**. Two reasons,
+both worth their own piece of work:
+
+1. **A unit only asks for a ramp when it has nothing else to do.** `ChooseDiggerJob` reaches
+   `RequestRamp` after `TryPlan(Dig)` fails, and a crew with spoil in its barrows always has
+   something else to do: it shuttles to the tip and back. Work it cannot reach ought to be able to
+   ask for a way in while the crew is still busy.
+2. **Units wait on each other for ever.** Three of the four finish the run saying "Waiting for a
+   unit at (14, 21)" near the dump zone, and they are still saying it four hundred seconds later.
+   There is no way out of `Waiting` when the unit ahead is itself waiting.

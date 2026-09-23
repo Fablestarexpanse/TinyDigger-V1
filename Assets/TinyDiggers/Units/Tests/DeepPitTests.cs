@@ -161,7 +161,8 @@ namespace TinyDiggers.Units.Tests
             var refused = 0;
             foreach (var unit in _units)
             {
-                said += $"[{unit.Id}: {unit.Status}] ";
+                said += $"[{unit.Id}: {unit.Status}"
+                        + (unit.LastRefusal.Length > 0 ? $"; last refusal: {unit.LastRefusal}" : "") + "] ";
                 landed += unit.LandedCuts;
                 refused += unit.RefusedCuts;
             }
@@ -174,12 +175,15 @@ namespace TinyDiggers.Units.Tests
         /// cleverness. If this one does not finish, nothing else in here means anything.
         /// </summary>
         [Test]
-        [Ignore("Known fault, 2026-09-22: a seven by seven pit two steps deep stops with its outer "
-                + "ring cut once and the inner twenty-five cells reported unreachable, and the "
-                + "ramp planner answers 'nowhere to stand beside'. Benching will not let a unit "
-                + "stand on a dig cell that is not yet at its floor, so nothing can get in to the "
-                + "middle of a block; on a hill the rule is right, in a pit it locks the door. "
-                + "See DECISIONS.md, 2026-09-22, 'A pit is not a hill'.")]
+        [Ignore("Known fault, 2026-09-22. With BenchDepth the outer ring now reaches its target — "
+                + "sixteen of forty-nine cells cleared, no refused cuts — and then it stops: the "
+                + "ring is a metre below the ground outside, which is more than a climb, so nobody "
+                + "can drive in to work the next ring, and no auto ramp is ever cut. The crew does "
+                + "not ask for one because it is never short of a job: it shuttles spoil instead, "
+                + "and three of the four end up 'Waiting for a unit' on each other near the tip. "
+                + "Two things to chase: units that wait on each other for ever, and a ramp that is "
+                + "only asked for when a unit has nothing else to do. "
+                + "See DECISIONS.md, 2026-09-22.")]
         public void AShallowPitIsDug()
         {
             Crew(4);
@@ -205,7 +209,7 @@ namespace TinyDiggers.Units.Tests
             var (done, seconds, moved) = Work(cap: 3000f, patience: 300f);
             var left = Outstanding();
             var depth = Ground - _grid.GetSurfaceHeight(Middle.x, Middle.y);
-            TestContext.WriteLine($"deep pit: done={done} after {seconds:0} s, {moved:0.##} m³ moved, "
+            Debug.Log($"deep pit: done={done} after {seconds:0} s, {moved:0.##} m³ moved, "
                                   + $"{left:0.##} m³ left, middle down {depth:0.##} m of "
                                   + $"{Ground - floor:0.##}. " + Roll());
 
@@ -218,6 +222,28 @@ namespace TinyDiggers.Units.Tests
             foreach (var unit in _units)
                 Assert.That(unit.State, Is.Not.EqualTo(CrewUnitState.Digging),
                     $"unit {unit.Id} says it is digging, but the pit has not moved for 300 s. " + Roll());
+        }
+
+        /// <summary>
+        /// Where a two-step pit actually stops, written out rather than asserted: the cells still
+        /// outstanding, how far down the middle got, and the reason the last cut was refused. This
+        /// is the diagnosis for the ignored test above, and it runs every time so the picture stays
+        /// current while the fault is being worked on.
+        /// </summary>
+        [Test]
+        public void AShallowPitReportsWhereItStops()
+        {
+            Crew(4);
+            MarkThePit(2);
+
+            var (done, seconds, moved) = Work(cap: 2400f, patience: 400f);
+            var rim = _grid.GetSurfaceHeight(Middle.x - Half, Middle.y);
+            var middle = _grid.GetSurfaceHeight(Middle.x, Middle.y);
+            Debug.Log($"two-step pit: done={done} after {seconds:0} s, {moved:0.##} m³ "
+                                  + $"moved, {Outstanding():0.##} m³ left, {_map.Count} cells; rim "
+                                  + $"at {rim:0.##} m, middle at {middle:0.##} m, both wanted "
+                                  + $"{Ground - 2f * _grid.HeightStep:0.##} m. " + Roll());
+            Assert.That(moved, Is.GreaterThan(0f), "it should have dug something at all. " + Roll());
         }
 
         /// <summary>
