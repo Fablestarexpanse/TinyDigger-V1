@@ -567,6 +567,11 @@ namespace TinyDiggers.Units
                 (x, z) => _designations.GetKind(x, z) == DesignationKind.None || Regions.CanReach(start.x, start.y, x, z));
             if (!found)
                 return Blocked($"no ramp route to ({target.x}, {target.y})");
+            // A corridor of one cell is the unit standing on the target: there is no step along it
+            // to cut. This only showed up once a unit could ask for a ramp while it still had a
+            // job, which is often enough to be standing on the thing it is asking about.
+            if (_corridor.Count < 2)
+                return Blocked($"already on ({target.x}, {target.y})");
 
             var climb = Climb;
             var step = Step;

@@ -4042,3 +4042,40 @@ both worth their own piece of work:
 2. **Units wait on each other for ever.** Three of the four finish the run saying "Waiting for a
    unit at (14, 21)" near the dump zone, and they are still saying it four hundred seconds later.
    There is no way out of `Waiting` when the unit ahead is itself waiting.
+
+### Correction: they are not waiting on each other
+
+"Units wait on each other for ever" was a misreading of a snapshot. A stuck timer that could not be
+reset by re-planning was written, the suite stayed green at 512, and the pit trial came out
+**byte for byte identical** — same four cubic metres, same thirty-two cuts, same thirty-three cells
+left. So it fixed nothing, and it went back out again rather than sitting in the crew logic as an
+unproven change. The roll that suggested it had one unit on its way to the tip, which is a crew
+going round in circles, not a crew jammed.
+
+What is actually happening is one thing, not two: the ring is a metre below the ground outside, so
+nothing can drive in to work the next ring, and **no ramp is ever asked for**. `ChooseDiggerJob`
+only reaches `RequestRamp` after `TryPlan(Dig)` fails, and a crew carrying spoil always has
+somewhere else to be. That is the single next piece of work.
+
+### Asking for a ramp while still busy, and what that showed
+
+`ChooseJob` now asks for a ramp whenever there is work it cannot reach, not only when it has
+nothing else to plan. That is right on its own terms — a crew shuttling spoil should still be
+cutting itself a way in — and it immediately turned up a latent crash: `PlaceRampStep` indexed
+`_corridor[Count - 2]` without checking there were two, which only happened once a unit could ask
+about a cell it was standing on. Guarded, suite green at 512.
+
+It did not, though, get a ramp cut, and the reason is worth writing down because it is the real
+shape of the problem:
+
+**The ramp planner reasons about height steps. What blocks the crew here is not a step.** The
+corridor it plans from a unit to an unreachable cell runs straight across the top of the block —
+the undug middle is at the same height as the ground outside, so there is no step anywhere along it
+— and the planner, finding nothing too steep to fix, answers "nowhere to stand beside". What
+actually stops the unit is the rule that it may not *stand* on ground that is still to be dug, and
+the corridor search knows nothing about that: its passability test is about designations and
+regions, not about where a unit may put its feet.
+
+So the next piece of work is to make the corridor honest: a cell the unit may not stand on is not
+passable, which forces the corridor round to the ring it has already cut, where there *is* a metre
+step to take down — and that is the ramp.

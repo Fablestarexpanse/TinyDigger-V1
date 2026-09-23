@@ -10,18 +10,20 @@ is done, what is running, what comes next.
 
 ## NEXT
 
-Two faults, both named and both reproducible in a one-second test
-(`DeepPitTests.AShallowPitReportsWhereItStops`, which prints its diagnosis every run):
+One fault, reproducible in a one-second test (`DeepPitTests.AShallowPitReportsWhereItStops`, which
+prints its diagnosis every run):
 
-1. **A unit only asks for a ramp when it has nothing else to do.** `CrewUnit.ChooseDiggerJob`
-   reaches `_dispatcher.RequestRamp` only after `TryPlan(Dig)` fails, and a crew with spoil in its
-   barrows always has something else to do. Work that cannot be reached should be able to ask for a
-   way in while the crew is still busy hauling.
-2. **Units wait on each other for ever.** Three of four end a run saying "Waiting for a unit at
-   (14, 21)" near the tip, and they are still saying it four hundred seconds later. `CrewUnitState.
-   Waiting` has no way out when the unit ahead is itself waiting.
+**A unit only asks for a ramp when it has nothing else to do.** `CrewUnit.ChooseDiggerJob` reaches
+`_dispatcher.RequestRamp` only after `TryPlan(Dig)` fails, and a crew with spoil in its barrows
+always has somewhere else to be. So the pit's outer ring is cut to its target, the ring ends up a
+metre below the ground outside — more than a climb, so nothing can drive in to work the next ring —
+and the crew shuttles spoil for ever without ever asking for a way in. Work that cannot be reached
+ought to be able to ask for a ramp while the crew is still busy.
 
-Fix those and the two-step pit should finish; then carry on down the trial list below.
+(A second fault, "units wait on each other for ever", was a misreading of a snapshot: the fix was
+written, changed the result not at all, and was taken back out. See DECISIONS.md.)
+
+Fix that and the two-step pit should finish; then carry on down the trial list below.
 
 ## Plan
 

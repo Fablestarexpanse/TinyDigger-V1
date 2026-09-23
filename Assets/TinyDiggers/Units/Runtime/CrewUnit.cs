@@ -816,6 +816,17 @@ namespace TinyDiggers.Units
             }
 
             UpdateUnreachable();
+
+            // Work it cannot reach asks for a way in whatever else it is doing. A ramp used to be
+            // asked for only by a unit with nothing left to plan, and a crew with spoil in its
+            // barrows always has somewhere else to be: it shuttles to the tip and back for ever
+            // while the cut it cannot get into sits there. A pit's outer ring came down and the
+            // middle was never touched, with not one ramp cut (2026-09-22). Cutting the ramp is
+            // still ordinary digging — some unit with room takes the step when it comes to plan —
+            // so this only puts the step on the map.
+            if (Digs && _unreachableDigs.Count > 0)
+                _dispatcher.RequestRamp(this, _unreachableDigs);
+
             if (Role == UnitRole.Hauler)
                 ChooseHaulerJob(start);
             else
