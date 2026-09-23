@@ -10,25 +10,28 @@ is done, what is running, what comes next.
 
 ## NEXT
 
-**Road cut (Ronan's current ask) — working, two things left.**
+**Road tool (Ronan's current ask).** The taper was already built — `RoadPlanner.Settle` batters a
+cutting back to the ground's angle of repose and builds an embankment up to the spoil's, and the
+ghost draws it. What was missing was the numbers, and those are in now and verified in play mode:
+node labels (`at grade` / `+4 m`), a depth line under each segment's grade (`fill 4 m`), and a
+tally (`cut 0 m³  fill 315.9 m³  highest fill 4 m  — too steep to build`).
 
-`TinyDiggers/Road Cut Capture` lays forty cells of road at width five, held **level** through a 3 m
-soil rise, with a 441-cell tip capped three metres over its own ground and a 169-cell quarry. The
-spoil now reads as tipped dirt: a rounded mound of bare material, nothing over its cap, and the
-crew works to about a quarter of the designations left.
+**One question answered from the code rather than asked:** a node already holds either behaviour.
+`LockToGround` true means it takes the ground's height as it moves ("Node on ground" in the panel);
+`Raise` unlocks it and it then **holds its absolute height**. So "hold a height" exists.
 
-1. **A digger and its dumper lose each other.** `[4 Full: waiting for a hauler]` beside
-   `[5 Idle: no digger to serve]`. That is trial F arriving on its own — look at
-   `JobDispatcher.AssignDigger` / `HaulerFor` / `DiggerFor` and what clears a pairing.
-2. **The heap terraces on the half-metre step grid** rather than rounding. Loose spoil at its angle
-   of repose wants a slope of about 0.35 m a cell and the grid cannot express less than 0.5, so
-   `AngleOfReposeSimulator` can never settle the last step. Presentation, most likely, not physics.
+**Open, and genuinely Ronan's call:**
 
-The slump pacing (`TerrainView.SlumpTilesPerSecond`, ninety, unscaled) needs judging live — a still
-cannot show it.
+1. **A grade lock** — pick 4% and let following nodes work out their own heights, rather than
+   setting each node by hand. This is the big one for laying long roads.
+2. **A third height mode: hold N metres *above the ground*** — a causeway that follows the terrain
+   at a constant clearance. Neither of the two existing modes does this.
+3. **Typing a number.** Height is nudged by scrolling a node; there is no way to say "ten metres".
 
-**Pit (earlier thread, still open).** A unit is told to start again every tick; see below and
-DECISIONS.md. Not the road's problem — the road crew's paths advance normally.
+**Worth knowing before designing around raised roads:** a 4 m bank cost **316 m³** of fill, and the
+embankment sprawls about twelve cells either side of the road. That is correct at dirt's angle of
+repose and it is a lot. If raised roads are meant to be common, they may want a steeper built
+batter or a retaining wall rather than a natural slope.
 
 ### Done since the last note
 
