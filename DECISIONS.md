@@ -4611,3 +4611,21 @@ Worth thinking about rather than patching:
 Either way the lesson is the same one this session keeps finding: **the status line is not the
 diagnosis.** "Waiting for a hauler" beside "no digger to serve" reads like a pairing bug and is
 nothing of the kind.
+
+### And a correction to the correction: the ends are connected
+
+Measured the corridor rather than inferring from it:
+
+```
+centre line z=1511: 1557:5.5 … 1589:5.5 1591:7D 1593:9D 1595:9.5D 1597:10D 1599:9.5D 1601:11
+ | ends connected=True
+```
+
+The western two thirds is cut to its 5.5 m and the eastern third is still original ground rising to
+11 m — and **the two ends of the line are connected**. So "the crew has cut the site in two" was
+too strong: what failed was reachability between one digger and one dumper at two particular
+points, not the site as a whole.
+
+The ordering observation still stands — the crew works the cutting from one end and the far end is
+untouched — but the trench-divides-the-site story was a reach. Three corrections in a row from the
+same habit: reading a story into a status line and then arguing from the story.
