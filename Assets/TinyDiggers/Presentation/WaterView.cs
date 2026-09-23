@@ -39,6 +39,9 @@ namespace TinyDiggers.Presentation
         [Tooltip("Rebuild the sheets this many seconds after the land last changed.")]
         [SerializeField, Min(0f)] float _rebuildDelay = 0.5f;
 
+        [Tooltip("Tiles of the sea sheet remeshed in one frame. The rest wait for the next one.")]
+        [SerializeField, Min(1)] int _tilesPerFrame = 2;
+
         Material _material;
         Texture2D _detail;
         Wave[] _waves;
@@ -65,13 +68,35 @@ namespace TinyDiggers.Presentation
         void ApplyVisible()
         {
             if (_sea != null)
-                _sea.GetComponent<MeshRenderer>().enabled = _visible;
+                _sea.SetActive(_visible);
             if (_river != null)
                 _river.GetComponent<MeshRenderer>().enabled = _visible;
         }
-        Mesh _seaMesh;
+
+        /// <summary>
+        /// Columns of the vertex grid in one tile of the sea sheet. At the default resolution a
+        /// column is four cells, so a tile is 256 cells — 128 metres — and the island is thirteen
+        /// tiles across.
+        /// </summary>
+        const int TileColumns = 64;
+
         Mesh _riverMesh;
+        Mesh[] _tileMeshes;
+        GameObject[] _tileObjects;
+        int _tilesAcross;
+        int _tilesDown;
+        int _columns;
+        int _rows;
+        int _step = 1;
+        readonly HashSet<int> _dirtyTiles = new HashSet<int>();
+        readonly List<int> _draining = new List<int>();
         float _dirtyAt = -1f;
+
+        /// <summary>The cells that have changed since the last rebake, or nothing when x0 > x1.</summary>
+        int _changedX0 = int.MaxValue;
+        int _changedZ0 = int.MaxValue;
+        int _changedX1 = int.MinValue;
+        int _changedZ1 = int.MinValue;
 
         /// <summary>Triangles across both sheets, for the perf report.</summary>
         public int TriangleCount { get; private set; }
@@ -108,7 +133,9 @@ namespace TinyDiggers.Presentation
             _material = new Material(shader) { name = "Water", hideFlags = HideFlags.DontSave };
             _detail = WaterDetailTexture.Create();
             Apply();
-            _sea = NewSheet("Sea");
+            // The sea is a holder for its tiles; only the river is one sheet.
+            _sea = new GameObject("Sea") { hideFlags = HideFlags.DontSave };
+            _sea.transform.SetParent(_terrain.transform, false);
             _river = NewSheet("River");
             ApplyVisible();
             Rebuild();
@@ -128,8 +155,10 @@ namespace TinyDiggers.Presentation
 
             Destroy(_material);
             Destroy(_detail);
-            Destroy(_seaMesh);
             Destroy(_riverMesh);
+            if (_tileMeshes != null)
+                foreach (var mesh in _tileMeshes)
+                    Destroy(mesh);
         }
 
         /// <summary>Puts the settings onto the material and the swell into the shader's globals.</summary>
@@ -210,11 +239,17 @@ namespace TinyDiggers.Presentation
         /// </summary>
         void OnCellChanged(int x, int z)
         {
-            if (_dirtyAt >= 0f)
-                return;   // already waiting to rebuild; no need to look
             if (!CouldMoveTheWaterline(x, z))
                 return;
-            _dirtyAt = Time.time;
+
+            // Where it happened, not merely that it happened: only this corner of the island is
+            // rebaked and only the tiles over it are remeshed.
+            if (x < _changedX0) _changedX0 = x;
+            if (z < _changedZ0) _changedZ0 = z;
+            if (x > _changedX1) _changedX1 = x;
+            if (z > _changedZ1) _changedZ1 = z;
+            if (_dirtyAt < 0f)
+                _dirtyAt = Time.time;   // the clock starts at the first change, not the last
         }
 
         /// <summary>Whether a change at (x, z) could put water somewhere it was not, or take it away.</summary>
@@ -246,12 +281,76 @@ namespace TinyDiggers.Presentation
 
         void Update()
         {
-            // Edits come in bursts, and rebuilding a sheet is not free, so the shoreline follows a
-            // moment after the digging stops rather than on every cell.
-            if (_dirtyAt < 0f || Time.time - _dirtyAt < _rebuildDelay)
+            // Edits come in bursts, and remeshing is not free, so the shoreline follows a moment
+            // after the digging stops rather than on every cell.
+            if (_dirtyAt >= 0f && Time.time - _dirtyAt >= _rebuildDelay)
+            {
+                _dirtyAt = -1f;
+                RebakeChanged();
+            }
+
+            DrainTiles(_tilesPerFrame);
+        }
+
+        /// <summary>
+        /// Brings the field and the sheet up to date over the cells that changed, and nowhere else.
+        /// The whole-island version of this was 1,396 ms of a 1,407 ms frame (2026-09-23).
+        /// </summary>
+        void RebakeChanged()
+        {
+            if (_changedX1 < _changedX0 || Field == null || _terrain == null || _terrain.Grid == null)
                 return;
-            _dirtyAt = -1f;
-            Rebuild();
+
+            var window = new RectInt(_changedX0, _changedZ0,
+                _changedX1 - _changedX0 + 1, _changedZ1 - _changedZ0 + 1);
+            _changedX0 = int.MaxValue;
+            _changedZ0 = int.MaxValue;
+            _changedX1 = int.MinValue;
+            _changedZ1 = int.MinValue;
+
+            Field.Rebake(_terrain.Grid, window);
+            MarkTiles(window);
+        }
+
+        /// <summary>Every tile of the sheet whose quads read a cell in <paramref name="window"/>.</summary>
+        void MarkTiles(RectInt window)
+        {
+            if (_tileMeshes == null)
+                return;
+
+            // A quad reads the cell a column past its own, and the field is blurred and walked past
+            // the window, so the tiles either side are marked too.
+            var margin = _step * 2 + 48;
+            var c0 = Mathf.Clamp((window.xMin - margin) / _step / TileColumns, 0, _tilesAcross - 1);
+            var c1 = Mathf.Clamp((window.xMax + margin) / _step / TileColumns, 0, _tilesAcross - 1);
+            var r0 = Mathf.Clamp((window.yMin - margin) / _step / TileColumns, 0, _tilesDown - 1);
+            var r1 = Mathf.Clamp((window.yMax + margin) / _step / TileColumns, 0, _tilesDown - 1);
+            for (var r = r0; r <= r1; r++)
+                for (var c = c0; c <= c1; c++)
+                    _dirtyTiles.Add(r * _tilesAcross + c);
+        }
+
+        /// <summary>Remeshes up to <paramref name="many"/> dirty tiles, so no frame pays for all of them.</summary>
+        void DrainTiles(int many)
+        {
+            if (_dirtyTiles.Count == 0 || _tileMeshes == null)
+                return;
+
+            _draining.Clear();
+            foreach (var tile in _dirtyTiles)
+            {
+                _draining.Add(tile);
+                if (_draining.Count >= many)
+                    break;
+            }
+
+            foreach (var tile in _draining)
+            {
+                _dirtyTiles.Remove(tile);
+                BuildTile(tile);
+            }
+
+            CountTriangles();
         }
 
         GameObject NewSheet(string name)
@@ -266,43 +365,125 @@ namespace TinyDiggers.Presentation
             return sheet;
         }
 
-        /// <summary>Rebuilds both sheets from the land as it now stands.</summary>
+        /// <summary>
+        /// Rebuilds everything from the land as it now stands: a full bake of the field and every
+        /// tile of the sheet. For a new world, not for a dig — a dig goes through
+        /// <see cref="WaterField.Rebake"/> and the dirty tiles.
+        /// </summary>
         public void Rebuild()
         {
             if (_terrain == null || _terrain.Grid == null || _sea == null)
                 return;
 
             Field = WaterField.Bake(_terrain.Grid);
-            _seaMesh = BuildSea(_seaMesh);
+            EnsureTiles();
             _riverMesh = BuildRiver(_riverMesh);
-            _sea.GetComponent<MeshFilter>().sharedMesh = _seaMesh;
             _river.GetComponent<MeshFilter>().sharedMesh = _riverMesh;
-            TriangleCount = (_seaMesh == null ? 0 : _seaMesh.triangles.Length / 3)
-                + (_riverMesh == null ? 0 : _riverMesh.triangles.Length / 3);
+
+            _dirtyTiles.Clear();
+            for (var tile = 0; tile < _tileMeshes.Length; tile++)
+                BuildTile(tile);
+            CountTriangles();
         }
 
         /// <summary>
-        /// The sea: a grid of quads over the disc at sea level, keeping only the quads that have
-        /// water under at least one corner, so the sheet stops at the shoreline instead of being
-        /// drawn over the whole island and hidden by it.
+        /// One object and one mesh per tile of the sheet, made once. Tiles are what let a dig by the
+        /// water remesh a hundred metres of sea instead of three kilometres of it, and they give the
+        /// renderer something to cull: a single island-wide sheet is always on screen.
         /// </summary>
-        Mesh BuildSea(Mesh mesh)
+        void EnsureTiles()
+        {
+            var grid = _terrain.Grid;
+            var step = Mathf.Max(1, Mathf.RoundToInt(_seaResolution / grid.CellSize));
+            var columns = grid.Width / step + 1;
+            var rows = grid.Height / step + 1;
+            var across = Mathf.Max(1, Mathf.CeilToInt((columns - 1) / (float)TileColumns));
+            var down = Mathf.Max(1, Mathf.CeilToInt((rows - 1) / (float)TileColumns));
+            if (_tileMeshes != null && across == _tilesAcross && down == _tilesDown && step == _step)
+                return;
+
+            if (_tileObjects != null)
+                foreach (var one in _tileObjects)
+                    Destroy(one);
+            if (_tileMeshes != null)
+                foreach (var mesh in _tileMeshes)
+                    Destroy(mesh);
+
+            _step = step;
+            _columns = columns;
+            _rows = rows;
+            _tilesAcross = across;
+            _tilesDown = down;
+            _tileMeshes = new Mesh[across * down];
+            _tileObjects = new GameObject[across * down];
+            for (var r = 0; r < down; r++)
+            {
+                for (var c = 0; c < across; c++)
+                {
+                    var tile = r * across + c;
+                    var holder = new GameObject($"Sea {c},{r}") { hideFlags = HideFlags.DontSave };
+                    holder.transform.SetParent(_sea.transform, false);
+                    holder.AddComponent<MeshFilter>();
+                    var renderer = holder.AddComponent<MeshRenderer>();
+                    renderer.sharedMaterial = _material;
+                    renderer.shadowCastingMode = ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                    _tileObjects[tile] = holder;
+                    _tileMeshes[tile] = new Mesh { name = $"Sea {c},{r}", hideFlags = HideFlags.DontSave };
+                    holder.GetComponent<MeshFilter>().sharedMesh = _tileMeshes[tile];
+                }
+            }
+        }
+
+        /// <summary>Remeshes one tile, and hides it when the land under it has no water on it.</summary>
+        void BuildTile(int tile)
+        {
+            if (_tileMeshes == null || tile < 0 || tile >= _tileMeshes.Length)
+                return;
+
+            var c = tile % _tilesAcross;
+            var r = tile / _tilesAcross;
+            var mesh = BuildSea(_tileMeshes[tile],
+                c * TileColumns, Mathf.Min((c + 1) * TileColumns, _columns - 1),
+                r * TileColumns, Mathf.Min((r + 1) * TileColumns, _rows - 1));
+            _tileMeshes[tile] = mesh;
+            // An empty tile is most of them — open sea past the rim is one tile, the island is the
+            // rest — and a renderer with nothing in it still costs a culling test.
+            _tileObjects[tile].GetComponent<MeshRenderer>().enabled = mesh != null && mesh.vertexCount > 0;
+        }
+
+        void CountTriangles()
+        {
+            var total = _riverMesh == null ? 0 : (int)(_riverMesh.GetIndexCount(0) / 3);
+            if (_tileMeshes != null)
+                foreach (var mesh in _tileMeshes)
+                    if (mesh != null && mesh.vertexCount > 0)
+                        total += (int)(mesh.GetIndexCount(0) / 3);
+            TriangleCount = total;
+        }
+
+        /// <summary>
+        /// One tile of the sea: a grid of quads over the disc at sea level, keeping only the quads
+        /// that have water under at least one corner, so the sheet stops at the shoreline instead of
+        /// being drawn over the whole island and hidden by it.
+        /// </summary>
+        Mesh BuildSea(Mesh mesh, int firstColumn, int lastColumn, int firstRow, int lastRow)
         {
             // Built in cells, like the grid it follows, and scaled to metres at the end.
             var grid = _terrain.Grid;
             var cellSize = grid.CellSize;
-            var step = Mathf.Max(1, Mathf.RoundToInt(_seaResolution / cellSize));
+            var step = _step;
             var centre = _terrain.DiscCentre / cellSize;
             var radius = (_terrain.DiscRadius + _seaOverhang) / cellSize;
 
-            var columns = grid.Width / step + 1;
-            var rows = grid.Height / step + 1;
-            var vertices = new List<Vector3>(columns * rows);
-            var depths = new List<Vector2>(columns * rows);
-            var shores = new List<Vector2>(columns * rows);
-            var directions = new List<Vector2>(columns * rows);
-            var indices = new List<int>(columns * rows * 6);
-            var lookup = new int[columns * rows];
+            var wide = lastColumn - firstColumn + 1;
+            var tall = lastRow - firstRow + 1;
+            var vertices = new List<Vector3>(wide * tall);
+            var depths = new List<Vector2>(wide * tall);
+            var shores = new List<Vector2>(wide * tall);
+            var directions = new List<Vector2>(wide * tall);
+            var indices = new List<int>(wide * tall * 6);
+            var lookup = new int[wide * tall];
             for (var i = 0; i < lookup.Length; i++)
                 lookup[i] = -1;
 
@@ -321,7 +502,7 @@ namespace TinyDiggers.Presentation
 
             int VertexAt(int column, int row)
             {
-                var slot = row * columns + column;
+                var slot = (row - firstRow) * wide + (column - firstColumn);
                 if (lookup[slot] >= 0)
                     return lookup[slot];
 
@@ -345,9 +526,9 @@ namespace TinyDiggers.Presentation
                 return lookup[slot];
             }
 
-            for (var row = 0; row < rows - 1; row++)
+            for (var row = firstRow; row < lastRow; row++)
             {
-                for (var column = 0; column < columns - 1; column++)
+                for (var column = firstColumn; column < lastColumn; column++)
                 {
                     var x = column * step;
                     var z = row * step;
@@ -367,7 +548,7 @@ namespace TinyDiggers.Presentation
                 }
             }
 
-            return Fill(mesh, "Sea", vertices, depths, shores, directions, indices, cellSize);
+            return Fill(mesh, mesh != null ? mesh.name : "Sea", vertices, depths, shores, directions, indices, cellSize);
         }
 
         /// <summary>

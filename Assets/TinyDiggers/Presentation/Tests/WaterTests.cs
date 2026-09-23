@@ -118,6 +118,56 @@ namespace TinyDiggers.Presentation.Tests
         }
 
         [Test]
+        public void RebakingAWindowGivesWhatABakeOfTheWholeIslandWouldHave()
+        {
+            // The point of the window: digging a channel by the shore must not cost a bake of the
+            // island. It is only worth having if what it writes is what the full bake writes, so
+            // this digs a bite out of the coast and compares the two, cell by cell.
+            var grid = HalfIsland(40, 10);
+            var field = WaterField.Bake(grid);
+
+            for (var z = 18; z <= 22; z++)
+                for (var x = 6; x <= 9; x++)
+                    grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Sand, 17f) });   // −3 m: now sea
+
+            field.Rebake(grid, new RectInt(6, 18, 4, 5), margin: 12);
+            var full = WaterField.Bake(grid);
+
+            var worstDepth = 0f;
+            var worstShore = 0f;
+            for (var z = 8; z <= 32; z++)
+            {
+                for (var x = 0; x < 20; x++)
+                {
+                    worstDepth = Mathf.Max(worstDepth, Mathf.Abs(field.DepthAt(x, z) - full.DepthAt(x, z)));
+                    worstShore = Mathf.Max(worstShore,
+                        Mathf.Abs(Mathf.Min(field.ShoreDistanceAt(x, z), 40f) - Mathf.Min(full.ShoreDistanceAt(x, z), 40f)));
+                }
+            }
+
+            Assert.That(worstDepth, Is.LessThan(1e-3f), $"depth differs by {worstDepth} m");
+            Assert.That(worstShore, Is.LessThan(1e-3f), $"shore distance differs by {worstShore} m");
+        }
+
+        [Test]
+        public void ARebakeLeavesTheRestOfTheIslandAlone()
+        {
+            // The other half of the bargain: a window must not disturb water it was not asked about,
+            // or a dig on one coast would ripple the waves on the other.
+            var grid = HalfIsland(40, 10);
+            var field = WaterField.Bake(grid);
+            var wasFar = field.ShoreDistanceAt(30, 35);
+            var wasDeep = field.DepthAt(30, 35);
+
+            for (var z = 2; z <= 4; z++)
+                grid.SetColumn(8, z, new[] { new Layer(MaterialTable.Sand, 17f) });
+            field.Rebake(grid, new RectInt(8, 2, 1, 3), margin: 6);
+
+            Assert.That(field.ShoreDistanceAt(30, 35), Is.EqualTo(wasFar).Within(1e-4f));
+            Assert.That(field.DepthAt(30, 35), Is.EqualTo(wasDeep).Within(1e-4f));
+        }
+
+        [Test]
         public void CrestsNeverFoldOverThemselves()
         {
             _settings.Steepness = 1f;

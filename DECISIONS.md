@@ -5542,3 +5542,34 @@ None of them was the stutter.
 **The lesson, and it is the expensive one of this session:** *the biggest sample in a slow frame is
 not the same question as what makes the frame slow.* Dissecting the worst frame across all threads
 names the culprit in one shot, and it should have been the first thing done, not the fifth.
+
+## 2026-09-23 — Water in tiles, and a window instead of the island
+
+The waterline fix above made the stutter rare; it did not make it cheap. A dig *by the water* still
+paid the whole 1,396 ms, and Ronan's point stands: "we do have water all over in streams and rivers
+and I'm sure people will build near water." So the rebuild is now proportional to what changed.
+
+**Where the 1,396 ms was.** `WaterField.Bake` measured 4 ms at 0.26M cells, 17 ms at 1.05M and
+65 ms at 2.41M — call it 260–300 ms at the island's 9.63M. The other ~1.1 s was meshing. Chunking
+the bake alone would have bought a fifth of it.
+
+Three changes:
+
+1. **The river left the rebuild.** `BuildRiver` reads the generator's polyline, which digging cannot
+   change. It is built once, at `Rebuild`, and never again by a dig.
+
+2. **The sea sheet is tiles.** 64 columns of the vertex grid each — 256 cells, 128 m, thirteen
+   across the island, 169 in all. A changed cell dirties its tile and its neighbours; `Update`
+   remeshes at most `_tilesPerFrame` (2) of them. Empty tiles have their renderer disabled, and each
+   tile's own bounds let the renderer cull it — a single island-wide sheet is always on screen.
+
+3. **`WaterField.Rebake(grid, window, margin = 48)`.** The chamfer runs inside the window only,
+   seeded from the distances already in the field at its border, so a cell's value is exactly what a
+   full bake gives it as long as its nearest shore is within the margin. 48 cells is 24 m; the
+   shader's `_ShoreReach` is 16 m and `_DampDistance` 6 m, so nothing that is read is ever outside
+   it. Two tests hold this: one compares a window rebake against a full bake cell by cell after
+   digging a bite out of the coast, the other checks the far side of the island did not move.
+
+   The known blind spot, recorded rather than hidden: digging *through* a spit narrower than the
+   margin can leave a stale wave band beyond the working area until the next full bake. It cannot
+   produce wrong water, only wrong waves, and a regeneration clears it.
