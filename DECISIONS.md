@@ -4538,3 +4538,18 @@ stays as the thing that spreads a load out; the cap is the thing that stops a to
 Two lessons, both already learned today and both re-learned: a limit measured against something
 that moves is not a limit, and **the measurement is what finds this** — the old metric would have
 said "7 m" as well, for the wrong reason, and been ignored.
+
+### A capped tip fills up, which is the right behaviour and needs a bigger tip
+
+With the per-cell cap in, the spoil came out at **1.5 m deep over 274 cells — not one cell over its
+cap**, against 7 m before. The heap is a long rounded mound of bare dirt and it reads as tipped
+material.
+
+And the crew then stopped with the road three quarters built, every unit saying *"needs a Dump Zone
+or a Fill to tip into"*. That is not a fault: 225 cells at a metre and a half is about 84 m³, and
+the cutting makes about 75 — so the tip genuinely filled, and slump carried some of it outside the
+zone as well. A capped tip fills up. That is what makes where to put the dump a decision rather
+than a formality, and the banner says so plainly.
+
+For the trial it just means the dump has to be worth the name: **441 cells at three metres**, some
+330 m³, which is room to watch the whole job rather than the first three quarters of it.

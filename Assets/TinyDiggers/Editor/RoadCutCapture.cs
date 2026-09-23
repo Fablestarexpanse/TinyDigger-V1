@@ -39,6 +39,17 @@ namespace TinyDiggers.EditorTools
         const float MinRise = 1.5f;
         const float MaxRise = 6f;
 
+        /// <summary>
+        /// Half the width of the tip, and how high its spoil may stand over the ground it starts
+        /// at. Ronan asked for a **large** dump site and the first one held about a single cut's
+        /// worth — 225 cells at a metre and a half is roughly 84 m³, against the 75 the cutting
+        /// makes, so the tip filled and the crew stopped with the road three quarters built. This
+        /// is 441 cells at three metres: room enough to watch the whole job.
+        /// </summary>
+        const int TipHalf = 10;
+        const int Window = TipHalf * 2 + 1;
+        const float TipCap = 3f;
+
         /// <summary>Game seconds to let the crew work, and how long without progress before giving up.</summary>
         const float Cap = 4000f;
         const float Patience = 600f;
@@ -101,25 +112,25 @@ namespace TinyDiggers.EditorTools
                 // A big tip well to one side of the line, and a big quarry to the other: the road
                 // wants both, and they have to be clear of the corridor or the crew tips into its
                 // own cut.
-                var tipAt = new Vector2Int(hill.crest.x + side.x * 14, hill.crest.y + side.y * 14);
+                var tipAt = new Vector2Int(hill.crest.x + side.x * 20, hill.crest.y + side.y * 20);
                 // Each cell of the tip gets a cap a metre and a half over the ground it starts
                 // at. Without one the crew builds a tower: the "three steps proud of the zone
                 // floor" rule measures from the *lowest open cell*, which rises as the heap grows,
                 // so the ceiling climbs with the floor and the spoil ratcheted to seven metres
                 // (2026-09-22). A tip has a capacity; this is where it is said.
                 var dump = 0;
-                for (var dz = -7; dz <= 7; dz++)
-                    for (var dx = -7; dx <= 7; dx++)
+                for (var dz = -TipHalf; dz <= TipHalf; dz++)
+                    for (var dx = -TipHalf; dx <= TipHalf; dx++)
                     {
                         var x = tipAt.x + dx;
                         var z = tipAt.y + dz;
                         if (!_grid.IsGround(x, z))
                             continue;
-                        if (_map.SetDumpZone(x, z, true, _grid.GetSurfaceHeight(x, z) + 1.5f))
+                        if (_map.SetDumpZone(x, z, true, _grid.GetSurfaceHeight(x, z) + TipCap))
                             dump++;
                     }
 
-                var quarryAt = new Vector2Int(hill.crest.x - side.x * 14, hill.crest.y - side.y * 14);
+                var quarryAt = new Vector2Int(hill.crest.x - side.x * 16, hill.crest.y - side.y * 16);
                 var quarryFloor = _grid.GetSurfaceHeight(quarryAt.x, quarryAt.y) - 3f;
                 var quarry = 0;
                 for (var dz = -6; dz <= 6; dz++)
@@ -205,8 +216,8 @@ namespace TinyDiggers.EditorTools
                             var b = new Vector2Int(x - dir.x * Reach, z - dir.y * Reach);
                             var side = new Vector2Int(-dir.y, dir.x);
                             if (!Dry(a, 4) || !Dry(b, 4)
-                                || !Dry(new Vector2Int(x + side.x * 14, z + side.y * 14), 8)
-                                || !Dry(new Vector2Int(x - side.x * 14, z - side.y * 14), 7))
+                                || !Dry(new Vector2Int(x + side.x * 20, z + side.y * 20), TipHalf + 1)
+                                || !Dry(new Vector2Int(x - side.x * 16, z - side.y * 16), 7))
                                 continue;
                             var foot = Mathf.Min(_grid.GetSurfaceHeight(a.x, a.y), _grid.GetSurfaceHeight(b.x, b.y));
                             var rise = crest - foot;
@@ -241,10 +252,10 @@ namespace TinyDiggers.EditorTools
 
             void RememberTheTip(Vector2Int at)
             {
-                _tipWas = new float[17 * 17];
-                for (var dz = -8; dz <= 8; dz++)
-                    for (var dx = -8; dx <= 8; dx++)
-                        _tipWas[(dz + 8) * 17 + dx + 8] = _grid.GetSurfaceHeight(at.x + dx, at.y + dz);
+                _tipWas = new float[Window * Window];
+                for (var dz = -TipHalf; dz <= TipHalf; dz++)
+                    for (var dx = -TipHalf; dx <= TipHalf; dx++)
+                        _tipWas[(dz + TipHalf) * Window + dx + TipHalf] = _grid.GetSurfaceHeight(at.x + dx, at.y + dz);
             }
 
             /// <summary>
@@ -259,12 +270,12 @@ namespace TinyDiggers.EditorTools
                     return (0f, 0);
                 var deepest = 0f;
                 var covered = 0;
-                for (var dz = -8; dz <= 8; dz++)
-                    for (var dx = -8; dx <= 8; dx++)
+                for (var dz = -TipHalf; dz <= TipHalf; dz++)
+                    for (var dx = -TipHalf; dx <= TipHalf; dx++)
                     {
                         if (!_grid.IsGround(at.x + dx, at.y + dz))
                             continue;
-                        var grew = _grid.GetSurfaceHeight(at.x + dx, at.y + dz) - _tipWas[(dz + 8) * 17 + dx + 8];
+                        var grew = _grid.GetSurfaceHeight(at.x + dx, at.y + dz) - _tipWas[(dz + TipHalf) * Window + dx + TipHalf];
                         if (grew <= 0.01f)
                             continue;
                         deepest = Mathf.Max(deepest, grew);
