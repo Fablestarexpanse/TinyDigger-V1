@@ -23,6 +23,12 @@ namespace TinyDiggers.Units
         public bool LockToGround = true;
 
         /// <summary>
+        /// Metres held above (or below) the ground while <see cref="LockToGround"/>: a causeway
+        /// that follows the lie of the land at a fixed height rather than sitting on it.
+        /// </summary>
+        public float GroundOffset;
+
+        /// <summary>
         /// A dragged tangent handle, in cells from the node: the direction and pull of the curve
         /// through it. Zero means automatic (Catmull-Rom from the neighbouring nodes).
         /// </summary>

@@ -159,6 +159,37 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>How a grade reads against the limit: fine, too steep to recommend (orange), or refused (red, over twice the limit).</summary>
+        /// <summary>
+        /// The tightest turn the crew are taken to drive without slowing to a crawl, in metres.
+        /// Four metres is a little over five of the half-metre cells, which is the tightest bend a
+        /// 0.7 m dumper rounds without reversing.
+        /// </summary>
+        public const float DefaultMinTurnRadius = 4f;
+
+        /// <summary>Each segment's tightest turn in metres, and the tightest of them all.</summary>
+        public static float Turns(IReadOnlyList<RoadNode> chain, float cellSize, List<float> into)
+        {
+            into.Clear();
+            var tightest = float.PositiveInfinity;
+            for (var i = 0; i + 1 < chain.Count; i++)
+            {
+                var radius = RoadSpline.TurnRadius(chain, i, cellSize);
+                into.Add(radius);
+                tightest = Mathf.Min(tightest, radius);
+            }
+
+            return tightest;
+        }
+
+        /// <summary>
+        /// How a turn of <paramref name="radius"/> metres is judged against the minimum: gentler is
+        /// fine, and half the minimum or tighter is refused, as the grades are.
+        /// </summary>
+        public static RoadGradeState JudgeTurn(float radius, float minRadius) =>
+            radius < minRadius * 0.5f - 1e-5f ? RoadGradeState.Refused
+            : radius < minRadius - 1e-5f ? RoadGradeState.Steep
+            : RoadGradeState.Fine;
+
         public static RoadGradeState Judge(float grade, float maxGrade) =>
             grade > maxGrade * 2f + 1e-5f ? RoadGradeState.Refused
             : grade > maxGrade + 1e-5f ? RoadGradeState.Steep

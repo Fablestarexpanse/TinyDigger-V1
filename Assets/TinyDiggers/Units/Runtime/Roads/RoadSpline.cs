@@ -174,6 +174,59 @@ namespace TinyDiggers.Units
             return steepest;
         }
 
+        /// <summary>
+        /// The tightest turn anywhere along segment <paramref name="i"/>, as the radius of the
+        /// circle the road bends around, in metres. A straight segment turns around nothing at
+        /// all, so it returns <see cref="float.PositiveInfinity"/>: bigger is always gentler, and
+        /// a minimum turn radius is a floor to compare against.
+        /// </summary>
+        public static float TurnRadius(IReadOnlyList<RoadNode> chain, int i, float cellSize)
+        {
+            const int steps = 48;
+            var tightest = float.PositiveInfinity;
+            var a = Flat3(Evaluate(chain, i, 0f));
+            var b = Flat3(Evaluate(chain, i, 1f / steps));
+            for (var s = 2; s <= steps; s++)
+            {
+                var c = Flat3(Evaluate(chain, i, s / (float)steps));
+                var radius = Circumradius(a, b, c) * cellSize;
+                if (radius < tightest)
+                    tightest = radius;
+                a = b;
+                b = c;
+            }
+
+            return tightest;
+        }
+
+        /// <summary>The tightest turn on the whole chain, in metres, or infinity if it never bends.</summary>
+        public static float TightestTurn(IReadOnlyList<RoadNode> chain, float cellSize)
+        {
+            var tightest = float.PositiveInfinity;
+            for (var i = 0; i + 1 < chain.Count; i++)
+                tightest = Mathf.Min(tightest, TurnRadius(chain, i, cellSize));
+            return tightest;
+        }
+
+        /// <summary>
+        /// The radius of the circle through three points, in the points' own units. Three points
+        /// in a line have no circle through them, so that returns infinity rather than dividing
+        /// by a zero area.
+        /// </summary>
+        public static float Circumradius(Vector2 a, Vector2 b, Vector2 c)
+        {
+            var ab = Vector2.Distance(a, b);
+            var bc = Vector2.Distance(b, c);
+            var ca = Vector2.Distance(c, a);
+            // Twice the triangle's area, by the cross product of two of its sides.
+            var twiceArea = Mathf.Abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
+            if (twiceArea < 1e-9f)
+                return float.PositiveInfinity;
+            return ab * bc * ca / (2f * twiceArea);
+        }
+
+        static Vector2 Flat3(Vector3 v) => new Vector2(v.x, v.z);
+
         /// <summary>Segment <paramref name="i"/>'s rise over its whole length on the flat: its average grade.</summary>
         public static float AverageGrade(IReadOnlyList<RoadNode> chain, int i, float cellSize)
         {

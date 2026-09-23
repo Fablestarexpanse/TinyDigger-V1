@@ -30,7 +30,28 @@ namespace TinyDiggers.Interaction
 
         public int Width = 3;
         public float MaxGrade = RoadPlanner.DefaultMaxGrade;
+        public float MinTurnRadius = RoadPlanner.DefaultMinTurnRadius;
         public bool Snap45 = true;
+
+        /// <summary>
+        /// Metres across a cell, so the draft can talk about grades and turns in metres without
+        /// being handed the grid at every call. The host sets it from the terrain.
+        /// </summary>
+        public float CellSize = 0.5f;
+
+        /// <summary>
+        /// A grade held while drawing, as a fraction (0.04 is 4%): each node placed takes the last
+        /// node's height plus that slope over the run, rather than the ground's height, so a long
+        /// ramp keeps one slope the whole way. Null while nodes simply sit on the ground.
+        /// </summary>
+        public float? GradeLock;
+
+        /// <summary>
+        /// Metres held above the ground by nodes that follow it: 0 sits the road on the land, and
+        /// a positive offset carries it over the land as a causeway. Applied to nodes as they are
+        /// placed, moved or re-locked.
+        /// </summary>
+        public float GroundOffset;
 
         /// <summary>Changes on every edit, so views can tell when to re-plan.</summary>
         public int Version { get; private set; }
@@ -72,7 +93,23 @@ namespace TinyDiggers.Interaction
             {
                 if (Snap45 && Nodes.Count > 0)
                     at = SnapAngle(Nodes[Nodes.Count - 1].Position, at);
-                node = new RoadNode { Position = at, Height = groundAt(at), LockToGround = true };
+                node = new RoadNode
+                {
+                    Position = at,
+                    Height = groundAt(at) + GroundOffset,
+                    LockToGround = true,
+                    GroundOffset = GroundOffset,
+                };
+                // With a grade held, the node leaves the ground and keeps the ramp's slope
+                // instead, climbing or falling whichever way the ground goes.
+                if (GradeLock.HasValue && Nodes.Count > 0)
+                {
+                    var last = Nodes[Nodes.Count - 1];
+                    var run = Vector2.Distance(last.Position, at) * CellSize;
+                    var rise = GradeLock.Value * run;
+                    node.Height = last.Height + (groundAt(at) < last.Height ? -rise : rise);
+                    node.LockToGround = false;
+                }
             }
 
             Nodes.Add(node);
@@ -131,7 +168,7 @@ namespace TinyDiggers.Interaction
             var node = Nodes[index];
             node.Position = at;
             if (node.LockToGround)
-                node.Height = groundAt(at);
+                node.Height = groundAt(at) + node.GroundOffset;
             Version++;
         }
 
@@ -155,8 +192,164 @@ namespace TinyDiggers.Interaction
             var node = Nodes[index];
             node.LockToGround = locked;
             if (locked)
-                node.Height = groundAt(node.Position);
+                node.Height = groundAt(node.Position) + node.GroundOffset;
             Version++;
+        }
+
+        /// <summary>
+        /// Sets a node's height outright, in metres, which unlocks it from the ground. This is what
+        /// a typed height does, where <see cref="Raise"/> is what a scroll of the wheel does.
+        /// </summary>
+        public void SetHeight(int index, float metres)
+        {
+            Nodes[index].Height = metres;
+            Nodes[index].LockToGround = false;
+            Version++;
+        }
+
+        /// <summary>
+        /// Holds a node <paramref name="metres"/> above the ground, following it: the causeway
+        /// mode. A node that was set by hand goes back to following the ground.
+        /// </summary>
+        public void SetGroundOffset(int index, float metres, Func<Vector2, float> groundAt)
+        {
+            var node = Nodes[index];
+            node.GroundOffset = metres;
+            node.LockToGround = true;
+            node.Height = groundAt(node.Position) + metres;
+            Version++;
+        }
+
+        /// <summary>
+        /// Re-cuts the heights of every node after the first so the road holds one grade the whole
+        /// way, each stretch keeping the direction it already ran in (up stays up). The first node
+        /// does not move, and every node it touches leaves the ground. Returns how many moved.
+        /// </summary>
+        public int ApplyGrade(float grade)
+        {
+            if (Nodes.Count < 2)
+                return 0;
+            var was = new float[Nodes.Count];
+            for (var i = 0; i < Nodes.Count; i++)
+                was[i] = Nodes[i].Height;
+
+            var moved = 0;
+            for (var i = 1; i < Nodes.Count; i++)
+            {
+                var run = Vector2.Distance(Nodes[i - 1].Position, Nodes[i].Position) * CellSize;
+                var rise = grade * run;
+                // Flat stretches stay flat; the rest keep the way they already ran.
+                if (Mathf.Abs(was[i] - was[i - 1]) < 1e-4f)
+                    rise = 0f;
+                else if (was[i] < was[i - 1])
+                    rise = -rise;
+                var height = Nodes[i - 1].Height + rise;
+                if (Mathf.Abs(height - Nodes[i].Height) > 1e-4f)
+                    moved++;
+                Nodes[i].Height = height;
+                Nodes[i].LockToGround = false;
+            }
+
+            Version++;
+            return moved;
+        }
+
+        /// <summary>
+        /// Rounds the bend at node <paramref name="index"/> out towards <paramref name="radius"/>
+        /// metres by pulling its handle along the way the road already runs. The turn cannot always
+        /// be had — two nodes close together cannot round a wide arc — so it returns the radius it
+        /// actually reached, which is never tighter than the one it started from.
+        /// </summary>
+        public float SmoothTo(int index, float radius)
+        {
+            if (index <= 0 || index >= Nodes.Count - 1)
+                return float.PositiveInfinity;
+
+            var node = Nodes[index];
+            var was = node.Handle;
+            var direction = RoadSpline.Tangent(Nodes, index);
+            if (node.HasHandle)
+                direction = node.Handle;
+            if (direction.sqrMagnitude < 1e-8f)
+                direction = Nodes[index + 1].Position - Nodes[index - 1].Position;
+            if (direction.sqrMagnitude < 1e-8f)
+                return float.PositiveInfinity;
+            direction = direction.normalized;
+
+            // A longer handle sweeps the bend wider, up to about the shorter of the two chords;
+            // past that the curve starts to overshoot and tightens again, so that is the ceiling.
+            var reach = Mathf.Min(
+                Vector2.Distance(node.Position, Nodes[index - 1].Position),
+                Vector2.Distance(node.Position, Nodes[index + 1].Position));
+            // Widen by steps and stop at the first handle that makes the turn asked for; if none
+            // does, keep the widest turn found, which is never tighter than the one we started at.
+            var bestHandle = was;
+            var best = At(was);
+            const int tries = 24;
+            for (var t = 1; t <= tries; t++)
+            {
+                var handle = direction * (reach * t / tries);
+                var got = At(handle);
+                if (got > best)
+                {
+                    best = got;
+                    bestHandle = handle;
+                }
+
+                if (got >= radius)
+                    break;
+            }
+
+            Nodes[index].Handle = bestHandle;
+            Version++;
+            return best;
+
+            float At(Vector2 handle)
+            {
+                Nodes[index].Handle = handle;
+                return Mathf.Min(
+                    RoadSpline.TurnRadius(Nodes, index - 1, CellSize),
+                    RoadSpline.TurnRadius(Nodes, index, CellSize));
+            }
+        }
+
+        /// <summary>Rounds every bend in the road out towards <paramref name="radius"/> metres.</summary>
+        public void SmoothAll(float radius)
+        {
+            for (var i = 1; i + 1 < Nodes.Count; i++)
+                SmoothTo(i, radius);
+        }
+
+        /// <summary>
+        /// Makes node <paramref name="index"/> a hard corner again: a handle short enough that the
+        /// road barely curves through it, which is what undoes a smoothed bend.
+        /// </summary>
+        public void Corner(int index)
+        {
+            var direction = RoadSpline.Tangent(Nodes, index);
+            if (direction.sqrMagnitude < 1e-8f)
+                direction = Vector2.right;
+            Nodes[index].Handle = direction.normalized * 0.05f;
+            Version++;
+        }
+
+        /// <summary>Clears a node's handle, putting its curve back to automatic.</summary>
+        public void AutoHandle(int index)
+        {
+            Nodes[index].Handle = Vector2.zero;
+            Version++;
+        }
+
+        /// <summary>Each segment's tightest turn in metres, and how the tightest of them is judged.</summary>
+        public RoadGradeState Turns(List<float> into)
+        {
+            if (Nodes.Count < 2)
+            {
+                into.Clear();
+                return RoadGradeState.Fine;
+            }
+
+            return RoadPlanner.JudgeTurn(RoadPlanner.Turns(Nodes, CellSize, into), MinTurnRadius);
         }
 
         public void RemoveLast()
@@ -214,6 +407,7 @@ namespace TinyDiggers.Interaction
                             continue;
                         chain[i].Handle = Nodes[i].Handle;
                         chain[i].LockToGround = Nodes[i].LockToGround;
+                        chain[i].GroundOffset = Nodes[i].GroundOffset;
                     }
                 }
             }
@@ -229,6 +423,7 @@ namespace TinyDiggers.Interaction
             Position = node.Position,
             Height = node.Height,
             LockToGround = node.LockToGround,
+            GroundOffset = node.GroundOffset,
             Handle = node.Handle,
         };
     }
