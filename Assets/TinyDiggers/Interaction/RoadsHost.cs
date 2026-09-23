@@ -29,6 +29,19 @@ namespace TinyDiggers.Interaction
     /// </summary>
     public sealed class RoadsHost : MonoBehaviour
     {
+        /// <summary>
+        /// How near the cursor has to be to grab a node or its handle, in **screen pixels**.
+        ///
+        /// These were 0.9 and 0.6 *cells* — forty-five and thirty centimetres of ground. From an
+        /// RTS camera that is a target a few pixels across, so a click meant for a node almost
+        /// always missed it and laid another section instead, and the handles could not be caught
+        /// at all (Ronan, 2026-09-23: "every click adds a new section which means I can't grab
+        /// handles"). Pixels are what the hand is actually aiming in.
+        /// </summary>
+        const float NodePickPixels = 22f;
+        const float HandlePickPixels = 18f;
+
+        /// <summary>Fallbacks in cells, for when there is no camera to measure pixels against.</summary>
         const float NodePickRadius = 0.9f;
         const float HandlePickRadius = 0.6f;
         const float DoubleClickSeconds = 0.35f;
@@ -155,7 +168,7 @@ namespace TinyDiggers.Interaction
             var shift = keyboard != null && keyboard.shiftKey.isPressed;
 
             // Scroll over a node raises or lowers it, and the camera leaves the wheel alone.
-            var hovered = hasHover ? Draft.NodeNear(at, NodePickRadius) : -1;
+            var hovered = hasHover ? PickNode(at) : -1;
             if (hovered >= 0)
             {
                 RtsCamera.ScrollCaptured = true;
@@ -170,12 +183,31 @@ namespace TinyDiggers.Interaction
 
             if (mouse.leftButton.wasPressedThisFrame && hasHover)
                 Press(at);
-            if (mouse.leftButton.isPressed && hasHover)
+            if (mouse.leftButton.isPressed)
             {
-                if (_dragNode >= 0)
+                // Ctrl held: the drag is up and down, not across. Grabbing a node and lifting it is
+                // how a grade gets set by hand (Ronan, 2026-09-23: "an easy way for me to grab a
+                // node to raise the grade elevation"); a metre of height per hundred pixels, and
+                // Shift for a finer hand.
+                var lifting = keyboard != null && keyboard.ctrlKey.isPressed;
+                if (_dragNode >= 0 && lifting)
+                {
+                    var pixels = mouse.delta.ReadValue().y;
+                    if (Mathf.Abs(pixels) > 0.01f)
+                    {
+                        Draft.Raise(_dragNode, pixels * (shift ? 0.0025f : 0.01f));
+                        _tools.Say($"Node {_dragNode + 1} at {Draft.Nodes[_dragNode].Height:0.##} m"
+                                   + $" ({NodeOverGround(_dragNode):+0.#;-0.#;0} m over the ground)");
+                    }
+                }
+                else if (_dragNode >= 0 && hasHover)
+                {
                     Draft.Move(_dragNode, at, GroundAt);
-                else if (_dragHandle >= 0)
+                }
+                else if (_dragHandle >= 0 && hasHover)
+                {
                     Draft.DragHandle(_dragHandle, at);
+                }
             }
 
             if (mouse.leftButton.wasReleasedThisFrame)
@@ -200,8 +232,8 @@ namespace TinyDiggers.Interaction
                     return;
                 }
 
-                var handle = Draft.HandleNear(at, HandlePickRadius);
-                var node = Draft.NodeNear(at, NodePickRadius);
+                var handle = PickHandle(at);
+                var node = PickNode(at);
                 if (handle >= 0 && (node < 0 || Vector2.Distance(Draft.HandleTip(handle), at) < Vector2.Distance(Draft.Nodes[node].Position, at)))
                 {
                     _dragHandle = handle;
@@ -229,10 +261,71 @@ namespace TinyDiggers.Interaction
                 }
             }
 
-            Draft.Place(at, GroundAt, Network);
+            var placed = Draft.Place(at, GroundAt, Network);
             ActiveNode = Draft.Nodes.Count - 1;
-            _tools.Say($"Road: {Draft.Nodes.Count} node{(Draft.Nodes.Count == 1 ? "" : "s")}; double-click or Enter to lay it");
+            var how = Draft.FollowGround || Draft.Nodes.Count < 2 ? "" : " (holding the level)";
+            _tools.Say($"Road: {Draft.Nodes.Count} node{(Draft.Nodes.Count == 1 ? "" : "s")}{how}"
+                       + $" at {placed.Height:0.##} m; double-click or Enter to lay it");
         }
+
+        /// <summary>
+        /// The draft node under the cursor, measured on screen so it is as easy to grab close up as
+        /// far away, or -1. Falls back to a radius in cells without a camera.
+        /// </summary>
+        int PickNode(Vector2 at)
+        {
+            var camera = _tools.Camera;
+            if (camera == null)
+                return Draft.NodeNear(at, NodePickRadius);
+
+            var best = -1;
+            var bestPixels = NodePickPixels;
+            var cursor = camera.WorldToScreenPoint(WorldOf(at, GroundAt(at)));
+            for (var i = 0; i < Draft.Nodes.Count; i++)
+            {
+                var node = Draft.Nodes[i];
+                var screen = camera.WorldToScreenPoint(WorldOf(node.Position, node.Height));
+                if (screen.z <= 0f)
+                    continue;
+                var pixels = Vector2.Distance(new Vector2(screen.x, screen.y), new Vector2(cursor.x, cursor.y));
+                if (pixels > bestPixels)
+                    continue;
+                bestPixels = pixels;
+                best = i;
+            }
+
+            return best;
+        }
+
+        /// <summary>The handle tip under the cursor, measured on screen, or -1.</summary>
+        int PickHandle(Vector2 at)
+        {
+            var camera = _tools.Camera;
+            if (camera == null)
+                return Draft.HandleNear(at, HandlePickRadius);
+
+            var best = -1;
+            var bestPixels = HandlePickPixels;
+            var cursor = camera.WorldToScreenPoint(WorldOf(at, GroundAt(at)));
+            for (var i = 0; i < Draft.Nodes.Count; i++)
+            {
+                var tip = Draft.HandleTip(i);
+                var screen = camera.WorldToScreenPoint(WorldOf(tip, Draft.Nodes[i].Height));
+                if (screen.z <= 0f)
+                    continue;
+                var pixels = Vector2.Distance(new Vector2(screen.x, screen.y), new Vector2(cursor.x, cursor.y));
+                if (pixels > bestPixels)
+                    continue;
+                bestPixels = pixels;
+                best = i;
+            }
+
+            return best;
+        }
+
+        /// <summary>A point in cells and metres, in the world.</summary>
+        Vector3 WorldOf(Vector2 cells, float height) =>
+            _terrain.transform.TransformPoint(new Vector3(cells.x * Grid.CellSize, height, cells.y * Grid.CellSize));
 
         /// <summary>The road whose centre line passes within its half width (plus a cell) of a point, or 0.</summary>
         int RoadAt(Vector2 at)

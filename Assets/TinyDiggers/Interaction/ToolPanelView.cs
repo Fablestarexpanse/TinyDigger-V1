@@ -35,7 +35,7 @@ namespace TinyDiggers.Interaction
         InputField _rampField;
         Text _grades;
         InputField _maxGradeField, _minBendField, _nodeHeightField, _overGroundField;
-        Toggle _holdGrade;
+        Toggle _holdGrade, _cutThrough;
         Text _bends;
         Toggle _snap45;
         Toggle _lockNode;
@@ -155,12 +155,16 @@ namespace TinyDiggers.Interaction
             var smooth = UiKit.NewButton(_roadShapeRow, "Smooth", () => _tools.Roads.SmoothWholeRoad());
             UiKit.Place((RectTransform)smooth.transform, 170f, 2f, 90f, RowHeight - 4f);
             UiKit.AddTooltip(smooth, () => "Round every bend out to the minimum, cutting a corner into a proper arc where pulling its handle cannot reach (C, or Shift+C)");
+            _cutThrough = UiKit.NewToggle(_roadShapeRow, "Cut through", false,
+                on => _tools.Roads.Draft.FollowGround = !on);
+            UiKit.Place((RectTransform)_cutThrough.transform, 268f, 4f, 130f, RowHeight - 8f);
+            UiKit.AddTooltip(_cutThrough, () => "Nodes keep the level of the one before instead of climbing the ground: a rise becomes a cutting to dig out, a dip an embankment to fill");
             _holdGrade = UiKit.NewToggle(_roadShapeRow, "Hold the grade", false, on =>
             {
                 var draft = _tools.Roads.Draft;
                 draft.GradeLock = on ? draft.MaxGrade : (float?)null;
             });
-            UiKit.Place((RectTransform)_holdGrade.transform, 268f, 4f, 200f, RowHeight - 8f);
+            UiKit.Place((RectTransform)_holdGrade.transform, 400f, 4f, 150f, RowHeight - 8f);
             UiKit.AddTooltip(_holdGrade, () => "Nodes placed climb at the max grade instead of sitting on the ground (G); Shift+G re-cuts the road already drawn");
 
             // The selected node's own height: typed outright, or held over the ground as a causeway.
@@ -176,7 +180,7 @@ namespace TinyDiggers.Interaction
             UiKit.AddTooltip(_overGroundField, () => "Carry the node this far over the land, still following it — a causeway (H, Shift+H)");
 
             _roadHintRow = Row("Road hints");
-            UiKit.NewLabel(_roadHintRow, "Click: node · drag: shape · scroll a node: height · C: round a bend · X: corner · Enter: lay · Del: remove",
+            UiKit.NewLabel(_roadHintRow, "Click: node · drag a node or handle · Ctrl+drag: raise it · scroll: height · C: round · Enter: lay",
                 0f, 0f, Width - 2 * Pad, RowHeight, 12).color = new Color(0.75f, 0.77f, 0.8f);
 
             _clearRow = Row("Clear");
@@ -380,6 +384,7 @@ namespace TinyDiggers.Interaction
                 if (!_minBendField.isFocused)
                     _minBendField.SetTextWithoutNotify(draft.MinTurnRadius.ToString("0.#", CultureInfo.InvariantCulture));
                 _holdGrade.SetIsOnWithoutNotify(draft.GradeLock.HasValue);
+                _cutThrough.SetIsOnWithoutNotify(!draft.FollowGround);
 
                 var node = roads.ActiveNode >= 0 && roads.ActiveNode < draft.Nodes.Count ? draft.Nodes[roads.ActiveNode] : null;
                 _nodeHeightField.interactable = node != null;

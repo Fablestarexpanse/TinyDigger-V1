@@ -59,6 +59,18 @@ namespace TinyDiggers.Interaction
         /// </summary>
         public float GroundOffset;
 
+        /// <summary>
+        /// Whether a node placed takes the height of the ground under it. Off, it takes the height
+        /// of the node before it instead, so a road run at a level keeps that level: into a rise it
+        /// becomes a cutting to be dug out, over a dip an embankment to be filled.
+        ///
+        /// Ronan, 2026-09-23: *"I start on a flat grade, run my road into the hill, and I need a
+        /// way to tell it I don't want it to go up — I want it to go through."* Following the
+        /// ground is what a road does across open country and is still the default; holding the
+        /// level is what it does at a hill.
+        /// </summary>
+        public bool FollowGround = true;
+
         /// <summary>Changes on every edit, so views can tell when to re-plan.</summary>
         public int Version { get; private set; }
 
@@ -106,15 +118,24 @@ namespace TinyDiggers.Interaction
                     LockToGround = true,
                     GroundOffset = GroundOffset,
                 };
-                // With a grade held, the node leaves the ground and keeps the ramp's slope
-                // instead, climbing or falling whichever way the ground goes.
-                if (GradeLock.HasValue && Nodes.Count > 0)
+                if (Nodes.Count > 0)
                 {
                     var last = Nodes[Nodes.Count - 1];
-                    var run = Vector2.Distance(last.Position, at) * CellSize;
-                    var rise = GradeLock.Value * run;
-                    node.Height = last.Height + (groundAt(at) < last.Height ? -rise : rise);
-                    node.LockToGround = false;
+                    if (GradeLock.HasValue)
+                    {
+                        // With a grade held, the node leaves the ground and keeps the ramp's slope
+                        // instead, climbing or falling whichever way the ground goes.
+                        var run = Vector2.Distance(last.Position, at) * CellSize;
+                        var rise = GradeLock.Value * run;
+                        node.Height = last.Height + (groundAt(at) < last.Height ? -rise : rise);
+                        node.LockToGround = false;
+                    }
+                    else if (!FollowGround)
+                    {
+                        // Hold the level: the road goes through the hill rather than over it.
+                        node.Height = last.Height;
+                        node.LockToGround = false;
+                    }
                 }
             }
 

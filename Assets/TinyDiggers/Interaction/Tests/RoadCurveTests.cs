@@ -387,6 +387,39 @@ namespace TinyDiggers.Interaction.Tests
         }
 
         [Test]
+        public void ARoadToldToCutThroughKeepsItsLevelIntoTheHill()
+        {
+            // Ronan, 2026-09-23: "I start on a flat grade, run my road into the hill, and I need a
+            // way to tell it I don't want it to go up — I want it to go through." Following the
+            // ground is what a road does across country; holding the level is what it does at a
+            // rise, and the rise becomes a cutting for the crew to dig out.
+            var draft = Draft();
+            draft.FollowGround = false;
+            float hill(Vector2 at) => at.x < 10f ? 5f : 5f + (at.x - 10f);
+
+            var first = draft.Place(new Vector2(0f, 0f), hill);
+            var into = draft.Place(new Vector2(20f, 0f), hill);
+
+            Assert.That(first.Height, Is.EqualTo(5f).Within(1e-4f), "the first node still sits on the ground");
+            Assert.That(hill(into.Position), Is.EqualTo(15f).Within(1e-4f), "the ground there is ten metres up");
+            Assert.That(into.Height, Is.EqualTo(5f).Within(1e-4f), "and the road holds its level, so that is a cutting");
+            Assert.That(into.LockToGround, Is.False);
+        }
+
+        [Test]
+        public void FollowingTheGroundIsStillWhatARoadDoesByDefault()
+        {
+            var draft = Draft();
+            float hill(Vector2 at) => at.x < 10f ? 5f : 5f + (at.x - 10f);
+
+            draft.Place(new Vector2(0f, 0f), hill);
+            var up = draft.Place(new Vector2(20f, 0f), hill);
+
+            Assert.That(up.Height, Is.EqualTo(15f).Within(1e-4f), "over the hill, not through it");
+            Assert.That(up.LockToGround, Is.True);
+        }
+
+        [Test]
         public void ATypedHeightSetsTheNodeOutrightAndUnlocksIt()
         {
             var draft = Draft();

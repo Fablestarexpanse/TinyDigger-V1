@@ -5254,3 +5254,33 @@ Checked in play, end to end rather than by raycast alone: **26 controls take a c
 not**, a simulated click on the crew panel's Digger button took the crew from **7 to 8**, and the
 panel raycasts, so clicks no longer fall through to the terrain. `UiKitTests` holds both halves —
 a canvas brings an event system, and a second canvas does not bring a second one.
+
+---
+
+## 2026-09-23 — Road tool: why every click made a new section, and two things it could not say
+
+Three things from Ronan the first time the panels took a click, all about the road tool.
+
+**"Every click adds a new section, so I can't grab handles."** The tool *did* grab a node or a
+handle instead of placing, and had all along — but `NodePickRadius` was **0.9 cells and
+`HandlePickRadius` 0.6**, which on a half-metre grid is forty-five and thirty centimetres of
+ground. From an RTS camera that is a target a few pixels across, so the grab almost never landed
+and the click fell through to "place another node". Picking is now done **in screen pixels** (22
+for a node, 18 for a handle) by projecting each node and the cursor through the camera, so a node
+is as easy to catch far away as close up. The cells are kept only as a fallback for having no
+camera.
+
+That is worth remembering as a shape of bug: the feature was written, was correct, and was
+unreachable, and no test would have caught it because nothing was wrong with the code.
+
+**"An easy way to grab a node and raise the grade."** Scrolling the wheel over a node already
+worked, and so did PageUp. Neither is *grabbing*. **Ctrl and drag** now lifts the node the mouse
+moves — a metre per hundred pixels, a quarter of that with Shift — and says what height it is at
+and how far over the ground that leaves it. Without Ctrl the drag still moves it about the map.
+
+**"I run into the hill and it climbs; I want it to go through."** A node placed took the ground's
+height, so a road walked over every rise. `RoadDraft.FollowGround` (the panel's **Cut through**
+toggle) turns that off: a node takes the height of the node before it instead, so a level run held
+into a rise becomes a cutting for the crew to dig and a dip becomes an embankment to fill. Grade
+lock still wins where it is set. Following the ground stays the default, because that is what a
+road does across open country.
