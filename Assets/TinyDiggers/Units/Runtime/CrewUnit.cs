@@ -824,6 +824,11 @@ namespace TinyDiggers.Units
             var me = Cell;
             if (me.x != x || me.y != z)
             {
+                // Ask the regions first. A search for somewhere that cannot be reached expands
+                // every cell it can, which on this island is seconds of frame time; the region map
+                // answers the same question from a lookup (2026-09-23).
+                if (!_dispatcher.Regions.CanReach(me.x, me.y, x, z))
+                    return false;
                 var path = new List<Vector2Int>();
                 if (!_pathfinder.TryFindPath(me.x, me.y, x, z, path))
                     return false;
@@ -1831,7 +1836,10 @@ namespace TinyDiggers.Units
                 return false;
             }
 
-            if (!_pathfinder.TryFindPath(cell.x, cell.y, JobStand.x, JobStand.y, _path, avoid))
+            // Same again before the repath: the stand was reachable when the job was taken, but
+            // the ground moves under this crew and a cut can close the way while they walk to it.
+            if (!_dispatcher.Regions.CanReach(cell.x, cell.y, JobStand.x, JobStand.y)
+                || !_pathfinder.TryFindPath(cell.x, cell.y, JobStand.x, JobStand.y, _path, avoid))
             {
                 _rethink = true;
                 _dispatcher.Release(Id);

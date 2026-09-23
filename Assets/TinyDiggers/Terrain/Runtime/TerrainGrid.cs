@@ -262,6 +262,9 @@ namespace TinyDiggers.Terrain
         }
 
         /// <summary>Raised after a cell's stack changes, with its x and z. Renderers subscribe to this.</summary>
+        /// <summary>How many cells have road as their top layer. Maintained as cells change.</summary>
+        public int RoadCellCount { get; private set; }
+
         public event Action<int, int> CellChanged;
 
         /// <summary>
@@ -687,7 +690,19 @@ namespace TinyDiggers.Terrain
             var was = _surfaceHeights[cell];
             _surfaceHeights[cell] = surface;
             _blocked[cell] = _void[cell] || IsDeep(cell);
-            _topMaterials[cell] = count == 0 ? MaterialId.None : _layers[layerBase + count - 1].Material;
+            var wasTop = _topMaterials[cell];
+            var nowTop = count == 0 ? MaterialId.None : _layers[layerBase + count - 1].Material;
+            _topMaterials[cell] = nowTop;
+            // Kept as it changes rather than counted on demand: a pathfinder asks "are there any
+            // roads at all?" on every search, and counting nine and a half million cells to answer
+            // it would cost more than the search.
+            if (wasTop != nowTop)
+            {
+                if (wasTop == MaterialTable.Road)
+                    RoadCellCount--;
+                if (nowTop == MaterialTable.Road)
+                    RoadCellCount++;
+            }
 
             // The height it had before this change, for anything that draws the ground moving
             // rather than jumping: CellChanged fires after the write, so the old height is gone by

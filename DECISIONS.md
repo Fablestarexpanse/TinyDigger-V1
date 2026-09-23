@@ -5307,3 +5307,53 @@ the ground *should* be hidden by what is in front of it — and only the road gh
 Checked in play: a five-cell road drawn with **Cut through** from flat ground into a rise holds
 **6 m** across all its nodes while the ground under them goes 6 → 9.5 → 12.5 → **25.5 m**, and the
 band draws dead level through the hillside with the cut faces beside it.
+
+---
+
+## 2026-09-23 — Where the lag comes from: it is the pathfinder, not the water
+
+Ronan: *"Where is all the lag coming from? Water?"* Profiled rather than guessed.
+
+**The frame.** Median 435 ms, and 98% of it is `PlayerLoop` — not editor overhead. Inside that:
+`UpdateScene` 421 ms → `BehaviourUpdate` 416 ms → **`CrewView.Update()` 415.7 ms**, self time. The
+water, the terrain rebuild and the slump do not appear at all.
+
+**What is actually expensive.** A crew tick on flat open ground is 0.01–0.04 ms for six units, so
+the tick itself is free. The cost is pathfinding, and it is worse than it looks:
+
+| path | expanded | time |
+| --- | --- | --- |
+| 100 cells away | 8,156 | 5.2 ms |
+| 500 cells | 161,385 | 116 ms |
+| corner to corner, 1024² | 602,387 | 476 ms |
+| corner to corner, 2048² | 2,458,371 | 2,018 ms |
+| **unreachable, 2048²** | every reachable cell | **3,424 ms** |
+
+With the crew stepped in slices, several units repathing a hundred-cell route in one frame is the
+415 ms, exactly.
+
+**Why a search that long.** The heuristic is scaled by `RoadCost` (0.7) so it can never
+overestimate even if the whole way turned out to be road — correct, and it means the search is led
+by seven tenths of the real distance and crawls outward in a huge diamond. Roads are a rope across
+a continent; paying for them everywhere is a bad trade.
+
+**The fix, and its honest limit.** The scaling now applies only while the map *has* a road on it
+(`TerrainGrid.RoadCellCount`, kept as cells change because counting 9.6 million of them per search
+would cost more than the search). With no roads a 500-cell path went from **116 ms to 0.68 ms**,
+161,385 cells expanded down to **501** — and the path is the same length. **The moment one road
+cell exists anywhere, it goes back to 117 ms.** That is a real caveat, not a solved problem: the
+next step is to pay the road discount only near a road rather than over the whole map.
+
+Weighting the heuristic instead was tried and rejected by a test rather than by taste: at 1.43 it
+was 68× faster, and `RoadCellsCostSevenTenthsAndUnitsGoOutOfTheirWayForThem` went red, because the
+road detour in it saves 14.7% and a weight above about 1.15 stops a unit taking it. A crew that
+will not use its own roads is worse than a slow one.
+
+**Two other guards, both cheap.** `GridPathfinder.MaxExpanded` (120,000) stops any search flooding
+the island — a hopeless one now costs about 90 ms instead of seconds. And the two path requests
+that were not gated by the region map now are: the player's move order, and the repath onto a job's
+stand.
+
+**Still open:** the crew repaths every slice, and a frame can hold several slices. Pathing once a
+frame, or only when the way actually changed, is the next and probably larger win. The suite's own
+run time fell from 67 s to 43.6 s on this change alone.
