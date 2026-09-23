@@ -36,10 +36,18 @@ questions were answered under "use best choice", plus the smooth-turn tools:
 Evidence: `Screenshots/RoadCurve/{1_drawn,2_smoothed,3_graded,4_causeway}.png`. Suite 535 passed,
 1 skipped.
 
-**Next on the road tool, if it is wanted:** a road that cannot make its radius needs a node
-inserting at the corner (a true fillet), not a longer handle — that is the one shaping job handle
-pulling cannot do. Also unbuilt: a panel row for the new numbers (the keys work, the panel does
-not show a turn-radius field or a typed-height box yet).
+**Corner cutting is in too** (`Fillet` / `Round` / `RoundAll`): where pulling a handle cannot make
+the radius, the corner node is replaced by the two ends of a real arc. C and Shift+C do this
+automatically, and the status line says how many corners were cut. The dog-leg that stopped at
+3.7 m now rounds to a true 4 m.
+
+**A bend readout bug went with it, and it mattered:** radii were taken in float from the world's
+absolute coordinates, so every bend on the island read about 7% tight and the tool warned about
+turns it had just built properly. Sampling relative to the segment's own first node fixed it —
+see `DECISIONS.md`, 2026-09-22.
+
+**Still unbuilt on the road tool:** a panel row for the new numbers (the keys work; the panel has
+no turn-radius field or typed-height box yet).
 
 **Still open from the digging run:** the rethink loop in the deep pit (`path 1/8 RETHINK`; suspect
 `UpdateRamp`/`RequestRamp` trading the designation — confirm with logs before changing), heap

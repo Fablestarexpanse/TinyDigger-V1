@@ -185,10 +185,18 @@ namespace TinyDiggers.Units
         /// How a turn of <paramref name="radius"/> metres is judged against the minimum: gentler is
         /// fine, and half the minimum or tighter is refused, as the grades are.
         /// </summary>
-        public static RoadGradeState JudgeTurn(float radius, float minRadius) =>
-            radius < minRadius * 0.5f - 1e-5f ? RoadGradeState.Refused
-            : radius < minRadius - 1e-5f ? RoadGradeState.Steep
-            : RoadGradeState.Fine;
+        /// <remarks>
+        /// The slack is a hundredth of the radius, not a float epsilon: an arc cut to exactly the
+        /// minimum measures a hair under it, and warning about a bend the tool had just built to
+        /// order is worse than saying nothing.
+        /// </remarks>
+        public static RoadGradeState JudgeTurn(float radius, float minRadius)
+        {
+            var slack = minRadius * 0.01f;
+            return radius < minRadius * 0.5f - slack ? RoadGradeState.Refused
+                : radius < minRadius - slack ? RoadGradeState.Steep
+                : RoadGradeState.Fine;
+        }
 
         public static RoadGradeState Judge(float grade, float maxGrade) =>
             grade > maxGrade * 2f + 1e-5f ? RoadGradeState.Refused

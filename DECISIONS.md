@@ -4727,3 +4727,42 @@ taper down to support it like a real road"). Suite green: 535 passed, 1 skipped.
 **Keys** (Road tool): C smooths the bend at the active node, Shift+C the whole road; X makes a
 hard corner, Shift+X back to automatic; G holds the grade while drawing, Shift+G re-cuts the road
 already drawn to it; H carries the node half a metre higher over the ground, Shift+H lower.
+
+---
+
+## 2026-09-22 — Cutting corners into arcs, and a readout that was wrong everywhere but the origin
+
+Part C left one shaping job undone: a bend that the nodes themselves are in the way of. Pulling a
+handle opened a right-angle dog-leg from 2.2 m to about 3.7 m and no further, which is the honest
+limit of moving tangents around while the nodes stay put.
+
+**`RoadDraft.Fillet` cuts the corner out.** The corner node goes, and two nodes take its place a
+tangent distance back along each leg (`d = R·tan(Δ/2)` for a deflection Δ), each handled
+`4/3·tan(Δ/4)·R` along its leg — the standard cubic approximation of a circular arc. `Round` pulls
+the handle first and cuts only if pulling cannot reach; `RoundAll` sweeps the chain backwards, so
+a corner becoming two nodes does not shift the ones still to be looked at. The arc is cut down to
+whatever the shorter leg allows and the radius actually laid is returned, as `SmoothTo` does.
+
+**Then the capture and the test disagreed, and the test was right.** The same chain, the same
+code: 3.98 m in an edit-mode test at the origin, 3.7 m in play mode. Two wrong explanations were
+written down and thrown out before the measurement — that the trailing `SmoothAll` was
+re-pulling the arc's handles (it is not: `SmoothTo` only ever keeps the widest, so sweeping again
+changes nothing), and that the fillet was being clamped by leg length (it was not: the tangent
+distances logged out at exactly `R·tan(Δ/2)` for R = 4 m). Logging the same chain translated to
+the origin settled it in one run: **4 m at the origin, 3.7 m at (1565, 1547)**.
+
+**The bend readout was losing the world's coordinates.** A radius is taken from three points about
+a tenth of a cell apart; the road sits fifteen hundred cells out; and in float those two facts
+leave almost no significant digits in the triangle's area. Rebasing the circumradius on the middle
+point and working in double got 3.7 to 3.85 — not enough, because `Evaluate` had already thrown
+the digits away before the radius was computed. The fix is to sample the curve *relative to the
+segment's own first node* (`FlatNear`), so every term stays small: **4 m out in the world, and
+straights that used to read "156.9 m" now read tens of thousands.**
+
+This was not only a cosmetic error. Every bend on the island read about 7% tight, so the tool
+warned about turns it had just built to order — a readout that is wrong everywhere the player
+actually builds, and right only in a test. `JudgeTurn` now also allows a hundredth of the radius
+of slack, since an arc cut to exactly the minimum measures a hair under it.
+
+Evidence: one dog-leg, drawn at 2.2 m, rounded to **4 m with both corners cut to arcs**, judged
+Fine. Suite green: 541 passed, 1 skipped.

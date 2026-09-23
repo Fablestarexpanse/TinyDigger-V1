@@ -194,11 +194,12 @@ namespace TinyDiggers.Units
             const int steps = 48;
             var tightest = float.PositiveInfinity;
             float At(int s) => Mathf.Lerp(from, to, s / (float)steps);
-            var a = Flat3(Evaluate(chain, i, At(0)));
-            var b = Flat3(Evaluate(chain, i, At(1)));
+            var origin = chain[i].Position;
+            var a = FlatNear(chain, i, At(0), origin);
+            var b = FlatNear(chain, i, At(1), origin);
             for (var s = 2; s <= steps; s++)
             {
-                var c = Flat3(Evaluate(chain, i, At(s)));
+                var c = FlatNear(chain, i, At(s), origin);
                 var radius = Circumradius(a, b, c) * cellSize;
                 if (radius < tightest)
                     tightest = radius;
@@ -225,17 +226,45 @@ namespace TinyDiggers.Units
         /// </summary>
         public static float Circumradius(Vector2 a, Vector2 b, Vector2 c)
         {
-            var ab = Vector2.Distance(a, b);
-            var bc = Vector2.Distance(b, c);
-            var ca = Vector2.Distance(c, a);
-            // Twice the triangle's area, by the cross product of two of its sides.
-            var twiceArea = Mathf.Abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
-            if (twiceArea < 1e-9f)
+            // Rebased on the middle point and worked in double. The three points are a fraction of
+            // a cell apart but sit wherever the road does — fifteen hundred cells out on this
+            // island — and taking the area from the raw coordinates threw away most of the digits
+            // that matter: a four-metre arc read as four metres at the origin and 3.7 m out in the
+            // world, which made the tool warn about bends it had just built properly (2026-09-22).
+            double ux = (double)a.x - b.x, uy = (double)a.y - b.y;
+            double wx = (double)c.x - b.x, wy = (double)c.y - b.y;
+            var twiceArea = System.Math.Abs(ux * wy - uy * wx);
+            if (twiceArea < 1e-12)
                 return float.PositiveInfinity;
-            return ab * bc * ca / (2f * twiceArea);
+            var u = System.Math.Sqrt(ux * ux + uy * uy);
+            var w = System.Math.Sqrt(wx * wx + wy * wy);
+            var uw = System.Math.Sqrt((ux - wx) * (ux - wx) + (uy - wy) * (uy - wy));
+            return (float)(u * w * uw / (2.0 * twiceArea));
         }
 
         static Vector2 Flat3(Vector3 v) => new Vector2(v.x, v.z);
+
+        /// <summary>
+        /// The flat point <paramref name="t"/> along segment <paramref name="i"/>, measured from
+        /// <paramref name="origin"/> rather than from the map's corner. A bend is read from points
+        /// a tenth of a cell apart, and a road drawn fifteen hundred cells out has already lost
+        /// those digits by the time <see cref="Evaluate"/> has added its terms together: the same
+        /// four-metre arc read 4 m at the origin and 3.7 m out in the world (2026-09-22). Taking
+        /// the node positions off first keeps every term small and the digits with them.
+        /// </summary>
+        static Vector2 FlatNear(IReadOnlyList<RoadNode> chain, int i, float t, Vector2 origin)
+        {
+            var a = chain[i].Position - origin;
+            var b = chain[i + 1].Position - origin;
+            var ta = Tangent(chain, i);
+            var tb = Tangent(chain, i + 1);
+            var t2 = t * t;
+            var t3 = t2 * t;
+            return (2f * t3 - 3f * t2 + 1f) * a
+                   + (t3 - 2f * t2 + t) * ta
+                   + (-2f * t3 + 3f * t2) * b
+                   + (t3 - t2) * tb;
+        }
 
         /// <summary>Segment <paramref name="i"/>'s rise over its whole length on the flat: its average grade.</summary>
         public static float AverageGrade(IReadOnlyList<RoadNode> chain, int i, float cellSize)

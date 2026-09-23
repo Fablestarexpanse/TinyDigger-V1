@@ -21,8 +21,9 @@ namespace TinyDiggers.Interaction
     /// double-click or Enter lays the road; Backspace takes the last node back; Escape drops the
     /// draft. With no draft, clicking a road picks it up to edit, and Delete removes it.
     ///
-    /// Shaping keys: C rounds the bend at the active node out to the minimum turn radius (Shift+C
-    /// the whole road); X makes it a hard corner again (Shift+X back to automatic); G holds the
+    /// Shaping keys: C rounds the bend at the active node to the minimum turn radius, pulling its
+    /// handle or, where that cannot reach, cutting a proper arc into the corner (Shift+C the whole
+    /// road); X makes it a hard corner again (Shift+X back to automatic); G holds the
     /// tool's grade while drawing (Shift+G re-cuts the road already drawn to it); H carries the
     /// node half a metre higher over the ground as a causeway (Shift+H lower).
     /// </summary>
@@ -343,9 +344,11 @@ namespace TinyDiggers.Interaction
             }
 
             Draft.CellSize = Grid.CellSize;
-            var got = Draft.SmoothTo(ActiveNode, Draft.MinTurnRadius);
+            var nodes = Draft.Nodes.Count;
+            var got = Draft.Round(ActiveNode, Draft.MinTurnRadius);
+            var cut = Draft.Nodes.Count > nodes;
             _tools.Say(got >= Draft.MinTurnRadius
-                ? $"Bend rounded to {Describe(got)}"
+                ? cut ? $"Corner cut to {Describe(got)}" : $"Bend rounded to {Describe(got)}"
                 : $"Bend widened to {Describe(got)} — as far as these nodes allow");
         }
 
@@ -359,8 +362,14 @@ namespace TinyDiggers.Interaction
             }
 
             Draft.CellSize = Grid.CellSize;
-            Draft.SmoothAll(Draft.MinTurnRadius);
-            _tools.Say($"Road smoothed — tightest bend {Describe(RoadSpline.TightestTurn(Draft.Nodes, Grid.CellSize))}");
+            var nodes = Draft.Nodes.Count;
+            Draft.RoundAll(Draft.MinTurnRadius);
+            var cut = Draft.Nodes.Count - nodes;
+            var says = $"Road smoothed — tightest bend {Describe(RoadSpline.TightestTurn(Draft.Nodes, Grid.CellSize))}";
+            // A cut corner takes one node away and puts two back, so each one is a node gained.
+            if (cut > 0)
+                says += $", {cut} corner{(cut == 1 ? "" : "s")} cut to an arc";
+            _tools.Say(says);
         }
 
         /// <summary>Holds (or drops) the tool's grade while drawing: nodes climb at it instead of sitting on the ground.</summary>

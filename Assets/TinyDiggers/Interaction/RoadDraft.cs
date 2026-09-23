@@ -366,6 +366,107 @@ namespace TinyDiggers.Interaction
         }
 
         /// <summary>
+        /// Replaces the corner at node <paramref name="index"/> with a true arc of
+        /// <paramref name="radius"/> metres: the corner node goes, and two nodes take its place
+        /// where the arc leaves each leg, handled so the curve between them is that circle. This
+        /// is the one shaping a handle cannot do — pulling a handle can only widen a bend so far
+        /// before the nodes themselves are in the way — so it is what <see cref="Round"/> falls
+        /// back on. The arc has to fit: it is cut down to whatever the shorter leg allows, and the
+        /// radius actually laid is returned.
+        /// </summary>
+        public float Fillet(int index, float radius)
+        {
+            if (index <= 0 || index >= Nodes.Count - 1 || radius <= 0f || CellSize <= 0f)
+                return float.PositiveInfinity;
+
+            var corner = Nodes[index];
+            var before = Nodes[index - 1];
+            var after = Nodes[index + 1];
+            var into = corner.Position - before.Position;
+            var away = after.Position - corner.Position;
+            if (into.sqrMagnitude < 1e-8f || away.sqrMagnitude < 1e-8f)
+                return float.PositiveInfinity;
+            var inLeg = into.magnitude;
+            var outLeg = away.magnitude;
+            into /= inLeg;
+            away /= outLeg;
+
+            // How far the road turns at the corner. A straight run has no corner to cut.
+            var turn = Vector2.Angle(into, away) * Mathf.Deg2Rad;
+            if (turn < 1e-3f)
+                return float.PositiveInfinity;
+
+            // The arc leaves each leg a tangent distance back from the corner, and that distance
+            // has to stay short of the neighbouring nodes or the legs would cross each other.
+            var cells = radius / CellSize;
+            var reach = Mathf.Min(inLeg, outLeg) * 0.45f;
+            var tangent = cells * Mathf.Tan(turn * 0.5f);
+            if (tangent > reach)
+            {
+                tangent = reach;
+                cells = tangent / Mathf.Tan(turn * 0.5f);
+            }
+
+            // A cubic through both ends of an arc, with its handles this long along the tangents,
+            // is the standard circle approximation and is within a fraction of a percent here.
+            var pull = 4f / 3f * Mathf.Tan(turn * 0.25f) * cells;
+            var start = new RoadNode
+            {
+                Position = corner.Position - into * tangent,
+                Height = Mathf.Lerp(before.Height, corner.Height, 1f - tangent / inLeg),
+                LockToGround = false,
+                GroundOffset = corner.GroundOffset,
+                Handle = into * pull,
+            };
+            var end = new RoadNode
+            {
+                Position = corner.Position + away * tangent,
+                Height = Mathf.Lerp(corner.Height, after.Height, tangent / outLeg),
+                LockToGround = false,
+                GroundOffset = corner.GroundOffset,
+                Handle = away * pull,
+            };
+
+            Nodes.RemoveAt(index);
+            Nodes.Insert(index, end);
+            Nodes.Insert(index, start);
+            Version++;
+            return RoadSpline.TurnRadius(Nodes, index, CellSize);
+        }
+
+        /// <summary>
+        /// Rounds the bend at node <paramref name="index"/> to <paramref name="radius"/> metres,
+        /// by pulling its handle if that reaches and by cutting a proper arc into the corner if it
+        /// does not. Returns the radius laid. The node count changes when it falls back, so a
+        /// caller walking the chain walks it backwards.
+        /// </summary>
+        public float Round(int index, float radius)
+        {
+            var pulled = SmoothTo(index, radius);
+            if (pulled >= radius || index <= 0 || index >= Nodes.Count - 1)
+                return pulled;
+            var cut = Fillet(index, radius);
+            return float.IsInfinity(cut) ? pulled : cut;
+        }
+
+        /// <summary>
+        /// Rounds every bend in the road to <paramref name="radius"/> metres, cutting arcs into the
+        /// corners that will not come round by their handles alone. Backwards along the chain,
+        /// because a corner that is cut becomes two nodes and would shift everything after it.
+        /// </summary>
+        public void RoundAll(float radius)
+        {
+            SmoothAll(radius);
+            for (var i = Nodes.Count - 2; i > 0; i--)
+                if (RoadSpline.TurnRadius(Nodes, i - 1, CellSize) < radius
+                    || RoadSpline.TurnRadius(Nodes, i, CellSize) < radius)
+                    Fillet(i, radius);
+
+            // No sweep afterwards: a cut corner's two nodes already carry the handles that are the
+            // arc, and there is nothing left for the smoother to widen.
+        }
+
+        /// <summary>
         /// Makes node <paramref name="index"/> a hard corner again: a handle short enough that the
         /// road barely curves through it, which is what undoes a smoothed bend.
         /// </summary>

@@ -86,7 +86,10 @@ namespace TinyDiggers.EditorTools
                 yield return Frames(5);
                 Pose(camera, pose, look);
                 yield return Frames(2);
-                Debug.Log($"Road curve capture: smoothed — tightest bend {Say(roads.TightestTurn)}, {roads.TurnState}");
+                var each = "";
+                foreach (var turn in roads.Turns)
+                    each += Say(turn) + " ";
+                Debug.Log($"Road curve capture: smoothed — tightest bend {Say(roads.TightestTurn)}, {roads.TurnState}; {draft.Nodes.Count} nodes, bends {each.Trim()}; asked for {draft.MinTurnRadius} m on {draft.CellSize} m cells");
                 yield return Shoot("2_smoothed");
 
                 roads.ApplyGradeToWholeRoad();

@@ -133,6 +133,109 @@ namespace TinyDiggers.Interaction.Tests
         }
 
         [Test]
+        public void ACutCornerTurnsAtTheRadiusItWasAskedFor()
+        {
+            // A right angle with long legs: pulling the handle could not make four metres of it,
+            // but an arc cut into the corner is exactly four metres by construction.
+            var draft = Draft();
+            draft.Place(new Vector2(0f, 0f), Flat);
+            draft.Place(new Vector2(40f, 0f), Flat);
+            draft.Place(new Vector2(40f, 40f), Flat);
+
+            var got = draft.Fillet(1, 4f);
+
+            Assert.That(draft.Nodes.Count, Is.EqualTo(4), "the corner became the two ends of an arc");
+            Assert.That(got, Is.EqualTo(4f).Within(0.2f));
+            Assert.That(RoadSpline.TightestTurn(draft.Nodes, Cell), Is.GreaterThan(3.8f),
+                "and nothing else on the road turns tighter");
+        }
+
+        [Test]
+        public void ABendReadsTheSameWhereverOnTheIslandItIs()
+        {
+            // Roads are drawn fifteen hundred cells from the origin, and the points the radius is
+            // taken from are a fraction of a cell apart. Worked in float on the raw coordinates,
+            // a four-metre arc read 3.7 m out in the world and the tool warned about bends it had
+            // just built properly (2026-09-22).
+            var draft = Draft();
+            draft.Place(new Vector2(0f, 0f), Flat);
+            draft.Place(new Vector2(40f, 0f), Flat);
+            draft.Place(new Vector2(40f, 40f), Flat);
+            draft.Fillet(1, 4f);
+            var atOrigin = RoadSpline.TightestTurn(draft.Nodes, Cell);
+
+            var far = new Vector2(1565.5f, 1547.5f);
+            foreach (var node in draft.Nodes)
+                node.Position += far;
+
+            Assert.That(RoadSpline.TightestTurn(draft.Nodes, Cell), Is.EqualTo(atOrigin).Within(0.02f));
+        }
+
+        [Test]
+        public void ACutCornerKeepsTheRoadWhereItWas()
+        {
+            var draft = Draft();
+            draft.Place(new Vector2(0f, 0f), Flat);
+            draft.Place(new Vector2(40f, 0f), Flat);
+            draft.Place(new Vector2(40f, 40f), Flat);
+
+            draft.Fillet(1, 4f);
+
+            // Both new nodes sit on the legs the corner was on, a tangent distance back from it.
+            Assert.That(draft.Nodes[1].Position.y, Is.EqualTo(0f).Within(1e-3f), "on the first leg");
+            Assert.That(draft.Nodes[2].Position.x, Is.EqualTo(40f).Within(1e-3f), "and on the second");
+            Assert.That(draft.Nodes[1].Position.x, Is.LessThan(40f).And.GreaterThan(30f), "cutting the corner, not the road");
+            Assert.That(draft.Nodes[0].Position, Is.EqualTo(new Vector2(0f, 0f)), "the ends do not move");
+            Assert.That(draft.Nodes[3].Position, Is.EqualTo(new Vector2(40f, 40f)));
+        }
+
+        [Test]
+        public void AnArcTooBigForTheLegsIsCutDownToFit()
+        {
+            // Legs four cells (two metres) long cannot hold a ten-metre arc, and a tool that tried
+            // would put the two new nodes past each other and tie the road in a knot.
+            var draft = Draft();
+            draft.Place(new Vector2(0f, 0f), Flat);
+            draft.Place(new Vector2(4f, 0f), Flat);
+            draft.Place(new Vector2(4f, 4f), Flat);
+
+            var got = draft.Fillet(1, 10f);
+
+            Assert.That(got, Is.LessThan(10f), "it does not claim the arc it was asked for");
+            Assert.That(draft.Nodes[1].Position.x, Is.LessThan(draft.Nodes[2].Position.x + 1e-3f));
+            Assert.That(draft.Nodes[1].Position.x, Is.GreaterThan(0f), "and stays clear of the node before");
+        }
+
+        [Test]
+        public void AStraightRunHasNoCornerToCut()
+        {
+            var draft = Draft();
+            draft.Place(new Vector2(0f, 0f), Flat);
+            draft.Place(new Vector2(20f, 0f), Flat);
+            draft.Place(new Vector2(40f, 0f), Flat);
+
+            Assert.That(draft.Fillet(1, 4f), Is.EqualTo(float.PositiveInfinity));
+            Assert.That(draft.Nodes.Count, Is.EqualTo(3), "and nothing is inserted");
+        }
+
+        [Test]
+        public void RoundingFallsBackToCuttingTheCornerWhenTheHandleCannotReach()
+        {
+            // The dog-leg that smoothing could only open to about 3.7 m.
+            var draft = Draft();
+            draft.Place(new Vector2(0f, 0f), Flat);
+            draft.Place(new Vector2(26f, 4f), Flat);
+            draft.Place(new Vector2(28f, 28f), Flat);
+            draft.Place(new Vector2(52f, 34f), Flat);
+
+            draft.RoundAll(4f);
+
+            Assert.That(draft.Nodes.Count, Is.EqualTo(6), "both corners were cut, not just pulled");
+            Assert.That(RoadSpline.TightestTurn(draft.Nodes, Cell), Is.GreaterThanOrEqualTo(3.95f),
+                "and now the road really does turn at the radius asked for");
+        }
+
+        [Test]
         public void ACorneredNodeTurnsTighterThanASmoothedOne()
         {
             var draft = Draft();
