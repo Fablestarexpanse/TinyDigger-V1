@@ -4629,3 +4629,32 @@ points, not the site as a whole.
 The ordering observation still stands — the crew works the cutting from one end and the far end is
 untouched — but the trench-divides-the-site story was a reach. Three corrections in a row from the
 same habit: reading a story into a status line and then arguing from the story.
+
+## 2026-09-22 — Refining the road tool: showing the depth
+
+Ronan: *"refine the road tool like Cities Skylines 2 … the road is above the ground, say you want
+it high up, its sides need to taper down to support it like a real road. The same goes for going
+down — we need a way to see what our depth is."*
+
+**The taper is already built.** `RoadPlanner.Settle` cuts the ground above a road back to its own
+angle of repose and builds the ground below it up to the angle the spoil holds, and `RoadsHost`
+already plans those faces, counts their volume into Cut and Fill, and draws them in the ghost. So a
+road lifted onto a bank already grows its embankment, and one driven into a rise already has its
+cutting battered back. What was missing was every number that would let you *see* it.
+
+So this is readout, and nothing about how a road is planned or built has changed:
+
+- **Each node says what it is doing to the ground** — `+2.4 m` on a bank (blue), `-1.8 m` in a
+  cutting (amber), or `at grade`. `RoadsHost.NodeOverGround` is the road's height at the node
+  against the ground under it.
+- **Each segment label gains a second line** under its grade: `fill 1.6 m` or `cut 2.2 m`,
+  whichever the segment does more of. Measured along the centre line, sample by sample.
+- **A tally across the top**: `cut X m³  fill Y m³  deepest cut A m  highest fill B m`, and
+  "— too steep to build" when the grade refuses it.
+
+`DeepestCut` and `HighestFill` are on the host for anything else that wants them.
+
+What this does **not** yet do, and is the next question rather than an oversight: set a node to a
+target height or a target grade directly. At the moment a node is raised by a nudge and you read
+the result; Cities Skylines lets you say "ten metres up" and holds it. That is a bigger change to
+`RoadDraft` and wants its own pass.

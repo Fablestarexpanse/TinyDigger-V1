@@ -49,6 +49,15 @@ namespace TinyDiggers.Interaction
         readonly List<PlannedCell> _faces = new List<PlannedCell>();
         readonly List<Vector2Int> _bed = new List<Vector2Int>();
         readonly List<float> _grades = new List<float>();
+
+        /// <summary>
+        /// How far the road stands over the ground, and how far it is sunk into it, for each
+        /// segment — the numbers you actually watch when you lift a road or drive it into a bank
+        /// (Ronan, 2026-09-22: "we need a way to see what our depth is"). Metres, never negative:
+        /// a segment can both cut and fill along its length, and both are worth knowing.
+        /// </summary>
+        readonly List<float> _cutDepth = new List<float>();
+        readonly List<float> _fillDepth = new List<float>();
         int _plannedVersion = -1;
 
         int _dragNode = -1;
@@ -364,6 +373,14 @@ namespace TinyDiggers.Interaction
             _faces.Clear();
             Cut = Fill = 0f;
             State = Draft.Grades(Grid.CellSize, _grades);
+            _cutDepth.Clear();
+            _fillDepth.Clear();
+            for (var i = 0; i < _grades.Count; i++)
+            {
+                _cutDepth.Add(0f);
+                _fillDepth.Add(0f);
+            }
+
             if (Draft.Nodes.Count < 2)
                 return;
 
@@ -374,6 +391,60 @@ namespace TinyDiggers.Interaction
             Blueprints.Volumes(_faces, out var faceCut, out var faceFill, Grid.CellArea);
             Cut = cut + faceCut;
             Fill = fill + faceFill;
+            MeasureDepth();
+        }
+
+        /// <summary>
+        /// The deepest cut and the highest fill on each segment, taken along the centre line: the
+        /// road's own height against the ground it passes over. Cheap — it is one lookup per
+        /// sample — and it is what tells you whether a road is riding on a bank or sunk in a
+        /// cutting before a single cell is dug.
+        /// </summary>
+        void MeasureDepth()
+        {
+            DeepestCut = 0f;
+            HighestFill = 0f;
+            foreach (var sample in _samples)
+            {
+                if (sample.Segment < 0 || sample.Segment >= _cutDepth.Count)
+                    continue;
+                var x = Mathf.FloorToInt(sample.Position.x);
+                var z = Mathf.FloorToInt(sample.Position.z);
+                if (!Grid.IsGround(x, z))
+                    continue;
+                var over = sample.Position.y - Grid.GetSurfaceHeight(x, z);
+                if (over > 0f)
+                {
+                    if (over > _fillDepth[sample.Segment]) _fillDepth[sample.Segment] = over;
+                    if (over > HighestFill) HighestFill = over;
+                }
+                else
+                {
+                    var under = -over;
+                    if (under > _cutDepth[sample.Segment]) _cutDepth[sample.Segment] = under;
+                    if (under > DeepestCut) DeepestCut = under;
+                }
+            }
+        }
+
+        /// <summary>Metres the road is sunk below the ground at its deepest point.</summary>
+        public float DeepestCut { get; private set; }
+
+        /// <summary>Metres the road stands over the ground at its highest point.</summary>
+        public float HighestFill { get; private set; }
+
+        /// <summary>
+        /// How far a node's road height stands over the ground beneath it: positive on a bank,
+        /// negative in a cutting.
+        /// </summary>
+        public float NodeOverGround(int index)
+        {
+            if (index < 0 || index >= Draft.Nodes.Count)
+                return 0f;
+            var node = Draft.Nodes[index];
+            var x = Mathf.FloorToInt(node.Position.x);
+            var z = Mathf.FloorToInt(node.Position.y);
+            return Grid.IsGround(x, z) ? node.Height - Grid.GetSurfaceHeight(x, z) : 0f;
         }
 
         // --- the ghost ---------------------------------------------------------------------------
@@ -547,9 +618,61 @@ namespace TinyDiggers.Interaction
                 var old = GUI.color;
                 GUI.color = state == RoadGradeState.Refused ? new Color(1f, 0.45f, 0.4f)
                     : state == RoadGradeState.Steep ? new Color(1f, 0.75f, 0.35f) : Color.white;
-                GUI.Box(new Rect(screen.x - 34f, Screen.height - screen.y - 13f, 68f, 26f), $"{_grades[segment] * 100f:0.#}%", _label);
+                // The grade, and under it what the segment is doing to the ground: a road is
+                // either riding on a bank or sunk in a cutting, and which of the two, and by how
+                // much, is the thing you are actually deciding when you drag a node up or down.
+                var says = $"{_grades[segment] * 100f:0.#}%";
+                var cut = segment < _cutDepth.Count ? _cutDepth[segment] : 0f;
+                var fill = segment < _fillDepth.Count ? _fillDepth[segment] : 0f;
+                if (fill >= 0.05f || cut >= 0.05f)
+                    says += "\n" + (fill >= cut ? $"fill {fill:0.#} m" : $"cut {cut:0.#} m");
+                GUI.Box(new Rect(screen.x - 40f, Screen.height - screen.y - 20f, 80f, 40f), says, _label);
                 GUI.color = old;
             }
+
+            DrawNodeHeights(camera, terrain, cell);
+            DrawTally();
+        }
+
+        /// <summary>
+        /// What each node is doing: how far its road height stands over or under the ground it
+        /// sits on. "+2.4 m" is a bank that has to be built and held up; "-1.8 m" is a cutting
+        /// that has to be dug and its sides tapered back.
+        /// </summary>
+        void DrawNodeHeights(Camera camera, Transform terrain, float cell)
+        {
+            for (var i = 0; i < Draft.Nodes.Count; i++)
+            {
+                var node = Draft.Nodes[i];
+                var world = terrain.TransformPoint(new Vector3(node.Position.x * cell, node.Height + 2.2f,
+                    node.Position.y * cell));
+                var screen = camera.WorldToScreenPoint(world);
+                if (screen.z <= 0f)
+                    continue;
+                var over = NodeOverGround(i);
+                var old = GUI.color;
+                GUI.color = Mathf.Abs(over) < 0.05f ? new Color(0.8f, 0.85f, 0.9f)
+                    : over > 0f ? new Color(0.55f, 0.85f, 1f) : new Color(1f, 0.82f, 0.5f);
+                var says = Mathf.Abs(over) < 0.05f ? "at grade" : $"{(over > 0f ? "+" : "")}{over:0.#} m";
+                GUI.Box(new Rect(screen.x - 32f, Screen.height - screen.y - 13f, 64f, 26f), says, _label);
+                GUI.color = old;
+            }
+        }
+
+        /// <summary>The whole line at a glance: what it moves, and the worst of it either way.</summary>
+        void DrawTally()
+        {
+            var says = $"cut {Cut:0.#} m³   fill {Fill:0.#} m³";
+            if (DeepestCut >= 0.05f)
+                says += $"   deepest cut {DeepestCut:0.#} m";
+            if (HighestFill >= 0.05f)
+                says += $"   highest fill {HighestFill:0.#} m";
+            if (State == RoadGradeState.Refused)
+                says += "   — too steep to build";
+            var old = GUI.color;
+            GUI.color = State == RoadGradeState.Refused ? new Color(1f, 0.45f, 0.4f) : Color.white;
+            GUI.Box(new Rect(Screen.width * 0.5f - 230f, 12f, 460f, 28f), says, _label);
+            GUI.color = old;
         }
     }
 }
