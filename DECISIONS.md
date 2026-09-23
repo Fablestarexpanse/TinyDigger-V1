@@ -4112,3 +4112,31 @@ it six hundred seconds later. A stuck timer — a traffic wait that re-planning 
 was written **twice** and changed the result not one byte either time, so whatever holds them is
 not the wait in `CrewUnit.Move`. That is where to pick it up: find out what a unit in that state is
 actually doing each tick before writing another fix for it.
+
+## 2026-09-22 — The heap walls the tip in (trial E, answered by accident)
+
+The last twelve cells of the pit are not a traffic bug. Six ticks of every unit's state, position
+and load — `DeepPitTests.TraceTicks`, which is why it exists — show two pairs of robots shuffling
+back and forth a tenth of a cell at a time at the mouth of the dump zone, one going in with a load
+and one coming out for the next cut, each resetting the other's wait. That is a livelock, not a
+deadlock, which is why two goes at a stuck timer changed nothing: the units *do* move, just not
+anywhere.
+
+What makes a one-cell mouth out of an open plain is the spoil:
+
+> **the heap: 2.5 m at its highest, 0.56 m mean over the tip and its edges, from 9.75 m³ tipped.**
+
+Nine and three quarter cubic metres spread over the forty-nine cells of the dump zone would stand
+**0.8 m**. It stands **2.5 m** — five height steps, where a climb is one — because tipping keeps
+picking the same few cells: it fills the lowest cell in reach, and from on top of the growing heap
+it may only tip level or higher, so it walks up its own pile and drops another load on the summit.
+The zone ends up a tower with a moat of untouched cells round it, and the only way on or off is the
+one cell the crew came up.
+
+So this is Ronan's trial E answered sideways, and it is a design question, not a pathing one: **a
+tip should build out before it builds up.** Spoil that slumps to its angle of repose is already in
+the model; what is missing is a preference for the *flattest* reachable cell over the lowest one,
+and a cap that keeps a heap within a climb of the ground round it until the zone's floor is full.
+
+That is the next piece of work, and it is worth more than the twelve cells it unblocks: it is what
+a tipped load is supposed to look like.

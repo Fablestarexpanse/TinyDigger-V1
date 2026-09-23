@@ -154,6 +154,31 @@ namespace TinyDiggers.Units.Tests
             return (false, elapsed, start - Outstanding());
         }
 
+        /// <summary>
+        /// A few ticks of what every unit is actually doing, one line each. A stalled crew's
+        /// status line says what it thinks it is waiting for; this says whether it is moving,
+        /// what it is carrying, and whether any of that changes from tick to tick — which is the
+        /// difference between a jam and a loop, and the thing two guessed-at fixes both missed.
+        /// </summary>
+        void TraceTicks(int ticks)
+        {
+            for (var t = 0; t < ticks; t++)
+            {
+                _dispatcher.Tick(TickSeconds);
+                foreach (var unit in _units)
+                    unit.Tick(TickSeconds);
+
+                var said = $"tick {t}: ";
+                foreach (var unit in _units)
+                    said += $"[{unit.Id} {unit.State} {unit.Job} at ({unit.Position.x:0.00}, "
+                            + $"{unit.Position.y:0.00}) cell ({unit.Cell.x}, {unit.Cell.y}) "
+                            + $"job ({unit.JobTarget.x}, {unit.JobTarget.y}) from ({unit.JobStand.x}, "
+                            + $"{unit.JobStand.y}) load {unit.Inventory.Total:0.###} "
+                            + $"waited {unit.WaitingFor:0.0}] ";
+                Debug.Log(said);
+            }
+        }
+
         string Roll()
         {
             var said = "";
@@ -238,10 +263,26 @@ namespace TinyDiggers.Units.Tests
             var (done, seconds, moved) = Work(cap: 6000f, patience: 600f);
             var rim = _grid.GetSurfaceHeight(Middle.x - Half, Middle.y);
             var middle = _grid.GetSurfaceHeight(Middle.x, Middle.y);
+            var heap = 0f;
+            var heapMean = 0f;
+            var heapCells = 0;
+            for (var z = Tip.y - 4; z <= Tip.y + 4; z++)
+                for (var x = Tip.x - 4; x <= Tip.x + 4; x++)
+                {
+                    var here = _grid.GetSurfaceHeight(x, z) - Ground;
+                    heap = Mathf.Max(heap, here);
+                    heapMean += here;
+                    heapCells++;
+                }
+
+            Debug.Log($"the heap: {heap:0.##} m at its highest, {heapMean / heapCells:0.##} m mean "
+                      + $"over the tip and its edges, from {moved:0.##} m³ tipped.");
             Debug.Log($"two-step pit: done={done} after {seconds:0} s, {moved:0.##} m³ "
                                   + $"moved, {Outstanding():0.##} m³ left, {_map.Count} cells; rim "
                                   + $"at {rim:0.##} m, middle at {middle:0.##} m, both wanted "
                                   + $"{Ground - 2f * _grid.HeightStep:0.##} m. " + Roll());
+            if (!done)
+                TraceTicks(6);
             Assert.That(moved, Is.GreaterThan(0f), "it should have dug something at all. " + Roll());
         }
 
