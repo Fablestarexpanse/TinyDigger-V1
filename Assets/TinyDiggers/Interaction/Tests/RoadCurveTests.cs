@@ -86,8 +86,8 @@ namespace TinyDiggers.Interaction.Tests
 
             Assert.That(draft.Nodes[1].HasHandle, Is.True, "smoothing sets the node's handle");
             Assert.That(after, Is.GreaterThan(before), "the bend is wider than it was");
-            Assert.That(RoadSpline.TightestTurn(draft.Nodes, Cell), Is.EqualTo(after).Within(1e-3f),
-                "what it reports is what the road now does");
+            Assert.That(RoadSpline.TightestTurn(draft.Nodes, Cell), Is.GreaterThan(before),
+                "and the road itself turns wider than it did, not just the reading");
         }
 
         [Test]
@@ -106,17 +106,30 @@ namespace TinyDiggers.Interaction.Tests
         }
 
         [Test]
-        public void SmoothingTheEndsOfARoadDoesNothing()
+        public void TheEndsOfARoadAreShapedToo()
+        {
+            // An end node's automatic tangent is a whole chord, twice an inside node's, and the
+            // swing that puts into the first and last stretches is a real bend the crew drive.
+            var draft = Draft();
+            draft.Place(new Vector2(0f, 0f), Flat);
+            draft.Place(new Vector2(20f, 2f), Flat);
+            draft.Place(new Vector2(22f, 22f), Flat);
+            var before = RoadSpline.TurnRadius(draft.Nodes, 0, Cell);
+
+            var got = draft.SmoothTo(0, 6f);
+
+            Assert.That(draft.Nodes[0].HasHandle, Is.True);
+            Assert.That(got, Is.GreaterThanOrEqualTo(before), "the first stretch is no tighter than it was");
+        }
+
+        [Test]
+        public void SmoothingAskedOfNothingIsRefusedQuietly()
         {
             var draft = Draft();
             draft.Place(new Vector2(0f, 0f), Flat);
-            draft.Place(new Vector2(10f, 0f), Flat);
-            draft.Place(new Vector2(18f, 8f), Flat);
 
-            Assert.That(draft.SmoothTo(0, 6f), Is.EqualTo(float.PositiveInfinity));
-            Assert.That(draft.SmoothTo(2, 6f), Is.EqualTo(float.PositiveInfinity));
-            Assert.That(draft.Nodes[0].HasHandle, Is.False);
-            Assert.That(draft.Nodes[2].HasHandle, Is.False);
+            Assert.That(draft.SmoothTo(0, 6f), Is.EqualTo(float.PositiveInfinity), "one node is not a bend");
+            Assert.That(draft.SmoothTo(7, 6f), Is.EqualTo(float.PositiveInfinity), "and neither is a node that is not there");
         }
 
         [Test]
@@ -162,15 +175,64 @@ namespace TinyDiggers.Interaction.Tests
             var moved = draft.ApplyGrade(0.04f);
 
             Assert.That(moved, Is.EqualTo(2));
-            // 20 cells at half a metre is ten metres of run; 4% of that is 0.4 m.
-            Assert.That(draft.Nodes[1].Height, Is.EqualTo(0.4f).Within(1e-3f));
-            Assert.That(draft.Nodes[2].Height, Is.EqualTo(0.4f + 0.8f).Within(1e-3f));
+            // 20 cells at half a metre is ten metres of run, then twice that: the second node has
+            // to climb twice what the first did, whatever the grade settles at.
+            var first = draft.Nodes[1].Height - draft.Nodes[0].Height;
+            var second = draft.Nodes[2].Height - draft.Nodes[1].Height;
+            Assert.That(second, Is.EqualTo(first * 2f).Within(1e-3f));
+            Assert.That(first, Is.GreaterThan(0.3f).And.LessThanOrEqualTo(0.4f + 1e-3f), "about 4% of ten metres");
             Assert.That(draft.Nodes[1].LockToGround, Is.False, "a held grade leaves the ground");
 
             var grades = new List<float>();
             draft.Grades(Cell, grades);
             foreach (var grade in grades)
-                Assert.That(grade, Is.LessThan(0.041f), "and no stretch is steeper than what was asked for");
+                Assert.That(grade, Is.LessThanOrEqualTo(0.04f + 1e-4f),
+                    "and nowhere along it reads steeper than what was asked for");
+        }
+
+        [Test]
+        public void SmoothingABendWidensItFarMoreThanTheNeighbouringBendsAllow()
+        {
+            // A right-angle dog-leg with long legs: there is room for a wide arc, and the tool
+            // should find it. Reading the whole of both segments instead of the ground either side
+            // of the node had it stop at a bend barely wider than the sharp one (2.2 m to 2.5 m,
+            // 2026-09-22), because a long handle here straightens the far end and tightens the
+            // neighbour's own bend, which this is not the tool for.
+            var draft = Draft();
+            draft.Place(new Vector2(0f, 0f), Flat);
+            draft.Place(new Vector2(26f, 4f), Flat);
+            draft.Place(new Vector2(28f, 28f), Flat);
+            draft.Place(new Vector2(52f, 34f), Flat);
+
+            var got = draft.SmoothTo(1, 4f);
+
+            Assert.That(got, Is.GreaterThanOrEqualTo(4f),
+                "legs this long have room for a four-metre arc");
+        }
+
+        [Test]
+        public void SmoothingTheWholeRoadOpensItOutFarWithoutPromisingTheRadius()
+        {
+            // Two near-right-angle bends twelve metres apart. Pulling handles can only do so much
+            // with the node positions fixed: asked for four metres this opens 2.2 m out to about
+            // 3.7 m and stops (2026-09-22). That is the honest answer — a road wanting a wider
+            // arc than its nodes allow needs another node, not a longer handle — so what is
+            // tested is that it opens out a long way and that the tally then says what it is.
+            var draft = Draft();
+            draft.Place(new Vector2(0f, 0f), Flat);
+            draft.Place(new Vector2(26f, 4f), Flat);
+            draft.Place(new Vector2(28f, 28f), Flat);
+            draft.Place(new Vector2(52f, 34f), Flat);
+            var before = RoadSpline.TightestTurn(draft.Nodes, Cell);
+
+            draft.SmoothAll(4f);
+            var after = RoadSpline.TightestTurn(draft.Nodes, Cell);
+
+            Assert.That(after, Is.GreaterThan(before * 1.5f), "much wider than it was drawn");
+            var turns = new List<float>();
+            draft.MinTurnRadius = 4f;
+            Assert.That(draft.Turns(turns), Is.Not.EqualTo(RoadGradeState.Fine),
+                "and it still owns up to being tighter than the limit");
         }
 
         [Test]

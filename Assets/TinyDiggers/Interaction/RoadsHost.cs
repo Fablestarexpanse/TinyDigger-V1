@@ -20,6 +20,11 @@ namespace TinyDiggers.Interaction
     /// or its handle to reshape; scroll over a node raises or lowers it a metre (Shift: 0.25 m);
     /// double-click or Enter lays the road; Backspace takes the last node back; Escape drops the
     /// draft. With no draft, clicking a road picks it up to edit, and Delete removes it.
+    ///
+    /// Shaping keys: C rounds the bend at the active node out to the minimum turn radius (Shift+C
+    /// the whole road); X makes it a hard corner again (Shift+X back to automatic); G holds the
+    /// tool's grade while drawing (Shift+G re-cuts the road already drawn to it); H carries the
+    /// node half a metre higher over the ground as a causeway (Shift+H lower).
     /// </summary>
     public sealed class RoadsHost : MonoBehaviour
     {
@@ -58,6 +63,9 @@ namespace TinyDiggers.Interaction
         /// </summary>
         readonly List<float> _cutDepth = new List<float>();
         readonly List<float> _fillDepth = new List<float>();
+
+        /// <summary>Each segment's tightest turn, in metres; infinity where it runs straight.</summary>
+        readonly List<float> _turns = new List<float>();
         int _plannedVersion = -1;
 
         int _dragNode = -1;
@@ -84,6 +92,14 @@ namespace TinyDiggers.Interaction
         public IReadOnlyList<float> Grades => _grades;
 
         public RoadGradeState State { get; private set; }
+
+        /// <summary>Each segment's tightest turn in metres, and how the tightest of them is judged.</summary>
+        public IReadOnlyList<float> Turns => _turns;
+
+        public RoadGradeState TurnState { get; private set; }
+
+        /// <summary>The tightest bend anywhere on the draft, in metres, or infinity if it never bends.</summary>
+        public float TightestTurn { get; private set; } = float.PositiveInfinity;
 
         public bool IsDrawing => !Draft.IsEmpty;
 
@@ -277,8 +293,116 @@ namespace TinyDiggers.Interaction
                 return true;
             }
 
+            if (keyboard.cKey.wasPressedThisFrame && Draft.Nodes.Count >= 3)
+            {
+                if (shift)
+                    SmoothWholeRoad();
+                else
+                    SmoothActive();
+                return true;
+            }
+
+            if (keyboard.xKey.wasPressedThisFrame && target >= 0)
+            {
+                if (shift)
+                    Draft.AutoHandle(target);
+                else
+                    Draft.Corner(target);
+                _tools.Say(shift ? "Bend back to automatic" : "Hard corner");
+                return true;
+            }
+
+            if (keyboard.gKey.wasPressedThisFrame)
+            {
+                if (shift)
+                    ApplyGradeToWholeRoad();
+                else
+                    ToggleGradeLock();
+                return true;
+            }
+
+            if (keyboard.hKey.wasPressedThisFrame && target >= 0)
+            {
+                SetGroundOffset(target, Draft.Nodes[target].GroundOffset + (shift ? -0.5f : 0.5f));
+                return true;
+            }
+
             return false;
         }
+
+        /// <summary>
+        /// Rounds the bend at the active node out towards the tool's minimum turn radius, and says
+        /// what it reached — two nodes close together cannot be made to hold a wide arc.
+        /// </summary>
+        public void SmoothActive()
+        {
+            if (ActiveNode <= 0 || ActiveNode >= Draft.Nodes.Count - 1)
+            {
+                _tools.Say("Pick a bend to smooth, not an end");
+                return;
+            }
+
+            Draft.CellSize = Grid.CellSize;
+            var got = Draft.SmoothTo(ActiveNode, Draft.MinTurnRadius);
+            _tools.Say(got >= Draft.MinTurnRadius
+                ? $"Bend rounded to {Describe(got)}"
+                : $"Bend widened to {Describe(got)} — as far as these nodes allow");
+        }
+
+        /// <summary>Rounds every bend in the draft, and says what the tightest of them came out at.</summary>
+        public void SmoothWholeRoad()
+        {
+            if (Draft.Nodes.Count < 3)
+            {
+                _tools.Say("Nothing to smooth yet");
+                return;
+            }
+
+            Draft.CellSize = Grid.CellSize;
+            Draft.SmoothAll(Draft.MinTurnRadius);
+            _tools.Say($"Road smoothed — tightest bend {Describe(RoadSpline.TightestTurn(Draft.Nodes, Grid.CellSize))}");
+        }
+
+        /// <summary>Holds (or drops) the tool's grade while drawing: nodes climb at it instead of sitting on the ground.</summary>
+        public void ToggleGradeLock()
+        {
+            Draft.GradeLock = Draft.GradeLock.HasValue ? (float?)null : Draft.MaxGrade;
+            _tools.Say(Draft.GradeLock.HasValue
+                ? $"Holding {Draft.GradeLock.Value * 100f:0.#}% — nodes climb instead of following the ground"
+                : "Grade let go — nodes sit on the ground again");
+        }
+
+        /// <summary>Re-cuts the whole draft to one grade, each stretch keeping the way it already ran.</summary>
+        public void ApplyGradeToWholeRoad()
+        {
+            Draft.CellSize = Grid.CellSize;
+            var moved = Draft.ApplyGrade(Draft.MaxGrade);
+            _tools.Say(moved == 0
+                ? "Nothing to re-cut"
+                : $"{moved} node{(moved == 1 ? "" : "s")} re-cut to {Draft.MaxGrade * 100f:0.#}%");
+        }
+
+        /// <summary>Carries a node that many metres over the ground, still following it: a causeway.</summary>
+        public void SetGroundOffset(int index, float metres)
+        {
+            if (index < 0 || index >= Draft.Nodes.Count)
+                return;
+            metres = Mathf.Max(0f, metres);
+            Draft.SetGroundOffset(index, metres, GroundAt);
+            _tools.Say(metres <= 0f ? "Node back on the ground" : $"Node held {metres:0.#} m over the ground");
+        }
+
+        /// <summary>Sets the active node's height outright, in metres, as a typed height does.</summary>
+        public void SetActiveHeight(float metres)
+        {
+            if (ActiveNode < 0 || ActiveNode >= Draft.Nodes.Count)
+                return;
+            Draft.SetHeight(ActiveNode, metres);
+            _tools.Say($"Node set to {metres:0.#} m");
+        }
+
+        static string Describe(float radius) =>
+            float.IsInfinity(radius) ? "straight" : $"{radius:0.#} m radius";
 
         /// <summary>Drops the draft; an edit leaves the road as it was built.</summary>
         public void Cancel()
@@ -372,7 +496,12 @@ namespace TinyDiggers.Interaction
             _footprint.Clear();
             _faces.Clear();
             Cut = Fill = 0f;
+            Draft.CellSize = Grid.CellSize;
             State = Draft.Grades(Grid.CellSize, _grades);
+            TurnState = Draft.Turns(_turns);
+            TightestTurn = float.PositiveInfinity;
+            foreach (var turn in _turns)
+                TightestTurn = Mathf.Min(TightestTurn, turn);
             _cutDepth.Clear();
             _fillDepth.Clear();
             for (var i = 0; i < _grades.Count; i++)
@@ -626,7 +755,16 @@ namespace TinyDiggers.Interaction
                 var fill = segment < _fillDepth.Count ? _fillDepth[segment] : 0f;
                 if (fill >= 0.05f || cut >= 0.05f)
                     says += "\n" + (fill >= cut ? $"fill {fill:0.#} m" : $"cut {cut:0.#} m");
-                GUI.Box(new Rect(screen.x - 40f, Screen.height - screen.y - 20f, 80f, 40f), says, _label);
+                var turn = segment < _turns.Count ? _turns[segment] : float.PositiveInfinity;
+                if (RoadPlanner.JudgeTurn(turn, Draft.MinTurnRadius) != RoadGradeState.Fine)
+                {
+                    says += $"\nbend {turn:0.#} m";
+                    if (state == RoadGradeState.Fine)
+                        GUI.color = new Color(1f, 0.85f, 0.6f);
+                }
+                var lines = says.Split('\n').Length;
+                var high = 8f + lines * 16f;
+                GUI.Box(new Rect(screen.x - 42f, Screen.height - screen.y - high * 0.5f, 84f, high), says, _label);
                 GUI.color = old;
             }
 
@@ -667,11 +805,20 @@ namespace TinyDiggers.Interaction
                 says += $"   deepest cut {DeepestCut:0.#} m";
             if (HighestFill >= 0.05f)
                 says += $"   highest fill {HighestFill:0.#} m";
+            // A bend is worth a word only when it is tight enough to matter to a driver.
+            if (TurnState != RoadGradeState.Fine)
+                says += $"   tightest bend {TightestTurn:0.#} m";
+            if (Draft.GradeLock.HasValue)
+                says += $"   holding {Draft.GradeLock.Value * 100f:0.#}%";
             if (State == RoadGradeState.Refused)
                 says += "   — too steep to build";
+            else if (TurnState == RoadGradeState.Refused)
+                says += "   — that bend is too tight to drive";
             var old = GUI.color;
-            GUI.color = State == RoadGradeState.Refused ? new Color(1f, 0.45f, 0.4f) : Color.white;
-            GUI.Box(new Rect(Screen.width * 0.5f - 230f, 12f, 460f, 28f), says, _label);
+            GUI.color = State == RoadGradeState.Refused || TurnState == RoadGradeState.Refused
+                ? new Color(1f, 0.45f, 0.4f)
+                : TurnState == RoadGradeState.Steep ? new Color(1f, 0.85f, 0.6f) : Color.white;
+            GUI.Box(new Rect(Screen.width * 0.5f - 270f, 12f, 540f, 28f), says, _label);
             GUI.color = old;
         }
     }

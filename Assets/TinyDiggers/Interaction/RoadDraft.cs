@@ -23,6 +23,12 @@ namespace TinyDiggers.Interaction
         /// <summary>Cells within which a placed node lands on an existing road node, joining it.</summary>
         public const float JoinRadius = 1.5f;
 
+        /// <summary>
+        /// How much of a segment next to a node belongs to that node's neighbour when a bend is
+        /// being shaped, as a fraction of the segment.
+        /// </summary>
+        const float Near = 0.15f;
+
         public readonly List<RoadNode> Nodes = new List<RoadNode>();
 
         /// <summary>The road being edited, or 0 for a new one.</summary>
@@ -233,6 +239,26 @@ namespace TinyDiggers.Interaction
             for (var i = 0; i < Nodes.Count; i++)
                 was[i] = Nodes[i].Height;
 
+            var moved = Lay(grade, was);
+
+            // The height eases in and out at each node, so a segment is steeper in its middle than
+            // end to end: laying nodes at exactly the grade asked for reads back as over it. Lay
+            // them again a shade shallower, by however much the first pass overshot.
+            var steepest = new List<float>();
+            var worst = RoadPlanner.Grades(Nodes, CellSize, steepest);
+            if (worst > grade + 1e-4f)
+                moved = Lay(grade * grade / worst, was);
+
+            Version++;
+            return moved;
+        }
+
+        /// <summary>
+        /// Lays every node after the first at <paramref name="grade"/> from the one before, each
+        /// stretch keeping the direction it ran in when the heights were <paramref name="was"/>.
+        /// </summary>
+        int Lay(float grade, float[] was)
+        {
             var moved = 0;
             for (var i = 1; i < Nodes.Count; i++)
             {
@@ -244,13 +270,12 @@ namespace TinyDiggers.Interaction
                 else if (was[i] < was[i - 1])
                     rise = -rise;
                 var height = Nodes[i - 1].Height + rise;
-                if (Mathf.Abs(height - Nodes[i].Height) > 1e-4f)
+                if (Mathf.Abs(height - was[i]) > 1e-4f)
                     moved++;
                 Nodes[i].Height = height;
                 Nodes[i].LockToGround = false;
             }
 
-            Version++;
             return moved;
         }
 
@@ -258,29 +283,36 @@ namespace TinyDiggers.Interaction
         /// Rounds the bend at node <paramref name="index"/> out towards <paramref name="radius"/>
         /// metres by pulling its handle along the way the road already runs. The turn cannot always
         /// be had — two nodes close together cannot round a wide arc — so it returns the radius it
-        /// actually reached, which is never tighter than the one it started from.
+        /// actually reached, which is never tighter than the one it started from. That reading is
+        /// this bend alone, not the whole road's worst: the neighbouring nodes have their own.
         /// </summary>
         public float SmoothTo(int index, float radius)
         {
-            if (index <= 0 || index >= Nodes.Count - 1)
+            if (Nodes.Count < 2 || index < 0 || index >= Nodes.Count)
                 return float.PositiveInfinity;
 
+            var first = index == 0;
+            var last = index == Nodes.Count - 1;
             var node = Nodes[index];
             var was = node.Handle;
             var direction = RoadSpline.Tangent(Nodes, index);
             if (node.HasHandle)
                 direction = node.Handle;
             if (direction.sqrMagnitude < 1e-8f)
-                direction = Nodes[index + 1].Position - Nodes[index - 1].Position;
+                direction = Nodes[Mathf.Min(Nodes.Count - 1, index + 1)].Position
+                            - Nodes[Mathf.Max(0, index - 1)].Position;
             if (direction.sqrMagnitude < 1e-8f)
                 return float.PositiveInfinity;
             direction = direction.normalized;
 
             // A longer handle sweeps the bend wider, up to about the shorter of the two chords;
             // past that the curve starts to overshoot and tightens again, so that is the ceiling.
-            var reach = Mathf.Min(
-                Vector2.Distance(node.Position, Nodes[index - 1].Position),
-                Vector2.Distance(node.Position, Nodes[index + 1].Position));
+            // At the two ends of the road there is only one chord to go by.
+            var reach = float.MaxValue;
+            if (!first)
+                reach = Mathf.Min(reach, Vector2.Distance(node.Position, Nodes[index - 1].Position));
+            if (!last)
+                reach = Mathf.Min(reach, Vector2.Distance(node.Position, Nodes[index + 1].Position));
             // Widen by steps and stop at the first handle that makes the turn asked for; if none
             // does, keep the widest turn found, which is never tighter than the one we started at.
             var bestHandle = was;
@@ -304,20 +336,33 @@ namespace TinyDiggers.Interaction
             Version++;
             return best;
 
+            // The road either side of the node, short of the neighbouring nodes themselves: those
+            // hold bends of their own, and reading them made the tool think a long handle had
+            // changed nothing, so it left the handle short (2.2 m stayed 2.5 m, 2026-09-22).
             float At(Vector2 handle)
             {
                 Nodes[index].Handle = handle;
-                return Mathf.Min(
-                    RoadSpline.TurnRadius(Nodes, index - 1, CellSize),
-                    RoadSpline.TurnRadius(Nodes, index, CellSize));
+                var tightest = float.PositiveInfinity;
+                if (!first)
+                    tightest = Mathf.Min(tightest, RoadSpline.TurnRadius(Nodes, index - 1, CellSize, Near, 1f));
+                if (!last)
+                    tightest = Mathf.Min(tightest, RoadSpline.TurnRadius(Nodes, index, CellSize, 0f, 1f - Near));
+                return tightest;
             }
         }
 
-        /// <summary>Rounds every bend in the road out towards <paramref name="radius"/> metres.</summary>
+        /// <summary>
+        /// Rounds every bend in the road out towards <paramref name="radius"/> metres, the two end
+        /// nodes included: an end's automatic tangent is a whole chord long, twice what an inside
+        /// node gets, and the swing that puts into the first and last stretches was the tightest
+        /// bend left on a road whose corners had all been rounded (2026-09-22). Neighbouring bends
+        /// pull on one another through the segment they share, so it sweeps twice.
+        /// </summary>
         public void SmoothAll(float radius)
         {
-            for (var i = 1; i + 1 < Nodes.Count; i++)
-                SmoothTo(i, radius);
+            for (var pass = 0; pass < 2; pass++)
+                for (var i = 0; i < Nodes.Count; i++)
+                    SmoothTo(i, radius);
         }
 
         /// <summary>

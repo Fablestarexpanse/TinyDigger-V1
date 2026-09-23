@@ -4658,3 +4658,72 @@ What this does **not** yet do, and is the next question rather than an oversight
 target height or a target grade directly. At the moment a node is raised by a nudge and you read
 the result; Cities Skylines lets you say "ten metres up" and holds it. That is a bigger change to
 `RoadDraft` and wants its own pass.
+
+---
+
+## 2026-09-22 — Road tool, part C: curves, ramps and the numbers that go with them
+
+Ronan: *"refine the road tool like city skyline 2 … you need to be able to find a slope or height
+or depth curves etc"*, then *"Use best choice you will also need all the smooth turn tools as well
+to make curves ramps etc"*. The three questions left open in part B were delegated, so they were
+answered here rather than asked again.
+
+**Curves already existed and were not the gap.** The road is a cubic Hermite spline through its
+nodes, each tangent automatic (Catmull-Rom) unless a handle has been dragged. Three clicks already
+gave a smooth curve. What was missing was any way to *judge* a bend and any way to shape one
+except dragging by eye.
+
+**Turn radius is the missing reading.** `RoadSpline.TurnRadius` walks a segment and takes the
+circumradius of each three consecutive points; the tightest is the segment's bend, in metres. A
+straight road returns infinity rather than dividing by a zero area, so "bigger is gentler" holds
+everywhere and a minimum radius is a plain floor. `RoadPlanner.JudgeTurn` grades it exactly as a
+slope is graded (over the minimum fine, under half of it refused) and the default minimum is 4 m —
+a little over five of the half-metre cells, the tightest bend a 0.7 m dumper rounds without
+reversing. It is **reported, not refused at commit**: the grade rules already decide what can be
+built, and a second gate would silently block roads the player has good reason to draw.
+
+**Smoothing had to be taught where to look.** `SmoothTo(node, radius)` widens the node's handle
+along the way the road already runs, in steps up to the shorter adjacent chord. Three wrong
+measures before the right one, all on the same dog-leg (two near-right-angle bends, 13 m legs,
+drawn bend 2.2 m):
+
+- the whole of both adjoining segments → **2.5 m**. The neighbouring node's own sharp bend
+  dominated the minimum, so every handle length scored the same and the tool kept the shortest.
+- the near 45% either side → **3.4 m**, but the stretch in the middle of the shared segment then
+  belonged to no node's reading, so the nodes each claimed over 4 m while the road turned in 3.4.
+- half a segment either side (every stretch owned by exactly one bend) → **3.4 m** again, because
+  the tight spot had moved next to the *end* nodes.
+- the whole of both segments bar the 15% nearest each neighbour, **ends included**, two sweeps →
+  **3.6 m**. An end node's automatic tangent is a whole chord, twice what an inside node gets, and
+  the swing that puts in the first and last stretches was the tightest bend left on a road whose
+  corners had all been rounded.
+
+**It stops at 3.6 m and says so.** Handle length alone cannot make that dog-leg turn in 4 m with
+the nodes where they are; a road wanting a wider arc needs another node, not a longer handle. So
+`SmoothTo` returns the radius it actually reached and the tool says "widened to 3.6 m — as far as
+these nodes allow", and the tally goes on showing "tightest bend 3.6 m". A tool that claimed the
+radius it was asked for would be worse than no tool. The test asserts the opening-out and the
+owning-up, not a number the code cannot promise.
+
+**A held grade has to aim below the grade it wants.** `ApplyGrade` lays every node after the first
+at one slope, each stretch keeping the way it already ran (up stays up, flat stays flat). Laid at
+exactly 12% it read back as **12.4% / 12.6%** — over the limit and orange — because the height
+eases in and out at each node, so a segment is steeper in its middle than end to end, and `Grade`
+reports the steepest point. A second pass at `grade × grade / worst` brings it to **11.7% / 12%**.
+`GradeLock` does the same while drawing: each node takes the last node's height plus the slope
+over the run, climbing or falling whichever way the ground goes.
+
+**"Hold N metres above the ground" is one field, not a mode.** `RoadNode.GroundOffset` is metres
+held above the land while the node still follows it. Nothing else changed: a causeway is a road
+whose nodes are locked to the ground two metres up. Carried through `Place`, `Move`, `SetLocked`
+and `Commit`.
+
+**Evidence** (`Screenshots/RoadCurve/`, one road, four states): drawn, tightest bend 2.2 m with
+every segment labelled; smoothed, 3.6 m and visibly a drivable S; the grade held, 11.7% / 0% /
+12%, 126.4 m³ of fill; and carried 2 m up, 384.1 m³ of fill with the embankment tapering down to
+the land on both sides — which is the thing Ronan asked for in as many words ("its sides need to
+taper down to support it like a real road"). Suite green: 535 passed, 1 skipped.
+
+**Keys** (Road tool): C smooths the bend at the active node, Shift+C the whole road; X makes a
+hard corner, Shift+X back to automatic; G holds the grade while drawing, Shift+G re-cuts the road
+already drawn to it; H carries the node half a metre higher over the ground, Shift+H lower.

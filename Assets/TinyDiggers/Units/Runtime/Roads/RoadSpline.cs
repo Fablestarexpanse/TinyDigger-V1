@@ -180,15 +180,25 @@ namespace TinyDiggers.Units
         /// all, so it returns <see cref="float.PositiveInfinity"/>: bigger is always gentler, and
         /// a minimum turn radius is a floor to compare against.
         /// </summary>
-        public static float TurnRadius(IReadOnlyList<RoadNode> chain, int i, float cellSize)
+        public static float TurnRadius(IReadOnlyList<RoadNode> chain, int i, float cellSize) =>
+            TurnRadius(chain, i, cellSize, 0f, 1f);
+
+        /// <summary>
+        /// The tightest turn along the stretch of segment <paramref name="i"/> between
+        /// <paramref name="from"/> and <paramref name="to"/> (0–1 along it). Shaping one node's
+        /// handle bends the curve near that node and straightens it further off, so a tool that
+        /// judged the whole segment would read the far end's bend and think it had done nothing.
+        /// </summary>
+        public static float TurnRadius(IReadOnlyList<RoadNode> chain, int i, float cellSize, float from, float to)
         {
             const int steps = 48;
             var tightest = float.PositiveInfinity;
-            var a = Flat3(Evaluate(chain, i, 0f));
-            var b = Flat3(Evaluate(chain, i, 1f / steps));
+            float At(int s) => Mathf.Lerp(from, to, s / (float)steps);
+            var a = Flat3(Evaluate(chain, i, At(0)));
+            var b = Flat3(Evaluate(chain, i, At(1)));
             for (var s = 2; s <= steps; s++)
             {
-                var c = Flat3(Evaluate(chain, i, s / (float)steps));
+                var c = Flat3(Evaluate(chain, i, At(s)));
                 var radius = Circumradius(a, b, c) * cellSize;
                 if (radius < tightest)
                     tightest = radius;
