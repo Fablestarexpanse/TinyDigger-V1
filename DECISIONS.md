@@ -5752,3 +5752,29 @@ and stalled whatever site it was on; the other claimed a freed unit would "take 
 the unit had already walked to its posted site and *that* was then the nearest work. Freeing a unit
 proves nothing while there is still work in front of it, so the test now takes the first site's work
 away as well.
+
+### Slice G — ribbons (2026-09-23)
+
+An open chain with a width, straight through `RoadPlanner.Footprint`: the same curve, the same
+nearest-sample stamping, the same half-cell shoulder easing back to the ground. A test asserts the
+cells and heights are identical to what the road tool stamps for the same chain and width, which is
+the cheapest possible proof that it is one implementation and not two that will drift.
+
+Two differences from a road, both deliberate. A ribbon is never paved — it leaves designations and no
+`MaterialTable.Road` anywhere — and it is never *refused* for grade, because a terrace edge is
+allowed to be steeper than anything a machine would drive.
+
+**A ribbon's nodes carry their height, unlike an area's.** An area has one target for the whole
+shape, so dragging a corner over a bank does not tilt the pad; a ribbon runs its height along the
+chain, so changing H between clicks grades it. Without that a ribbon would sit on the ground and ask
+for nothing at all, which is no use.
+
+### Nothing in this game persists (2026-09-23)
+
+Worth writing down because it was nearly built by accident. There is **no save system at all**:
+`RoadNetwork.ToJson` exists and is used only by its own tests, and the world is generated from a seed
+every time play starts. So the landform plan not surviving a reload is not a gap in this feature — it
+is the same gap roads, designations and the terrain itself have.
+
+Building persistence for landforms alone would be a save system for one layer of a game that has
+none, and which layers are worth saving is Ronan's call, not a slice of this. Left alone deliberately.

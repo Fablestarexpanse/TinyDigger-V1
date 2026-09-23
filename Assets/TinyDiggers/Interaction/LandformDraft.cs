@@ -81,7 +81,15 @@ namespace TinyDiggers.Interaction
         /// </summary>
         public RoadNode Place(Vector2 at, Func<Vector2, float> groundAt)
         {
-            var node = new RoadNode { Position = at, Height = groundAt?.Invoke(at) ?? 0f };
+            // A ribbon's nodes carry the height it is cut at, because the spline runs the height
+            // along the chain: place two at different H and the ribbon grades between them, which is
+            // how a haul route or a terrace edge is drawn. A ribbon on the ground would ask for
+            // nothing, which is no use at all.
+            //
+            // An area's nodes only draw the outline; its target is Landform.Height, one number for
+            // the whole shape, so dragging a corner over a bank does not tilt the pad.
+            var height = Form.Kind == LandformKind.Ribbon ? Form.Height : groundAt?.Invoke(at) ?? 0f;
+            var node = new RoadNode { Position = at, Height = height, LockToGround = false };
             Form.Nodes.Add(node);
             Touch();
             return node;

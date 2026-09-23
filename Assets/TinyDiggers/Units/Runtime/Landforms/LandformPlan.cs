@@ -24,6 +24,7 @@ namespace TinyDiggers.Units
         readonly List<RoadSample> _samples = new List<RoadSample>();
         readonly List<Vector2> _outline = new List<Vector2>();
         readonly List<int> _cells = new List<int>();
+        readonly List<PlannedCell> _footprint = new List<PlannedCell>();
 
         /// <summary>How finely an outline is walked before its cells are worked out, in cells.</summary>
         public const float SampleSpacing = RoadPlanner.SampleSpacing;
@@ -107,7 +108,15 @@ namespace TinyDiggers.Units
             owners?.Clear();
             foreach (var form in _forms)
             {
-                if (form.Kind != LandformKind.Area || !form.IsDrawn)
+                if (!form.IsDrawn)
+                    continue;
+                if (form.Kind == LandformKind.Ribbon)
+                {
+                    Ribbon(grid, form, into, owners);
+                    continue;
+                }
+
+                if (form.Kind != LandformKind.Area)
                     continue;
 
                 LandformSpline.Polygon(form, SampleSpacing, _samples, _outline);
@@ -129,6 +138,41 @@ namespace TinyDiggers.Units
                     if (owners != null)
                         owners[cell] = form.Id;
                 }
+            }
+        }
+
+        /// <summary>
+        /// A ribbon: an open chain with a width, which is a road that is never paved. It is the road
+        /// tool's own footprint — same curve, same nearest-sample stamping, same half-cell shoulder
+        /// easing back to the ground — so a terrace edge or a haul route cut by this tool comes out
+        /// exactly as the road tool would cut it, without a second implementation to drift.
+        ///
+        /// The one thing it does not take from a road is the refusal: a road over twice the grade
+        /// limit is rejected, and a ribbon is only ever a shape somebody asked for.
+        /// </summary>
+        void Ribbon(TerrainGrid grid, Landform form, Dictionary<int, float> into, Dictionary<int, int> owners)
+        {
+            RoadSpline.Sample(form.Nodes, RoadPlanner.SampleSpacing, _samples);
+            if (_samples.Count < 2)
+                return;
+
+            _footprint.Clear();
+            RoadPlanner.Footprint(grid, _samples, Mathf.Max(1, form.Width), _footprint, null, includeSettled: true);
+            foreach (var cell in _footprint)
+            {
+                var key = cell.Z * grid.Width + cell.X;
+                var height = cell.Height;
+                if (into.TryGetValue(key, out var already))
+                    height = form.Blend switch
+                    {
+                        LandformBlend.Lower => Mathf.Min(already, height),
+                        LandformBlend.Raise => Mathf.Max(already, height),
+                        _ => height,
+                    };
+
+                into[key] = height;
+                if (owners != null)
+                    owners[key] = form.Id;
             }
         }
 

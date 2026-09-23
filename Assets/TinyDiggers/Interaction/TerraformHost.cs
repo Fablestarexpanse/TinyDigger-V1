@@ -225,6 +225,8 @@ namespace TinyDiggers.Interaction
                 return SetKind(LandformKind.Heap, "Heap — spoil goes here, crowned at H");
             if (keyboard.pKey.wasPressedThisFrame && !keyboard.ctrlKey.isPressed)
                 return SetKind(LandformKind.Pit, "Pit — dug in benches down to H");
+            if (keyboard.rKey.wasPressedThisFrame && !keyboard.ctrlKey.isPressed)
+                return SetKind(LandformKind.Ribbon, "Ribbon — a route cut at H; change H between clicks to grade it");
 
             return false;
         }
@@ -460,9 +462,7 @@ namespace TinyDiggers.Interaction
                 // The outline itself, at the height it is asking for, and its corners.
                 if (Draft.Any)
                 {
-                    LandformSpline.Polygon(Draft.Form, LandformPlan.SampleSpacing, _samples, _outline);
-                    GhostMesh.Loop(_outline, Draft.Form.Height + 0.15f, 0.12f, OutlineColor,
-                        _vertices, _colors, _triangles, cell);
+                    Edge(Draft.Form, Draft.Form.Height + 0.15f, 0.12f, OutlineColor, cell);
                     var nodes = Draft.Form.Nodes;
                     for (var i = 0; i < nodes.Count; i++)
                         GhostMesh.Disc(nodes[i].Position, Draft.Form.Height + 0.2f, 0.55f,
@@ -475,9 +475,7 @@ namespace TinyDiggers.Interaction
                 {
                     if (!form.IsDrawn)
                         continue;
-                    LandformSpline.Polygon(form, LandformPlan.SampleSpacing, _samples, _outline);
-                    GhostMesh.Loop(_outline, form.Height + 0.1f, 0.08f, BuiltColor,
-                        _vertices, _colors, _triangles, cell);
+                    Edge(form, form.Height + 0.1f, 0.08f, BuiltColor, cell);
                 }
             }
 
@@ -485,6 +483,24 @@ namespace TinyDiggers.Interaction
             _mesh.SetVertices(_vertices);
             _mesh.SetColors(_colors);
             _mesh.SetTriangles(_triangles, 0, true);
+        }
+
+        /// <summary>
+        /// A shape's edge: the loop round a closed one, or the centre line along a ribbon. A ribbon
+        /// drawn as a loop would close itself back to the start, which is not a route.
+        /// </summary>
+        void Edge(Landform form, float height, float half, Color32 colour, float cell)
+        {
+            if (form.Kind == LandformKind.Ribbon)
+            {
+                RoadSpline.Sample(form.Nodes, RoadPlanner.SampleSpacing, _samples);
+                GhostMesh.Ribbon(_samples, form.Width * 0.5f, 0.08f, _ => colour,
+                    _vertices, _colors, _triangles, cell);
+                return;
+            }
+
+            LandformSpline.Polygon(form, LandformPlan.SampleSpacing, _samples, _outline);
+            GhostMesh.Loop(_outline, height, half, colour, _vertices, _colors, _triangles, cell);
         }
 
         GUIStyle _label;
@@ -521,8 +537,10 @@ namespace TinyDiggers.Interaction
             };
             GUI.Label(new Rect(12f, Screen.height - 76f, 700f, 26f), says, _label);
             GUI.Label(new Rect(12f, Screen.height - 48f, 700f, 26f),
-                Draft.CanCommit ? "Enter commits   •   A area, H heap, P pit   •   C curves the outline   •   Backspace undoes a corner"
-                    : "Click to drop corners — three make a shape   •   A area, H heap, P pit", _label);
+                Draft.CanCommit
+                    ? "Enter commits   •   A area, H heap, P pit, R ribbon   •   C curves it   •   Backspace undoes a corner"
+                    : "Click to drop corners — three make a shape, two make a ribbon   •   A area, H heap, P pit, R ribbon",
+                _label);
         }
     }
 }
