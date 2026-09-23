@@ -87,6 +87,7 @@ namespace TinyDiggers.Interaction
         float _lastClickTime;
         Vector2 _lastClickAt;
         DesignationMap _builtFor;
+        Material _ghostMaterial;
 
         public RoadNetwork Network { get; private set; } = new RoadNetwork();
 
@@ -127,7 +128,15 @@ namespace TinyDiggers.Interaction
             holder.transform.SetParent(terrain.transform, false);
             holder.AddComponent<MeshFilter>().sharedMesh = _mesh;
             var meshRenderer = holder.AddComponent<MeshRenderer>();
-            meshRenderer.sharedMaterial = material;
+            // The ghost's own copy of the overlay material, drawn without a depth test: a road cut
+            // through a hill is inside the hill, and a ghost you cannot see is no use for deciding
+            // how deep to cut. The designation tiles keep the shared material and its normal
+            // depth test, because a tile lying on the ground should be hidden by what is in front
+            // of it.
+            _ghostMaterial = new Material(material) { name = "Road Ghost" };
+            if (_ghostMaterial.HasProperty("_ZTest"))
+                _ghostMaterial.SetFloat("_ZTest", (float)UnityEngine.Rendering.CompareFunction.Always);
+            meshRenderer.sharedMaterial = _ghostMaterial;
             meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
             Network.Changed += Replan;
             terrain.Regenerated += Forget;
@@ -137,6 +146,8 @@ namespace TinyDiggers.Interaction
         {
             if (_terrain != null)
                 _terrain.Regenerated -= Forget;
+            if (_ghostMaterial != null)
+                Destroy(_ghostMaterial);
         }
 
         /// <summary>A new island: no roads.</summary>
@@ -767,10 +778,15 @@ namespace TinyDiggers.Interaction
             {
                 var s = samples[i];
                 var across = new Vector2(-s.Direction.y, s.Direction.x) * half;
-                // On the road bed, or on the ground where the road is cut into it, so the ribbon
-                // reads as one band instead of vanishing into the hill it will cut.
-                var ground = GroundAt(new Vector2(s.Position.x, s.Position.z));
-                var height = Mathf.Max(s.Position.y, ground) + lift;
+                // At the road's own height, always — including where that is under the hill.
+                //
+                // It used to be lifted to the ground wherever the road was cut into it, so the
+                // band never vanished. That was fine while a road only rode the land; it lies as
+                // soon as one is cut through a rise, which is the whole point of the Cut through
+                // toggle: the labels said "0%, cut 9 m" while the ribbon drawn beside them climbed
+                // the hill in steps (Ronan, 2026-09-23: "it shows going over; the visual should
+                // show it at the same level going through").
+                var height = s.Position.y + lift;
                 _vertices.Add(new Vector3((s.Position.x - across.x) * cell, height, (s.Position.z - across.y) * cell));
                 _vertices.Add(new Vector3((s.Position.x + across.x) * cell, height, (s.Position.z + across.y) * cell));
                 var c = color(s.Segment);

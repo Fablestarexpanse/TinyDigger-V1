@@ -5284,3 +5284,26 @@ toggle) turns that off: a node takes the height of the node before it instead, s
 into a rise becomes a cutting for the crew to dig and a dip becomes an embankment to fill. Grade
 lock still wins where it is set. Following the ground stays the default, because that is what a
 road does across open country.
+
+---
+
+## 2026-09-23 — The road ghost was drawn on the ground it was meant to cut through
+
+Ronan, with a picture: the labels read `0%`, `cut 9 m`, nodes at `-4 m` — all correct — while the
+green band beside them climbed the hill in steps. *"The cut through shows going over; the visual
+should show it at the same level going through."*
+
+`Ribbon` lifted every sample to `Mathf.Max(roadHeight, groundHeight)`, with a comment explaining
+why: so the band "reads as one band instead of vanishing into the hill it will cut". That was a
+fair trade while a road only ever rode the land. It became a lie the moment a road could be cut
+through a rise, and it hid the one thing the player is deciding.
+
+**The ribbon is now drawn at the road's own height, always.** Which buries it, so the ghost gets
+its own copy of the overlay material with the depth test off. `TerrainOverlay.shader` gained a
+`_ZTest` property defaulting to `LEqual`, so the designation tiles are unchanged — a tile lying on
+the ground *should* be hidden by what is in front of it — and only the road ghost asks for
+`Always`. A ghost you cannot see is no use for deciding how deep to cut.
+
+Checked in play: a five-cell road drawn with **Cut through** from flat ground into a rise holds
+**6 m** across all its nodes while the ground under them goes 6 → 9.5 → 12.5 → **25.5 m**, and the
+band draws dead level through the hillside with the cut faces beside it.
