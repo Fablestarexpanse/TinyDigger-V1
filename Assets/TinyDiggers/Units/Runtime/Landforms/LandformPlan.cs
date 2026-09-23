@@ -133,6 +133,50 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
+        /// The heaps' caps and the pits' floors, per cell. Separate channels from the surface,
+        /// because a cap and a dig target on the same cell are different statements: one says where
+        /// spoil may go, the other says what the ground should become.
+        /// </summary>
+        public void Zones(TerrainGrid grid, Dictionary<int, float> caps, Dictionary<int, float> floors,
+            Dictionary<int, int> owners = null)
+        {
+            if (grid == null)
+                throw new ArgumentNullException(nameof(grid));
+
+            caps?.Clear();
+            floors?.Clear();
+            var inside = new List<InsideCell>();
+            var one = new Dictionary<int, float>();
+            foreach (var form in _forms)
+            {
+                var heap = form.Kind == LandformKind.Heap;
+                var pit = form.Kind == LandformKind.Pit;
+                if (!heap && !pit || !form.IsDrawn)
+                    continue;
+                var into = heap ? caps : floors;
+                if (into == null)
+                    continue;
+
+                LandformSpline.Polygon(form, SampleSpacing, _samples, _outline);
+                LandformRaster.Fill(grid, _outline, _cells);
+                LandformRaster.Inside(grid, _cells, inside);
+                if (heap)
+                    LandformProfile.Heap(grid, form, inside, one);
+                else
+                    LandformProfile.Pit(grid, form, inside, one);
+
+                foreach (var pair in one)
+                {
+                    // Later wins here too, and for the same reason: a heap drawn over a pit is you
+                    // changing your mind about that ground, not asking for both.
+                    into[pair.Key] = pair.Value;
+                    if (owners != null)
+                        owners[pair.Key] = form.Id;
+                }
+            }
+        }
+
+        /// <summary>
         /// The whole plan as cells to dig and fill. <paramref name="includeSettled"/> keeps cells
         /// that already sit at their target, which the ghost wants so a shape draws as one piece
         /// rather than with holes wherever no work happens to be needed.

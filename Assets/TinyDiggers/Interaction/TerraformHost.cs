@@ -30,6 +30,8 @@ namespace TinyDiggers.Interaction
         static readonly Color32 DigColor = new Color32(235, 70, 60, 90);
         static readonly Color32 FillColor = new Color32(70, 140, 245, 90);
         static readonly Color32 FlatColor = new Color32(200, 205, 210, 55);
+        static readonly Color32 HeapColor = new Color32(80, 205, 95, 90);
+        static readonly Color32 PitColor = new Color32(220, 160, 70, 90);
         static readonly Color32 CutFaceColor = new Color32(215, 150, 95, 95);
         static readonly Color32 FillFaceColor = new Color32(110, 165, 235, 95);
         static readonly Color32 OutlineColor = new Color32(255, 255, 255, 230);
@@ -52,6 +54,10 @@ namespace TinyDiggers.Interaction
         readonly List<Vector2> _outline = new List<Vector2>();
         readonly List<RoadSample> _samples = new List<RoadSample>();
         readonly Dictionary<int, float> _surface = new Dictionary<int, float>();
+        readonly Dictionary<int, float> _caps = new Dictionary<int, float>();
+        readonly Dictionary<int, float> _floors = new Dictionary<int, float>();
+        readonly List<InsideCell> _inside = new List<InsideCell>();
+        readonly Dictionary<int, float> _profile = new Dictionary<int, float>();
 
         int _plannedVersion = -1;
         int _dragNode = -1;
@@ -71,6 +77,14 @@ namespace TinyDiggers.Interaction
 
         /// <summary>Cells the draft covers, for the readout.</summary>
         public int Cells { get; private set; }
+
+        /// <summary>A heap's m³ before it reaches the shape drawn, and a pit's m³ above its floor.</summary>
+        public float Capacity { get; private set; }
+
+        public float Reserves { get; private set; }
+
+        /// <summary>How many benches deep a drafted pit goes.</summary>
+        public int Benches { get; private set; }
 
         public bool IsDrawing => Draft.Any;
 
@@ -202,7 +216,23 @@ namespace TinyDiggers.Interaction
                 return true;
             }
 
+            // What the shape is for. A drawn outline keeps its corners when the kind changes, so you
+            // can draw a pad and decide afterwards that it is a pit.
+            if (keyboard.aKey.wasPressedThisFrame && !keyboard.ctrlKey.isPressed)
+                return SetKind(LandformKind.Area, "Area — levelled to H");
+            if (keyboard.hKey.wasPressedThisFrame && !keyboard.ctrlKey.isPressed)
+                return SetKind(LandformKind.Heap, "Heap — spoil goes here, crowned at H");
+            if (keyboard.pKey.wasPressedThisFrame && !keyboard.ctrlKey.isPressed)
+                return SetKind(LandformKind.Pit, "Pit — dug in benches down to H");
+
             return false;
+        }
+
+        bool SetKind(LandformKind kind, string says)
+        {
+            Draft.SetKind(kind);
+            _tools.Say(says);
+            return true;
         }
 
         public void Cancel()
@@ -231,10 +261,17 @@ namespace TinyDiggers.Interaction
             _tools.History?.Begin("terraform");
             Plan.Rasterise(Grid, _committedCells);
             var made = Builder.Commit(_committedCells);
+            Plan.Zones(Grid, _caps, _floors);
+            Builder.CommitZones(_caps, _floors);
             _tools.History?.Commit();
 
             Blueprints.Volumes(_committedCells, out var cut, out var fill, Grid.CellArea);
-            _tools.Say($"Shape committed: {made} cells of work, cut {cut:0.#} m³, fill {fill:0.#} m³");
+            _tools.Say(form.Kind switch
+            {
+                LandformKind.Heap => $"Heap committed: holds {LandformProfile.Capacity(Grid, _caps):0.#} m³",
+                LandformKind.Pit => $"Pit committed: {LandformProfile.Reserves(Grid, _floors):0.#} m³ in reserve",
+                _ => $"Shape committed: {made} cells of work, cut {cut:0.#} m³, fill {fill:0.#} m³",
+            });
         }
 
         /// <summary>Takes the shape under the cursor out of the plan, and its orders with it.</summary>
@@ -316,13 +353,40 @@ namespace TinyDiggers.Interaction
             Draft.CellSize = Grid.CellSize;
             _preview.Clear();
             _faces.Clear();
+            _profile.Clear();
             Cut = Fill = 0f;
+            Capacity = Reserves = 0f;
+            Benches = 0;
             Cells = 0;
             if (!Draft.CanCommit)
                 return;
 
             var one = new LandformPlan();
             one.Add(Draft.Form);
+
+            // A heap and a pit are shapes for spoil and for material, not work to be done: they have
+            // a profile and a number, not a cut and a fill.
+            if (Draft.Form.Kind == LandformKind.Heap || Draft.Form.Kind == LandformKind.Pit)
+            {
+                LandformSpline.Polygon(Draft.Form, LandformPlan.SampleSpacing, _samples, _outline);
+                LandformRaster.Fill(Grid, _outline, _rim);
+                LandformRaster.Inside(Grid, _rim, _inside);
+                if (Draft.Form.Kind == LandformKind.Heap)
+                {
+                    LandformProfile.Heap(Grid, Draft.Form, _inside, _profile);
+                    Capacity = LandformProfile.Capacity(Grid, _profile);
+                }
+                else
+                {
+                    LandformProfile.Pit(Grid, Draft.Form, _inside, _profile);
+                    Reserves = LandformProfile.Reserves(Grid, _profile);
+                    Benches = LandformProfile.Benches(Grid, Draft.Form, _profile);
+                }
+
+                Cells = _profile.Count;
+                return;
+            }
+
             one.Rasterise(Grid, _preview, includeSettled: true);
 
             // What the ground round the shape does once it is built. Only the rim can batter
@@ -364,6 +428,18 @@ namespace TinyDiggers.Interaction
                     var colour = planned.IsDig ? DigColor : planned.IsFill ? FillColor : FlatColor;
                     DesignationsView.AddTile(planned.X, planned.Z, top, top, top, top,
                         colour, _vertices, _colors, _triangles, cell);
+                }
+
+                // A heap's crown or a pit's benches, drawn at the height the profile asks for — the
+                // cone or the steps, not a flat sheet at one number.
+                var heap = Draft.Form.Kind == LandformKind.Heap;
+                foreach (var pair in _profile)
+                {
+                    var x = pair.Key % Grid.Width;
+                    var z = pair.Key / Grid.Width;
+                    var top = pair.Value + 0.06f;
+                    DesignationsView.AddTile(x, z, top, top, top, top,
+                        heap ? HeapColor : PitColor, _vertices, _colors, _triangles, cell);
                 }
 
                 // The outline itself, at the height it is asking for, and its corners.
@@ -415,15 +491,23 @@ namespace TinyDiggers.Interaction
             // heap somewhere.
             var area = Cells * Grid.CellArea;
             var balance = Cut - Fill;
-            var says = $"cut {Cut:0.#} m³   fill {Fill:0.#} m³   "
-                       + (Mathf.Abs(balance) < 0.05f ? "balanced"
-                           : balance > 0f ? $"spoil {balance:0.#} m³ to tip"
-                           : $"needs {-balance:0.#} m³")
-                       + $"   area {area:0.#} m²";
-            GUI.Label(new Rect(12f, Screen.height - 76f, 620f, 26f), says, _label);
-            GUI.Label(new Rect(12f, Screen.height - 48f, 620f, 26f),
-                Draft.CanCommit ? "Enter or double-click to commit   •   C curves the outline   •   Backspace undoes a corner"
-                    : "Click to drop corners — three make a shape", _label);
+            var says = Draft.Form.Kind switch
+            {
+                // A heap's number is what it holds before it starts spreading, not a limit: the
+                // crown is what you drew, and spoil past it piles on and runs out at its own angle.
+                LandformKind.Heap => $"heap holds {Capacity:0.#} m³ before it spreads   area {area:0.#} m²",
+                LandformKind.Pit => $"pit holds {Reserves:0.#} m³   {Benches} bench{(Benches == 1 ? "" : "es")}"
+                                    + $"   area {area:0.#} m²",
+                _ => $"cut {Cut:0.#} m³   fill {Fill:0.#} m³   "
+                     + (Mathf.Abs(balance) < 0.05f ? "balanced"
+                         : balance > 0f ? $"spoil {balance:0.#} m³ to tip"
+                         : $"needs {-balance:0.#} m³")
+                     + $"   area {area:0.#} m²",
+            };
+            GUI.Label(new Rect(12f, Screen.height - 76f, 700f, 26f), says, _label);
+            GUI.Label(new Rect(12f, Screen.height - 48f, 700f, 26f),
+                Draft.CanCommit ? "Enter commits   •   A area, H heap, P pit   •   C curves the outline   •   Backspace undoes a corner"
+                    : "Click to drop corners — three make a shape   •   A area, H heap, P pit", _label);
         }
     }
 }

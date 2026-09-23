@@ -5690,3 +5690,39 @@ The lesson is the same one this project keeps relearning: **a flag that means tw
 mean the wrong one.** `DontSave` bundles "do not write to disk" with "outlive the scene", and only
 the first was ever wanted; `Settle`'s footprint bundles "batter with these" with "do not batter
 these", and only the first was ever wanted.
+
+### Slice E — heaps and pits, and an hour lost to a stale assembly (2026-09-23)
+
+`LandformProfile` turns the inside-distance walk into the two shapes that were missing:
+
+- A **heap** rises from its outline at the spoil's angle of repose until it reaches the crown, so it
+  is a heap with a foot and batter sides rather than a slab. It is written as a dump zone with **no
+  hard cap**: the crown is what you drew, not a wall (Ronan's ruling), so the crew keep tipping, and
+  past the crown the spoil piles on and spreads at its own angle — which the slump already does.
+  The profile is the ghost and the capacity number, *what it holds before it starts spreading*.
+- A **pit** steps down in benches from the rim, each `BenchWidth` cells wide and `BenchHeight` deep,
+  never below the floor asked for, written as per-cell quarry floors. Reserves come straight from
+  `QuarryLeft`, which already existed.
+
+Both follow the lie of the land, because the distance walk carries the ground at the nearest point
+*outside* the outline with it. A heap along a bank has its foot on the bank.
+
+**No crew change was needed for any of it**, which was the bet made when this started.
+
+**The expensive lesson, and it is not about landforms.** Two tests failed for an hour against numbers
+the same code produced correctly when run directly from the bridge. The test runner was executing a
+**stale assembly**: the failures quoted assertion text that had already been deleted from the file.
+`AssetDatabase.Refresh` returned with `compiling=False` and did nothing, `RequestScriptReload` did
+nothing, and `CompilationPipeline.RequestScriptCompilation` did nothing — Unity had decided the file
+was unchanged. Appending a line to the file and importing it finally gave `compiling=True`.
+
+So: **when a test disagrees with a probe of the same code, suspect the build before the logic.** The
+tell is cheap and decisive — an assertion message in the failure output that no longer exists in the
+source. Editor.log timestamps on the .dll against the .cs are *not* a reliable signal; they sat nine
+seconds apart in both directions throughout.
+
+The two tests were wrong as well, and honestly so: one assumed a rim cell would be within a repose
+slope of the ground without allowing for the height-step snap, and the other wrote down the two-metre
+step it meant to make rather than measuring the step it actually made — a column's surface is not the
+sum of the layers put into it. Both now derive their expectations from the same grid they are
+testing against.

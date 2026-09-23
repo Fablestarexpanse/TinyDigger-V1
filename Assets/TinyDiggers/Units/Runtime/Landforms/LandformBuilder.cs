@@ -32,6 +32,8 @@ namespace TinyDiggers.Units
         readonly TerrainGrid _grid;
         readonly DesignationMap _map;
         readonly Dictionary<int, float> _committed = new Dictionary<int, float>();
+        readonly Dictionary<int, float> _caps = new Dictionary<int, float>();
+        readonly Dictionary<int, float> _floors = new Dictionary<int, float>();
 
         public LandformBuilder(TerrainGrid grid, DesignationMap map)
         {
@@ -79,11 +81,50 @@ namespace TinyDiggers.Units
             return made;
         }
 
+        /// <summary>
+        /// Puts the heaps' caps and the pits' floors where the crew will find them. Both go in per
+        /// cell, which `DesignationMap` has always allowed and no tool has ever used: that is the
+        /// whole of what makes a heap a heap instead of a slab, and a pit benched instead of a box.
+        ///
+        /// A heap's cap goes in as **no cap at all**. The crown is what the player drew, not a wall
+        /// (Ronan's ruling): the crew tip into the lowest cell of the zone as they already do, so
+        /// the heap fills evenly and takes the drawn shape by itself, and when it passes the crown it
+        /// keeps piling and spreads at the repose angle, which the slump does for free.
+        /// </summary>
+        public void CommitZones(IReadOnlyDictionary<int, float> caps, IReadOnlyDictionary<int, float> floors)
+        {
+            var width = _grid.Width;
+
+            foreach (var pair in _caps)
+                if (caps == null || !caps.ContainsKey(pair.Key))
+                    _map.SetDumpZone(pair.Key % width, pair.Key / width, false);
+            foreach (var pair in _floors)
+                if (floors == null || !floors.ContainsKey(pair.Key))
+                    _map.SetQuarry(pair.Key % width, pair.Key / width, false);
+
+            _caps.Clear();
+            _floors.Clear();
+            if (caps != null)
+                foreach (var pair in caps)
+                {
+                    _map.SetDumpZone(pair.Key % width, pair.Key / width, true);
+                    _caps[pair.Key] = pair.Value;
+                }
+
+            if (floors != null)
+                foreach (var pair in floors)
+                {
+                    _map.SetQuarry(pair.Key % width, pair.Key / width, true, pair.Value);
+                    _floors[pair.Key] = pair.Value;
+                }
+        }
+
         /// <summary>Takes the whole plan back off the crew.</summary>
         public void Clear()
         {
             Release(null);
             _committed.Clear();
+            CommitZones(null, null);
         }
 
         /// <summary>

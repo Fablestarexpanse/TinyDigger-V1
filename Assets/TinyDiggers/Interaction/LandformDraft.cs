@@ -130,6 +130,18 @@ namespace TinyDiggers.Interaction
             Touch();
         }
 
+        /// <summary>
+        /// What the shape is for. The outline is kept, so a pad you have already drawn can become a
+        /// pit without drawing it again.
+        /// </summary>
+        public void SetKind(LandformKind kind)
+        {
+            if (Form.Kind == kind)
+                return;
+            Form.Kind = kind;
+            Touch();
+        }
+
         public void SetCurved(bool curved)
         {
             if (Form.Curved == curved)
