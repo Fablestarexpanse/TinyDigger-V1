@@ -4441,3 +4441,20 @@ If that is it, the fix is narrower than "rework when a rethink happens": **a ram
 ended while a unit is on its way to cut its step.** Hysteresis on one decision rather than a change
 to how every unit hears about the world. Confirm first — log `EndRamp` and `PlaceRampStep` for a
 few ticks — because this is the fourth explanation for these cells and the first three were wrong.
+
+## 2026-09-22 — Ronan: smoothing is a unit's job, and the next trial is a road cut
+
+Two rulings.
+
+**Smoothing comes off the list.** *"dont worry about smoothing i will use a new unit for that"* —
+so trial C goes, and levelling ground is a job for a machine built to do it rather than something
+the general crew logic has to be good at.
+
+**The next trial is a straight road cut.** *"lets try and get the dirt feeling like its actually
+dumping and spilling, lets test a big long road section cutting through a hill straight not sloped
+with a large quarry and a large dump site."*
+
+So the thing being judged is **how the material looks and behaves**, not whether the job completes:
+a long straight corridor held at one level through a rise, so there is a real cut face and real
+spoil, with a quarry big enough to feed the fill and a dump big enough to take the surplus. The
+road is held level rather than following the ground on purpose — a sloped road hides the cut.
