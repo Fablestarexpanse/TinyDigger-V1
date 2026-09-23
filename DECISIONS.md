@@ -4458,3 +4458,26 @@ So the thing being judged is **how the material looks and behaves**, not whether
 a long straight corridor held at one level through a rise, so there is a real cut face and real
 spoil, with a quarry big enough to feed the fill and a dump big enough to take the surplus. The
 road is held level rather than following the ground on purpose — a sloped road hides the cut.
+
+## 2026-09-22 — Why a tip did not look like a tip
+
+`TinyDiggers/Road Cut Capture`: a forty-cell road at width five, held **level** at 6.5 m through a
+3 m soil rise, with a 225-cell tip and a 169-cell quarry. The cut reads well — there is a face, and
+the mech works it — and the tip reads as nothing at all. Two separate causes, neither of them the
+angle of repose, which was there and working the whole time.
+
+**The slump was over before it could be seen.** `TerrainView.SlumpTilesPerTick` was a thousand
+cells a frame, so a tipped load finished finding its angle in the same frame it landed. There is
+now a `SlumpTilesPerSecond` (ninety) budgeted in **unscaled** seconds, so a barrow's cascade takes
+about half a second to run whether the clock is at one times or twenty — what is being paced is the
+eye, not the work. Nought turns the limit off, which is what generation wants.
+
+**And the heap was being deliberately flattened — by my own fix.** "Build out before up", added
+this morning to stop a tip growing a 2.5 m tower that walled the crew in, spreads each load onto
+the lowest cells of the zone. Over 225 cells that takes a road cutting's spoil as a film. Right for
+pathing, wrong for the eye. The cap is now three steps proud of the zone floor rather than one
+climb, which builds a mound with a slumped apron and still stops well short of the tower.
+
+The first attempt at the trial is worth keeping too: it took the biggest rise it could find, which
+was a **twenty-metre rock mountain**, and marked a road across the top of it. True to the letter and
+no use. The search is banded now — soil only, one and a half to six metres, aiming for three.

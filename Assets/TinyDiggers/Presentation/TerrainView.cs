@@ -88,6 +88,22 @@ namespace TinyDiggers.Presentation
         /// <summary>Most cells the slump simulator examines per frame; the rest wait for the next frame.</summary>
         [Min(1)] public int SlumpTilesPerTick = 1000;
 
+        /// <summary>
+        /// Cells the slump simulator may examine per **second**, so spoil takes a moment to find
+        /// its angle instead of arriving already settled.
+        ///
+        /// A thousand a frame meant a tipped load finished spreading in the same frame it landed —
+        /// the angle of repose was all there and none of it was ever visible, and a tip read as
+        /// ground changing rather than as dirt being dumped (Ronan, 2026-09-22). At ninety a
+        /// second a barrow's worth of cascade takes about half a second, which is long enough to
+        /// see it run and short enough not to hold the site up. Nought means no limit, which is
+        /// what generation wants.
+        /// </summary>
+        [Min(0f)] public float SlumpTilesPerSecond = 90f;
+
+        /// <summary>Carried-over fraction of a cell, so the rate does not depend on the frame rate.</summary>
+        float _slumpBudget;
+
         ChunkedTerrainRenderer _terrainRenderer;
         AngleOfReposeSimulator _slump;
         TerrainDetail _detail;
@@ -250,7 +266,21 @@ namespace TinyDiggers.Presentation
 
         void Update()
         {
-            _slump.MaxTilesPerTick = SlumpTilesPerTick;
+            // Budgeted by the second rather than by the frame, and by *unscaled* time: a tip should
+            // take the same moment to settle whether the clock is running at one times or twenty,
+            // because what is being paced here is the eye, not the work.
+            if (SlumpTilesPerSecond > 0f)
+            {
+                _slumpBudget += SlumpTilesPerSecond * Time.unscaledDeltaTime;
+                var take = Mathf.FloorToInt(_slumpBudget);
+                _slumpBudget -= take;
+                _slump.MaxTilesPerTick = Mathf.Clamp(take, 0, SlumpTilesPerTick);
+            }
+            else
+            {
+                _slump.MaxTilesPerTick = SlumpTilesPerTick;
+            }
+
             using (SlumpMarker.Auto())
                 _slump.Tick();
         }

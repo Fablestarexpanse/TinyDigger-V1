@@ -336,6 +336,18 @@ namespace TinyDiggers.Units
 
         /// <summary>The lowest cell of the dump zones when the tip in hand was planned.</summary>
         float _zoneFloor = float.MinValue;
+
+        /// <summary>
+        /// How far above the floor of a dump zone its spoil may stand: the height of a heap.
+        ///
+        /// This was one climb — half a metre on the sandbox's grid — which kept the crew out of
+        /// trouble and left nothing to look at. Two hundred and twenty-five cells of tip took a
+        /// road cutting's spoil as a film you could not see, when what a tip should look like is a
+        /// mound with a slumped apron. Three steps builds that and still caps it well under the
+        /// two-and-a-half-metre tower that walled the crew in before there was any cap at all
+        /// (Ronan, 2026-09-22: "get the dirt feeling like its actually dumping and spilling").
+        /// </summary>
+        float HeapProud => 3f * Step;
         float _parkTimer;
         int _parkLoadVersion;
         bool _loadFull;
@@ -1303,7 +1315,7 @@ namespace TinyDiggers.Units
                         // with it. Nine and three quarter cubic metres made a tower 2.5 m tall
                         // that walled the tip in, where spread over the zone it would have stood
                         // 0.8 m (2026-09-22).
-                        && _grid.GetSurfaceHeight(x, z) <= _zoneFloor + _dispatcher.Climb + Epsilon
+                        && _grid.GetSurfaceHeight(x, z) <= _zoneFloor + HeapProud + Epsilon
                         && CanTipOnto(standX, standZ, standHeight, x, z, _designations.DumpZoneCap(x, z));
                 default:
                     return false;
