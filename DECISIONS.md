@@ -4190,3 +4190,55 @@ Two ways out, for whoever picks it up:
 2. **Let a unit move apart.** The radius check refuses any move that would put two units too close;
    it should allow a move that *increases* the distance between them, which is exactly what all
    four of these are trying to do. A cluster would then unwind itself in one step.
+
+## 2026-09-22 — What a unit should carry, and the metric to set it by
+
+Ronan: *"we should also figure out the best amount of material to dig and carry for each unit that
+will make gameplay fun but not too fast, and we can use as a metric to scale up when we add bigger
+units."*
+
+`Assets/TinyDiggers/Units/Tests/LoadSizingTests.cs` is the bench for it: one unit, a strip of face
+it can always reach, a tip a measured distance away, ten game minutes. It prints **cubic metres a
+game minute at a given haul** and where the time went, every test run.
+
+The first cut of it measured the site instead of the unit — a five by five block two metres deep
+read "Unreachable 82%", which is true of the block and says nothing about a barrow. A strip three
+cells wide fixes it: every cell of it is next to open ground.
+
+| unit | load | 3 m haul | 10 m haul | digging | moving |
+| --- | --- | --- | --- | --- | --- |
+| starter robot | 3 cuts (0.375 m³) | 0.80 m³/min | 0.45 m³/min | 4–8% | 86–93% |
+| digger mech | 6 cuts (0.75 m³) | 1.48 m³/min | 0.91 m³/min | 8–14% | 75–85% |
+
+Both paying the same 0.4 s a cut, since nothing in a test times a unit to an animation clip.
+
+### What the numbers say
+
+**The load is not what makes it feel wrong. The cut time is.** A unit spends between a twenty-fifth
+and a seventh of its life digging and nearly all the rest walking. Whatever the barrow holds, the
+crew reads as commuters rather than diggers. Those are two separate knobs and they should be turned
+for two separate reasons:
+
+- **Load size sets throughput.** Roughly linear at a fixed haul: double the load, halve the trips.
+- **Cut time sets the feel.** It is the whole of the dig/haul split and barely touches throughput
+  while digging is under a tenth of the cycle.
+
+So: keep the loads where they are — 1 : 2 : 6, barrow : scoop : bed, which is Ronan's own ruling and
+holds together — and buy "fun but not too fast" with the cut time. For a robot's digging to be a
+third of its cycle at a 3 m haul it wants about **a second a cut** rather than 0.4. That is also
+what pays off "every dig needs a matching animation the time to scoop and load truck": the digger
+mech's dig clip is already 2.97 s, and the starter robot has no clip named `dig` at all, which is
+why it falls back to the interval.
+
+### The ladder, and what is still missing
+
+The mech is only **twice** the robot here, which is a thin step up for a machine. But this bench
+measures it **hauling its own spoil**, which is the one thing it is not meant to do: a digger mech
+is supposed to stand at the face and load a parked dumper, never walking at all. Its real advantage
+is reach and not hauling, and neither shows up in a solo measurement.
+
+So the number that should set the ladder is **a digger and dumper working as a pair**, and that is
+the next thing to measure. Expect the step up to come from the pair, not from the scoop.
+
+For a new unit: put it on the bench, read its m³ a game minute at 10 m, and set its cut time so
+digging is a third of its cycle. One number to place it, one to make it feel right.

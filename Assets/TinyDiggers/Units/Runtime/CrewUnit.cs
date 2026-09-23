@@ -308,6 +308,12 @@ namespace TinyDiggers.Units
         float _workTimer;
         float _waitTimer;
 
+        /// <summary>Seconds it has stood on the same spot while blocked. See <see cref="Move"/>.</summary>
+        float _stuckTimer;
+
+        /// <summary>Where it was when it last actually moved.</summary>
+        Vector2 _lastMoved;
+
         /// <summary>The lowest cell of the dump zones when the tip in hand was planned.</summary>
         float _zoneFloor = float.MinValue;
         float _parkTimer;
@@ -1536,12 +1542,32 @@ namespace TinyDiggers.Units
             // gets there, so two of them are never overlapping on a boundary. It also will not
             // cut a diagonal past a unit standing on the corner. Blocked, it waits for the one in
             // the way, then goes round it, and gives the job up if there is no way round.
+            // Once the wait has run out, the keep-apart radius stops applying to this one step and
+            // only the cells hold — one unit each, so nothing ever overlaps. Without that a
+            // cluster can never unwind: a crew robot's radius is 0.35 and a cell is half a metre,
+            // so two of them on neighbouring cells are already closer than the radius wants, every
+            // move that does not open the gap is refused, and four in a two-by-two stand there for
+            // ever, each waiting (as its own status had it) for a unit on an empty cell. The gap
+            // is kept in ordinary running, which is what it is for; it is not worth a deadlock.
+            // Measured by how long it has actually stood still, not by how long it has been
+            // waiting: the wait is reset by every re-plan, and on a busy site a unit re-plans
+            // constantly, because every cut anyone takes changes the ground and sets it thinking
+            // again. A wedged unit's wait never ran out at all.
+            if ((Position - _lastMoved).sqrMagnitude > 1e-6f)
+            {
+                _lastMoved = Position;
+                _stuckTimer = 0f;
+            }
+
+            var jammed = _stuckTimer >= TrafficWaitSeconds;
             var next = NextCell();
             var blocked = next.x >= 0
-                && (_dispatcher.IsOccupiedByOther(next.x, next.y, Id) || !_dispatcher.CanMoveTo(Position, Probe(deltaTime), Id, Radius));
+                && (_dispatcher.IsOccupiedByOther(next.x, next.y, Id)
+                    || (!jammed && !_dispatcher.CanMoveTo(Position, Probe(deltaTime), Id, Radius)));
             if (blocked)
             {
                 _waitTimer += deltaTime;
+                _stuckTimer += deltaTime;
                 if (_waitTimer < TrafficWaitSeconds)
                 {
                     if (State != CrewUnitState.Waiting)
