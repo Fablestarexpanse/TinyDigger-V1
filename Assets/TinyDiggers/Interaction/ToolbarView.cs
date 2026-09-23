@@ -50,8 +50,13 @@ namespace TinyDiggers.Interaction
                 new ToolButton { Mode = ToolMode.Fill, Icon = ToolIcon.Fill, Name = "Fill", Key = "3", Help = "paint ground to be filled up to H" },
                 new ToolButton { Mode = ToolMode.Level, Icon = ToolIcon.Level, Name = "Level", Key = "5", Help = "drag a pad to be levelled to H" },
             },
-            new[] { new ToolButton { Mode = ToolMode.Road, Icon = ToolIcon.Road, Name = "Road", Key = "6",
-                Help = "click points, double-click or Enter to lay it" } },
+            new[]
+            {
+                new ToolButton { Mode = ToolMode.Road, Icon = ToolIcon.Road, Name = "Road", Key = "6",
+                    Help = "click points, double-click or Enter to lay it" },
+                new ToolButton { Mode = ToolMode.Terraform, Icon = ToolIcon.Terraform, Name = "Terraform", Key = "9",
+                    Help = "draw the shape you want the ground to be; the crew build it" },
+            },
             new[]
             {
                 new ToolButton { Mode = ToolMode.DumpZone, Icon = ToolIcon.DumpZone, Name = "Dump Zone", Key = "4",

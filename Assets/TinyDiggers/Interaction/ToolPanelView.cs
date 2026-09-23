@@ -265,6 +265,9 @@ namespace TinyDiggers.Interaction
                     case ToolMode.Quarry:
                         Show(_heightRow, _followRow, _pickRow, _quarryRow);
                         break;
+                    case ToolMode.Terraform:
+                        Show(_heightRow, _followRow, _pickRow, _volumeRow);
+                        break;
                     case ToolMode.Clear:
                         Show(_clearRow);
                         break;
@@ -281,6 +284,7 @@ namespace TinyDiggers.Interaction
                     ToolMode.DumpZone => "Dump Zone  —  drag where spoil may be tipped",
                     ToolMode.Road => "Road  —  a spline the crew builds; click a road to edit it",
                     ToolMode.Quarry => "Quarry  —  drag where the crew may dig for fill material, down to H",
+                    ToolMode.Terraform => "Terraform  —  click corners, Enter to commit; the crew build it to H",
                     ToolMode.Clear => "Clear  —  drag over designations to take them off",
                     _ => "",
                 };

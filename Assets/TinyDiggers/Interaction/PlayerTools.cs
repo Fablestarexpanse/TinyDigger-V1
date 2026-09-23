@@ -23,6 +23,9 @@ namespace TinyDiggers.Interaction
 
         /// <summary>An area the crew may dig for material when something needs filling.</summary>
         Quarry,
+
+        /// <summary>Shapes drawn over the land for the crew to build: see <see cref="TerraformHost"/>.</summary>
+        Terraform,
     }
 
     /// <summary>
@@ -129,6 +132,9 @@ namespace TinyDiggers.Interaction
         /// <summary>The island's roads and the Road tool (Slice 17 Part B).</summary>
         public RoadsHost Roads { get; private set; }
 
+        /// <summary>The landform plan and the Terraform tool.</summary>
+        public TerraformHost Terraform { get; private set; }
+
         /// <summary>The camera the tools pick through.</summary>
         public Camera Camera => _camera;
 
@@ -138,8 +144,9 @@ namespace TinyDiggers.Interaction
         /// <summary>Puts a line in the status bar.</summary>
         public void Say(string message) => LastAction = message;
 
-        /// <summary>Whether a rectangle or a road is part-drawn.</summary>
-        public bool IsDrawing => _dragging || Roads != null && Roads.IsDrawing;
+        /// <summary>Whether a rectangle, a road or a landform is part-drawn.</summary>
+        public bool IsDrawing => _dragging || Roads != null && Roads.IsDrawing
+            || Terraform != null && Terraform.IsDrawing;
 
         public DesignationMap Map => _designations.Map;
 
@@ -185,7 +192,8 @@ namespace TinyDiggers.Interaction
 
         /// <summary>Whether the tool uses the target height H.</summary>
         public bool UsesHeight => Mode == ToolMode.Dig || Mode == ToolMode.Fill || Mode == ToolMode.Level
-            || Mode == ToolMode.DumpZone || Mode == ToolMode.Road || Mode == ToolMode.Quarry;
+            || Mode == ToolMode.DumpZone || Mode == ToolMode.Road || Mode == ToolMode.Quarry
+            || Mode == ToolMode.Terraform;
 
         /// <summary>Whether H follows the hovered cell (the panel's toggle); false once H is set.</summary>
         public bool HeightFollowsCursor
@@ -241,6 +249,8 @@ namespace TinyDiggers.Interaction
             gameObject.AddComponent<BrushCursorView>().Init(this, _terrain, _overlayMaterial);
             Roads = gameObject.AddComponent<RoadsHost>();
             Roads.Init(this, _terrain, _overlayMaterial);
+            Terraform = gameObject.AddComponent<TerraformHost>();
+            Terraform.Init(this, _terrain, _overlayMaterial);
         }
 
         public void SetMode(ToolMode mode)
@@ -263,6 +273,7 @@ namespace TinyDiggers.Interaction
             _dragging = false;
             _painting = false;
             Roads?.Cancel();
+            Terraform?.Cancel();
             _plan.Clear();
             PlannedCut = 0f;
             PlannedFill = 0f;
@@ -333,6 +344,8 @@ namespace TinyDiggers.Interaction
                 SetMode(ToolMode.Clear);
             if (keyboard.digit8Key.wasPressedThisFrame)
                 SetMode(ToolMode.Quarry);
+            if (keyboard.digit9Key.wasPressedThisFrame)
+                SetMode(ToolMode.Terraform);
 
             if (keyboard.escapeKey.wasPressedThisFrame)
             {
@@ -343,6 +356,8 @@ namespace TinyDiggers.Interaction
             }
 
             if (Mode == ToolMode.Road && Roads != null && Roads.HandleKeys(keyboard))
+                return;
+            if (Mode == ToolMode.Terraform && Terraform != null && Terraform.HandleKeys(keyboard))
                 return;
 
             if (keyboard.pageUpKey.wasPressedThisFrame)
@@ -528,6 +543,13 @@ namespace TinyDiggers.Interaction
                     CancelDrawing();
                     LastAction = "Cancelled";
                 }
+                else if (Mode == ToolMode.Terraform && HasHover)
+                {
+                    // A shape is a thing, not a smear of marks: the right button takes the whole
+                    // shape under the cursor away, orders and all, rather than rubbing out cells.
+                    if (!Terraform.RemoveAt(HoverCells))
+                        LastAction = "No shape here";
+                }
                 else if (HasHover)
                 {
                     History?.Begin("clear");
@@ -553,6 +575,9 @@ namespace TinyDiggers.Interaction
                     break;
                 case ToolMode.Road:
                     Roads.HandleMouse(mouse, HasHover, HoverCells);
+                    break;
+                case ToolMode.Terraform:
+                    Terraform.HandleMouse(mouse, HasHover, HoverCells);
                     break;
             }
         }
@@ -760,6 +785,14 @@ namespace TinyDiggers.Interaction
                     }
 
                     break;
+                case ToolMode.Terraform:
+                    if (Terraform != null)
+                    {
+                        PlannedCut = Terraform.Cut;
+                        PlannedFill = Terraform.Fill;
+                    }
+
+                    break;
             }
 
             _preview.Clear();
@@ -814,6 +847,7 @@ namespace TinyDiggers.Interaction
                 case ToolMode.DumpZone: return new Color32(80, 205, 95, alpha);
                 case ToolMode.Quarry: return new Color32(220, 160, 70, alpha);
                 case ToolMode.Road: return new Color32(120, 230, 160, alpha);
+                case ToolMode.Terraform: return new Color32(255, 200, 110, alpha);
                 default: return new Color32(140, 220, 255, alpha);
             }
         }

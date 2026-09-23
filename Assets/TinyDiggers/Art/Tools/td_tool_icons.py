@@ -205,8 +205,16 @@ def quarry(d):
     poly(d, [(4, 58), (4, 50), (22, 50), (22, 44), (40, 44), (40, 38), (60, 38), (60, 58)])
 
 
+def terraform(d):
+    # A drawn outline over shaped ground: the corners you drop, and the terrace they describe.
+    poly(d, [(4, 58), (4, 46), (24, 46), (24, 36), (44, 36), (44, 26), (60, 26), (60, 58)])
+    line(d, [(10, 20), (32, 8), (54, 20), (32, 32), (10, 20)], width=8)
+    for x, y in ((10, 20), (32, 8), (54, 20), (32, 32)):
+        circle(d, x, y, 6)
+
+
 GLYPHS = [select, dig, fill, level, road, dump_zone, clear_tool, seed, settings, debug,
-          undo, redo, eyedropper, warning, digger, hauler, worker, quarry]
+          undo, redo, eyedropper, warning, digger, hauler, worker, quarry, terraform]
 
 
 def main(out):

@@ -24,6 +24,7 @@ namespace TinyDiggers.Interaction
         Hauler,
         Worker,
         Quarry,
+        Terraform,
     }
 
     /// <summary>

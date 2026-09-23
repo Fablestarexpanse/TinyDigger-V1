@@ -5631,3 +5631,29 @@ distance, perimeter), `Landform`, `LandformPlan`.
    is right for a road and wrong for a pad, a terrace or a quarry outline, so `Landform.Curved` is
    off by default and a curve is something you ask for. A test pins the bulge so nobody quietly
    turns it back on.
+
+### Slice C — the tool (2026-09-23)
+
+`TerraformHost` on the `RoadsHost` pattern: its own ghost mesh, its own copy of the overlay material
+with `_ZTest = Always` so a planned cut inside a hill still shows, pixel-space node picking, and a
+replan guarded on a version stamp. `ToolMode.Terraform` on key 9, a glyph appended to
+`td_tool_icons.py` and the sheet regenerated, a toolbar button beside Road, and a panel row set.
+
+The road tool's private `Ribbon`, `Disc` and `Line` moved to `Interaction/GhostMesh.cs` and both
+tools now draw from them; `RoadsHost` keeps its own names for them as one-line forwarders, so the
+drawing code there reads exactly as it did.
+
+**Measured in the running game:** a 20 m pad (40 × 40 cells) drawn across a 4 m slope rasterises in
+**4.4 ms** — 1,600 cells, 365.9 m³ of cut and 637.4 m³ of fill — and commits to 1,576 designations.
+The picture is in `Screenshots/Terraform/pad-ghost.png`: blue where the ground comes up, red where it
+comes off, pale where it is already right.
+
+Two things learned in the doing:
+
+- **Right-click had to mean something different here.** Everywhere else it rubs out cells; on a
+  landform it takes the whole shape away, orders and all, because a shape is a thing rather than a
+  smear of marks.
+- **The editor can be left on an empty untitled scene** after a play session ends through the
+  bridge, and entering play again then runs *that* — no terrain, no tools, and a confusing "not
+  ready" from every probe. Check the open scene before blaming the code;
+  `Assets/TinyDiggers/Scenes/TerrainSandbox.unity` is the game.

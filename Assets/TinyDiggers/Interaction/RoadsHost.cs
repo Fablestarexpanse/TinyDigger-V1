@@ -768,77 +768,17 @@ namespace TinyDiggers.Interaction
             };
         }
 
-        /// <summary>A band <paramref name="half"/> cells either side of the samples, <paramref name="lift"/> m above the road's height.</summary>
-        void Ribbon(List<RoadSample> samples, float half, float lift, System.Func<int, Color32> color, float cell)
-        {
-            if (samples.Count < 2)
-                return;
-            var start = _vertices.Count;
-            for (var i = 0; i < samples.Count; i++)
-            {
-                var s = samples[i];
-                var across = new Vector2(-s.Direction.y, s.Direction.x) * half;
-                // At the road's own height, always — including where that is under the hill.
-                //
-                // It used to be lifted to the ground wherever the road was cut into it, so the
-                // band never vanished. That was fine while a road only rode the land; it lies as
-                // soon as one is cut through a rise, which is the whole point of the Cut through
-                // toggle: the labels said "0%, cut 9 m" while the ribbon drawn beside them climbed
-                // the hill in steps (Ronan, 2026-09-23: "it shows going over; the visual should
-                // show it at the same level going through").
-                var height = s.Position.y + lift;
-                _vertices.Add(new Vector3((s.Position.x - across.x) * cell, height, (s.Position.z - across.y) * cell));
-                _vertices.Add(new Vector3((s.Position.x + across.x) * cell, height, (s.Position.z + across.y) * cell));
-                var c = color(s.Segment);
-                _colors.Add(c);
-                _colors.Add(c);
-                if (i == 0)
-                    continue;
-                var b = start + (i - 1) * 2;
-                // Both faces: seen from below a cut, the ribbon still shows.
-                _triangles.Add(b); _triangles.Add(b + 2); _triangles.Add(b + 1);
-                _triangles.Add(b + 1); _triangles.Add(b + 2); _triangles.Add(b + 3);
-                _triangles.Add(b); _triangles.Add(b + 1); _triangles.Add(b + 2);
-                _triangles.Add(b + 1); _triangles.Add(b + 3); _triangles.Add(b + 2);
-            }
-        }
+        // The three shapes a ghost is drawn from live in GhostMesh, where the terraform tool shares
+        // them. These stay as the road's own names for them, so the drawing above reads the same.
 
-        void Disc(Vector2 at, float height, float radius, Color32 color, float cell)
-        {
-            const int segments = 20;
-            var start = _vertices.Count;
-            _vertices.Add(new Vector3(at.x * cell, height, at.y * cell));
-            _colors.Add(color);
-            for (var i = 0; i <= segments; i++)
-            {
-                var a = i * Mathf.PI * 2f / segments;
-                _vertices.Add(new Vector3((at.x + Mathf.Cos(a) * radius) * cell, height, (at.y + Mathf.Sin(a) * radius) * cell));
-                _colors.Add(color);
-                if (i == 0)
-                    continue;
-                _triangles.Add(start); _triangles.Add(start + i + 1); _triangles.Add(start + i);
-                _triangles.Add(start); _triangles.Add(start + i); _triangles.Add(start + i + 1);
-            }
-        }
+        void Ribbon(List<RoadSample> samples, float half, float lift, System.Func<int, Color32> color, float cell) =>
+            GhostMesh.Ribbon(samples, half, lift, color, _vertices, _colors, _triangles, cell);
 
-        void Line(Vector2 from, Vector2 to, float height, float half, Color32 color, float cell)
-        {
-            var along = to - from;
-            if (along.sqrMagnitude < 1e-6f)
-                return;
-            var across = new Vector2(-along.y, along.x).normalized * half;
-            var start = _vertices.Count;
-            _vertices.Add(new Vector3((from.x - across.x) * cell, height, (from.y - across.y) * cell));
-            _vertices.Add(new Vector3((from.x + across.x) * cell, height, (from.y + across.y) * cell));
-            _vertices.Add(new Vector3((to.x - across.x) * cell, height, (to.y - across.y) * cell));
-            _vertices.Add(new Vector3((to.x + across.x) * cell, height, (to.y + across.y) * cell));
-            for (var i = 0; i < 4; i++)
-                _colors.Add(color);
-            _triangles.Add(start); _triangles.Add(start + 2); _triangles.Add(start + 1);
-            _triangles.Add(start + 1); _triangles.Add(start + 2); _triangles.Add(start + 3);
-            _triangles.Add(start); _triangles.Add(start + 1); _triangles.Add(start + 2);
-            _triangles.Add(start + 1); _triangles.Add(start + 3); _triangles.Add(start + 2);
-        }
+        void Disc(Vector2 at, float height, float radius, Color32 color, float cell) =>
+            GhostMesh.Disc(at, height, radius, color, _vertices, _colors, _triangles, cell);
+
+        void Line(Vector2 from, Vector2 to, float height, float half, Color32 color, float cell) =>
+            GhostMesh.Line(from, to, height, half, color, _vertices, _colors, _triangles, cell);
 
         // --- grade labels ---------------------------------------------------------------------
 
