@@ -24,6 +24,38 @@ namespace TinyDiggers.Units
         readonly int[] _label;
         readonly Dictionary<int, List<int>> _members = new Dictionary<int, List<int>>();
         readonly List<int> _dirtyCells = new List<int>();
+
+        /// <summary>
+        /// Member lists handed back when a region goes, to be handed out again when one is made.
+        ///
+        /// A region's members are every cell in it, and the crew's landmass is most of the island:
+        /// each relabel allocated a fresh list of about 795,000 ints and abandoned the last one.
+        /// That is hundreds of megabytes of rubbish per rebuild, and it showed — the managed heap
+        /// sat near **three gigabytes** and the game stopped for about 1.3 s at a time while the
+        /// collector walked it (2026-09-23). The lists are the same size and shape every time, so
+        /// there is no reason to make new ones.
+        /// </summary>
+        readonly Stack<List<int>> _spare = new Stack<List<int>>();
+
+        /// <summary>The cells a rebuild re-floods from; kept so it is not made afresh each time.</summary>
+        readonly List<int> _seeds = new List<int>();
+
+        List<int> TakeList()
+        {
+            if (_spare.Count == 0)
+                return new List<int>();
+            var list = _spare.Pop();
+            list.Clear();
+            return list;
+        }
+
+        void Recycle(List<int> list)
+        {
+            // Only worth keeping the big ones; a pool of thousands of tiny lists is its own leak.
+            if (list == null || list.Capacity < 1024 || _spare.Count >= 8)
+                return;
+            _spare.Push(list);
+        }
         readonly bool[] _dirty;
         readonly Stack<int> _stack = new Stack<int>();
         readonly HashSet<int> _affected = new HashSet<int>();
@@ -215,6 +247,8 @@ namespace TinyDiggers.Units
         void FullBuild()
         {
             Array.Fill(_label, Unlabelled);
+            foreach (var cells in _members.Values)
+                Recycle(cells);
             _members.Clear();
             _nextRegion = 0;
             CellsRelabelledLast = 0;
@@ -257,7 +291,14 @@ namespace TinyDiggers.Units
             }
 
             // Unlabel them all first: what was one region may now be several.
-            var seeds = new List<int>();
+            //
+            // Kept between rebuilds rather than made fresh: this fills with every cell of every
+            // region being relabelled — about 795,000 of them on the island's landmass — so a new
+            // one each time meant a few megabytes of rubbish per rebuild, and the list doubling its
+            // way up there threw away every size on the way. Forty rebuilds in thirty-five seconds
+            // grew the heap by 126 MB (2026-09-23).
+            var seeds = _seeds;
+            seeds.Clear();
             foreach (var region in _affected)
             {
                 if (!_members.TryGetValue(region, out var cells))
@@ -269,6 +310,7 @@ namespace TinyDiggers.Units
                 }
 
                 _members.Remove(region);
+                Recycle(cells);
             }
 
             var voids = _grid.BlockedCells;
@@ -288,7 +330,7 @@ namespace TinyDiggers.Units
         void Flood(int start)
         {
             var region = _nextRegion++;
-            var members = new List<int>();
+            var members = TakeList();
             _members[region] = members;
             var heights = _grid.SurfaceHeights;
             var voids = _grid.BlockedCells;
