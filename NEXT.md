@@ -10,22 +10,26 @@ is done, what is running, what comes next.
 
 ## NEXT
 
-**A path that is re-planned every tick.** The unit sent to cut the ramp has a good eight-waypoint
-path and never gets past the first of them:
+**A unit is told to start again every tick.** Confirmed, not guessed:
 
 ```
-[0 Moving at (15.50, 21.39) ... waited 0.0 path 7/8 :: Moving to ramp (14, 13) to 5.5 m]
+[0 Moving at (15.50, 21.39) ... waited 0.0 path 1/8 RETHINK :: Moving to ramp (14, 13) to 5.5 m]
 ```
 
-Seven waypoints still ahead, nothing blocking it, position alternating between z 21.46 and 21.39
-for ever. That is `Replan` putting `_pathIndex` back every tick. **Log `_repath` and `_pathIndex`
-next to the path length and one run should name it** — the suspects are the designation `Changed`
-event (the ramp step being re-placed on every rethink) and `OnCellChanged`, and neither ought to be
-firing on a site where nothing is being dug.
+`_rethink` is set every tick, so the unit re-chooses its job, `TryPlan` rebuilds the same
+eight-waypoint path, `_pathIndex` goes back to nought, it walks one waypoint and starts again.
+Nothing is blocking it. **This is very likely the whole of the "congestion" that was blamed on the
+traffic rule, the heap and the keep-apart radius in turn** — a unit whose job is re-chosen faster
+than it can walk looks exactly like one that is stuck.
 
-This is the last thing between the two-step pit and finishing, and it is very likely the same cause
-as the "waiting" that has been mistaken for congestion three times: a unit whose path is reset
-faster than it can walk it looks exactly like a unit that is stuck.
+The fix is probably not to stop the churn but to stop it mattering: **a rethink should belong to a
+change that touches this unit's own target, stand or path**, not to anything moving anywhere.
+`OnDesignationChanged` is the suspect (the auto ramp step cleared by `UpdateRamp` and re-placed by
+`RequestRamp` in the same tick, now every digger asks on every rethink); `OnCellChanged` should be
+quiet on a site where nothing is being dug — check that first, it is one log line.
+
+This is a core change to how the crew reacts to the world, so give it its own run and watch the
+whole suite, not just the pit.
 
 ### Done since the last note
 
