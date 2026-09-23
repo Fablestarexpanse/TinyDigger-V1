@@ -62,6 +62,7 @@ namespace TinyDiggers.Interaction
                 Curved = form.Curved,
                 Blend = form.Blend,
                 Spoil = form.Spoil,
+                Dabs = new List<BrushDab>(form.Dabs),
             };
             EditingId = id;
             Touch();
@@ -93,6 +94,23 @@ namespace TinyDiggers.Interaction
             Form.Nodes.Add(node);
             Touch();
             return node;
+        }
+
+        /// <summary>
+        /// Lays one press of the freehand brush, unless the last one was too close to be worth
+        /// having. The spacing is in cells rather than in frames, so a stroke comes out the same
+        /// whether the game is running at sixty frames a second or six.
+        /// </summary>
+        public bool Dab(Vector2 at, int radius, BrushMode mode, float amount, float spacing = 0.5f)
+        {
+            if (Form.Kind != LandformKind.Brush)
+                return false;
+            if (Form.Dabs.Count > 0 && Vector2.Distance(Form.Dabs[Form.Dabs.Count - 1].At, at) < spacing)
+                return false;
+
+            Form.Dabs.Add(new BrushDab { At = at, Radius = radius, Mode = mode, Amount = amount });
+            Touch();
+            return true;
         }
 
         /// <summary>Which corner is within <paramref name="radius"/> cells of the point, or -1.</summary>
@@ -175,6 +193,7 @@ namespace TinyDiggers.Interaction
                 if (already != null)
                 {
                     already.Nodes = new List<RoadNode>(Form.Nodes);
+                    already.Dabs = new List<BrushDab>(Form.Dabs);
                     already.Height = Form.Height;
                     already.HeightB = Form.HeightB;
                     already.Ramped = Form.Ramped;
@@ -203,6 +222,7 @@ namespace TinyDiggers.Interaction
                 Curved = Form.Curved,
                 Blend = Form.Blend,
                 Spoil = Form.Spoil,
+                Dabs = new List<BrushDab>(Form.Dabs),
             });
             Clear();
             return added;

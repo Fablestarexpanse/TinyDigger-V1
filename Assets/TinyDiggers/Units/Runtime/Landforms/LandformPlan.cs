@@ -25,6 +25,8 @@ namespace TinyDiggers.Units
         readonly List<Vector2> _outline = new List<Vector2>();
         readonly List<int> _cells = new List<int>();
         readonly List<PlannedCell> _footprint = new List<PlannedCell>();
+        readonly List<Vector2Int> _brushCells = new List<Vector2Int>();
+        readonly Dictionary<int, float> _before = new Dictionary<int, float>();
 
         /// <summary>How finely an outline is walked before its cells are worked out, in cells.</summary>
         public const float SampleSpacing = RoadPlanner.SampleSpacing;
@@ -116,6 +118,12 @@ namespace TinyDiggers.Units
                     continue;
                 }
 
+                if (form.Kind == LandformKind.Brush)
+                {
+                    Stroke(grid, form, into, owners);
+                    continue;
+                }
+
                 if (form.Kind != LandformKind.Area)
                     continue;
 
@@ -174,6 +182,83 @@ namespace TinyDiggers.Units
                 if (owners != null)
                     owners[key] = form.Id;
             }
+        }
+
+        /// <summary>
+        /// A freehand stroke over the plan surface — never over the ground, because the crew do the
+        /// work. Where no shape has claimed a cell the plan surface *is* the ground, so a raise
+        /// stroke on open country is a mound to be filled and a lower stroke is a hollow to be dug.
+        ///
+        /// Each press is applied in the order it was laid, over the disc
+        /// <see cref="BrushPlan.Cells"/> gives, with a falloff that reaches nothing at the rim.
+        /// Because the stroke is stored as presses rather than as the heights they produced, moving
+        /// a shape underneath it re-runs them against the new ground and the stroke comes along.
+        /// </summary>
+        void Stroke(TerrainGrid grid, Landform form, Dictionary<int, float> into, Dictionary<int, int> owners)
+        {
+            float At(int x, int z) =>
+                into.TryGetValue(z * grid.Width + x, out var already) ? already : grid.GetSurfaceHeight(x, z);
+
+            foreach (var dab in form.Dabs)
+            {
+                var cx = Mathf.FloorToInt(dab.At.x);
+                var cz = Mathf.FloorToInt(dab.At.y);
+                LandformRaster.Disc(grid, cx, cz, dab.Radius, _brushCells);
+                if (_brushCells.Count == 0)
+                    continue;
+
+                // Worked out against the surface as it stands *before* this press, so a single press
+                // cannot chase its own tail — a smooth that read its own output would drag a whole
+                // stroke towards whichever corner it happened to start in.
+                _before.Clear();
+                foreach (var cell in _brushCells)
+                    _before[cell.y * grid.Width + cell.x] = At(cell.x, cell.y);
+
+                foreach (var cell in _brushCells)
+                {
+                    var key = cell.y * grid.Width + cell.x;
+                    var away = Vector2.Distance(new Vector2(cell.x + 0.5f, cell.y + 0.5f), dab.At);
+                    var weight = Mathf.Clamp01(1f - away * away / Mathf.Max(1e-4f, dab.Radius * dab.Radius));
+                    if (weight <= 0f)
+                        continue;
+
+                    var was = _before[key];
+                    var now = dab.Mode switch
+                    {
+                        BrushMode.Raise => was + dab.Amount * weight,
+                        BrushMode.Lower => was - dab.Amount * weight,
+                        BrushMode.Smooth => Mathf.Lerp(was, Around(grid, cell.x, cell.y, _before, At), weight),
+                        _ => Mathf.Lerp(was, form.Height, weight),
+                    };
+
+                    into[key] = grid.HeightStep > 0f
+                        ? Mathf.Round(now / grid.HeightStep) * grid.HeightStep
+                        : now;
+                    if (owners != null)
+                        owners[key] = form.Id;
+                }
+            }
+        }
+
+        /// <summary>The average of the cells round one, as the plan had them before this press.</summary>
+        static float Around(TerrainGrid grid, int x, int z, Dictionary<int, float> before, Func<int, int, float> at)
+        {
+            var total = 0f;
+            var count = 0;
+            for (var dz = -1; dz <= 1; dz++)
+            {
+                for (var dx = -1; dx <= 1; dx++)
+                {
+                    var nx = x + dx;
+                    var nz = z + dz;
+                    if (!grid.IsGround(nx, nz))
+                        continue;
+                    total += before.TryGetValue(nz * grid.Width + nx, out var already) ? already : at(nx, nz);
+                    count++;
+                }
+            }
+
+            return count == 0 ? at(x, z) : total / count;
         }
 
         /// <summary>

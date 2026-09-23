@@ -5778,3 +5778,35 @@ is the same gap roads, designations and the terrain itself have.
 
 Building persistence for landforms alone would be a save system for one layer of a game that has
 none, and which layers are worth saving is Ronan's call, not a slice of this. Left alone deliberately.
+
+### Slice H — the freehand brush (2026-09-23)
+
+The last piece of what Ronan asked for. **B** picks the brush and picks again through what it does —
+raise, lower, smooth, flatten — and you hold the button and paint; `[` and `]` resize it, as they do
+every other brush in the game.
+
+It works the **plan surface**, never the ground, because the crew do the work. Where no shape has
+claimed a cell, the plan surface *is* the ground, so a raise stroke on open country is a mound to be
+filled and a lower stroke is a hollow to be dug. `TerrainBrush`, which edits the ground immediately,
+stays unused.
+
+**A stroke is kept as presses, not as the heights they produced.** That is the whole of why it stays
+re-editable: move the pad underneath and the stroke is re-run against the new ground and comes along,
+instead of being stranded at the height it was first worked out at. A test holds it — raise the pad
+four metres and the stroke rises four metres with it.
+
+Each press is worked out against a snapshot of the surface taken *before* that press. A smooth that
+read its own output as it swept would drag the whole stroke towards whichever corner the loop started
+in — the same bug as writing to a dictionary while enumerating it, in slower motion.
+
+The disc a brush covers now lives once, in `LandformRaster.Disc`, with `BrushPlan.Cells` calling it:
+two brushes drawing different discs is a bug waiting to be noticed.
+
+**The failing test was mine again, for the third time this session.** It checked the stroke was even
+about its middle by comparing cells 29 and 33 — but two presses at 30.5 and 31.5 mirror about 31.0,
+so 29's mirror is 32, not 33. Measuring the row directly settled it in one call where three test runs
+had not: 28:1.0 29:1.5 30:2.0 31:2.0 32:1.5 33:1.5.
+
+That is worth naming, because it is the session's pattern: **when a test disagrees, probe the code
+directly before touching either.** It has been the build twice and the test's own arithmetic three
+times, and the production code none.

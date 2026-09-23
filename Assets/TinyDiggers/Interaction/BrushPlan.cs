@@ -19,22 +19,10 @@ namespace TinyDiggers.Interaction
         /// at most radius²), into <paramref name="cells"/>, which is cleared first. Cells off the
         /// map or in the void are left out.
         /// </summary>
-        public static void Cells(TerrainGrid grid, int centreX, int centreZ, int radius, List<Vector2Int> cells)
-        {
-            cells.Clear();
-            for (var dz = -radius; dz <= radius; dz++)
-            {
-                for (var dx = -radius; dx <= radius; dx++)
-                {
-                    if (dx * dx + dz * dz > radius * radius)
-                        continue;
-                    var x = centreX + dx;
-                    var z = centreZ + dz;
-                    if (grid.IsGround(x, z))
-                        cells.Add(new Vector2Int(x, z));
-                }
-            }
-        }
+        public static void Cells(TerrainGrid grid, int centreX, int centreZ, int radius, List<Vector2Int> cells) =>
+            // The disc itself lives in LandformRaster, where the plan's freehand brush can reach it
+            // too: two brushes drawing different discs would be a bug waiting to be noticed.
+            Units.LandformRaster.Disc(grid, centreX, centreZ, radius, cells);
 
         /// <summary>
         /// Cubic metres of ground above <paramref name="height"/> that digging the cells to it would

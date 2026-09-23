@@ -23,6 +23,36 @@ namespace TinyDiggers.Units
         Brush,
     }
 
+    /// <summary>What one press of the freehand brush does to the plan under it.</summary>
+    public enum BrushMode
+    {
+        Raise,
+        Lower,
+
+        /// <summary>Pulls each cell towards the average of the ones around it.</summary>
+        Smooth,
+
+        /// <summary>Pulls each cell towards the height the stroke started at.</summary>
+        Flatten,
+    }
+
+    /// <summary>
+    /// One press of the brush: where it fell, how wide, and what it was doing. A stroke is a list of
+    /// these rather than the heights they produced, which is what keeps it re-editable — raise a pad
+    /// under a smoothed stroke and the smoothing comes with it instead of being stranded at the
+    /// height it was first worked out at.
+    /// </summary>
+    [Serializable]
+    public struct BrushDab
+    {
+        public Vector2 At;
+        public int Radius;
+        public BrushMode Mode;
+
+        /// <summary>Metres this press moves the plan at its centre.</summary>
+        public float Amount;
+    }
+
     /// <summary>What a landform does where it meets one drawn before it.</summary>
     public enum LandformBlend
     {
@@ -104,13 +134,18 @@ namespace TinyDiggers.Units
         /// </summary>
         public MaterialId Spoil = MaterialTable.DirtLoose;
 
+        /// <summary>The presses that make up a freehand stroke, in the order they were laid.</summary>
+        public List<BrushDab> Dabs = new List<BrushDab>();
+
         /// <summary>Changes on every edit. What the host watches to know when to replan.</summary>
         public int Version;
 
         public bool Closed => Kind != LandformKind.Ribbon && Kind != LandformKind.Brush;
 
-        /// <summary>Whether it has enough nodes to mean anything.</summary>
-        public bool IsDrawn => Closed ? Nodes.Count >= 3 : Nodes.Count >= 2;
+        /// <summary>Whether it has enough to it to mean anything.</summary>
+        public bool IsDrawn => Kind == LandformKind.Brush ? Dabs.Count > 0
+            : Closed ? Nodes.Count >= 3
+            : Nodes.Count >= 2;
 
         public void Touch() => Version++;
 

@@ -87,6 +87,11 @@ namespace TinyDiggers.Interaction
         /// <summary>How many benches deep a drafted pit goes.</summary>
         public int Benches { get; private set; }
 
+        /// <summary>What the freehand brush is doing, and how far one press moves the plan.</summary>
+        public BrushMode BrushMode { get; private set; } = BrushMode.Raise;
+
+        public float BrushAmount = 0.5f;
+
         public bool IsDrawing => Draft.Any;
 
         public void Init(PlayerTools tools, TerrainView terrain, Material material)
@@ -154,6 +159,21 @@ namespace TinyDiggers.Interaction
         {
             if (Grid == null)
                 return;
+
+            // The freehand brush paints while the button is held, rather than dropping corners.
+            if (Draft.Form.Kind == LandformKind.Brush)
+            {
+                if (mouse.leftButton.wasPressedThisFrame && hasHover)
+                {
+                    if (!Draft.Any)
+                        Draft.Begin(LandformKind.Brush, _tools.TargetHeight);
+                    Draft.Form.Height = _tools.TargetHeight;   // what Flatten pulls towards
+                }
+
+                if (mouse.leftButton.isPressed && hasHover)
+                    Draft.Dab(at, _tools.BrushRadius, BrushMode, BrushAmount);
+                return;
+            }
 
             if (mouse.leftButton.wasPressedThisFrame && hasHover)
                 Press(at);
@@ -227,6 +247,24 @@ namespace TinyDiggers.Interaction
                 return SetKind(LandformKind.Pit, "Pit — dug in benches down to H");
             if (keyboard.rKey.wasPressedThisFrame && !keyboard.ctrlKey.isPressed)
                 return SetKind(LandformKind.Ribbon, "Ribbon — a route cut at H; change H between clicks to grade it");
+
+            // B picks the brush, and picks again through what it does. One key rather than four,
+            // because the readout says which it is on and the panel has no room for a mode switch.
+            if (keyboard.bKey.wasPressedThisFrame && !keyboard.ctrlKey.isPressed)
+            {
+                if (Draft.Form.Kind != LandformKind.Brush)
+                    return SetKind(LandformKind.Brush, "Brush — raise. Hold the button and paint; B again for the next");
+                BrushMode = BrushMode switch
+                {
+                    BrushMode.Raise => BrushMode.Lower,
+                    BrushMode.Lower => BrushMode.Smooth,
+                    BrushMode.Smooth => BrushMode.Flatten,
+                    _ => BrushMode.Raise,
+                };
+                _tools.Say($"Brush — {BrushMode.ToString().ToLowerInvariant()}"
+                           + (BrushMode == BrushMode.Flatten ? ", towards H" : ""));
+                return true;
+            }
 
             return false;
         }
@@ -459,8 +497,9 @@ namespace TinyDiggers.Interaction
                         heap ? HeapColor : PitColor, _vertices, _colors, _triangles, cell);
                 }
 
-                // The outline itself, at the height it is asking for, and its corners.
-                if (Draft.Any)
+                // The outline itself, at the height it is asking for, and its corners. A stroke has
+                // neither: the tiles above are the whole of what it is.
+                if (Draft.Any && Draft.Form.Kind != LandformKind.Brush)
                 {
                     Edge(Draft.Form, Draft.Form.Height + 0.15f, 0.12f, OutlineColor, cell);
                     var nodes = Draft.Form.Nodes;
@@ -473,7 +512,7 @@ namespace TinyDiggers.Interaction
                 // Shapes already in the plan, so they can be found again.
                 foreach (var form in Plan.Forms)
                 {
-                    if (!form.IsDrawn)
+                    if (!form.IsDrawn || form.Kind == LandformKind.Brush)
                         continue;
                     Edge(form, form.Height + 0.1f, 0.08f, BuiltColor, cell);
                 }
@@ -537,9 +576,12 @@ namespace TinyDiggers.Interaction
             };
             GUI.Label(new Rect(12f, Screen.height - 76f, 700f, 26f), says, _label);
             GUI.Label(new Rect(12f, Screen.height - 48f, 700f, 26f),
-                Draft.CanCommit
-                    ? "Enter commits   •   A area, H heap, P pit, R ribbon   •   C curves it   •   Backspace undoes a corner"
-                    : "Click to drop corners — three make a shape, two make a ribbon   •   A area, H heap, P pit, R ribbon",
+                Draft.Form.Kind == LandformKind.Brush
+                    ? $"Hold the button and paint   •   B changes what it does ({BrushMode.ToString().ToLowerInvariant()})"
+                      + "   •   [ and ] resize it   •   Enter commits"
+                    : Draft.CanCommit
+                        ? "Enter commits   •   A area, H heap, P pit, R ribbon, B brush   •   C curves it   •   Backspace undoes a corner"
+                        : "Click to drop corners — three make a shape, two make a ribbon   •   A area, H heap, P pit, R ribbon, B brush",
                 _label);
         }
     }

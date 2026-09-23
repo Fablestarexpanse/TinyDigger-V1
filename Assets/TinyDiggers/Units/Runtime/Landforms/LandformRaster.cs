@@ -101,6 +101,34 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
+        /// The cells of a disc <paramref name="radius"/> across, centred on one, that are part of
+        /// the world. What a brush press covers, whichever brush is asking — the designation brush
+        /// in <c>BrushPlan</c> calls this too, so there is one disc and not two.
+        /// </summary>
+        public static void Disc(TerrainGrid grid, int centreX, int centreZ, int radius, List<Vector2Int> into)
+        {
+            if (grid == null)
+                throw new ArgumentNullException(nameof(grid));
+            if (into == null)
+                throw new ArgumentNullException(nameof(into));
+
+            into.Clear();
+            radius = Mathf.Max(0, radius);
+            for (var dz = -radius; dz <= radius; dz++)
+            {
+                for (var dx = -radius; dx <= radius; dx++)
+                {
+                    if (dx * dx + dz * dz > radius * radius)
+                        continue;
+                    var x = centreX + dx;
+                    var z = centreZ + dz;
+                    if (grid.IsGround(x, z))
+                        into.Add(new Vector2Int(x, z));
+                }
+            }
+        }
+
+        /// <summary>
         /// How far into the shape each of <paramref name="cells"/> lies, and the ground height at
         /// the nearest cell outside it, by a two-pass chamfer (1 straight, √2 diagonal) — the same
         /// walk the water field uses for its distance to the shore. A cell on the rim comes out at
