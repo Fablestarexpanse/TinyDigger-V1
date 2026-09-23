@@ -4499,3 +4499,20 @@ Worth noting what was already right and simply invisible: tipping converts mater
 disturbed form (`Excavation` uses `GetDisturbed`), so tipped topsoil lands as bare dirt and a heap
 really is a different colour from the grass round it. That was working the whole time, under the
 overlay, on a pile too flat to catch the light.
+
+### Correction: the road crew is not in the rethink loop
+
+Asked the crew directly, mid-run, rather than inferring from a status line:
+
+```
+[0 Digging path 0/0] [1 Waiting path 18/24] [2 Moving path 5/18]
+[3 Waiting path 2/22] [4 Digging path 0/0] [5 Parked by digger 4]
+```
+
+**No RETHINK on anybody, and the paths are advancing** — eighteen waypoints of twenty-four, five of
+eighteen. So the "Waiting for a unit" in the road shots is ordinary queueing where two units
+converge on the face, not the pathology the pit has. Saying otherwise on the strength of a matching
+status line was exactly the mistake this session has made four times already: **the status line is
+not the diagnosis.**
+
+The rethink loop remains real and remains the pit's problem. It is not the road's.

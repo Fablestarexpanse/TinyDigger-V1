@@ -279,7 +279,10 @@ namespace TinyDiggers.EditorTools
             {
                 var roll = "";
                 foreach (var unit in _crew.Units)
-                    roll += $"[{UnitNames.Of(unit.Role)} {unit.Id}: {unit.Status}] ";
+                    roll += $"[{UnitNames.Of(unit.Role)} {unit.Id}: {unit.Status}"
+                            + $" | path {unit.PathIndex}/{unit.PathLength}"
+                            + (unit.Repathing ? " REPATH" : "") + (unit.Rethinking ? " RETHINK" : "")
+                            + "] ";
                 return roll;
             }
 
