@@ -4140,3 +4140,22 @@ and a cap that keeps a heap within a climb of the ground round it until the zone
 
 That is the next piece of work, and it is worth more than the twelve cells it unblocks: it is what
 a tipped load is supposed to look like.
+
+### Build out before up: the heap comes down from 2.5 m to 1 m
+
+A tip is capped a climb above **where the unit stands**, which is the right cap and the wrong
+reference: the unit walks up onto its own heap and the cap goes up with it. A tip now also has to
+land within a climb of the **floor of the zone** (`CrewUnit.ZoneFloor`, the lowest cell of any dump
+zone that is not itself designated), so the floor fills before anything rises.
+
+Measured on the same trial: **2.5 m tall becomes 1 m**, mean over the tip and its edges 0.56 m
+becomes 0.38 m. That is what a tipped load should look like, and it is trial E's answer.
+
+Honest note on the cost: the same run moved **6.88 m³ instead of 9.75**, with 23 cells left rather
+than 12. The crew walks further to reach the bottom of the heap, and the jam that stops the trial is
+still there. So this is kept for the heap, not for the throughput.
+
+And the jam is *not* the heap, which is the second guess in a row about it to be wrong. The units
+end up round (21, 20) to (22, 23) — **south of the dump zone, not on it** — so whatever holds them
+is on the way between the pit and the tip, not on the spoil. The next person to look at this should
+start by tracing those four cells rather than believing either of the last two explanations.

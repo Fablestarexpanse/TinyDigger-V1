@@ -307,6 +307,9 @@ namespace TinyDiggers.Units
         float _rethinkTimer;
         float _workTimer;
         float _waitTimer;
+
+        /// <summary>The lowest cell of the dump zones when the tip in hand was planned.</summary>
+        float _zoneFloor = float.MinValue;
         float _parkTimer;
         int _parkLoadVersion;
         bool _loadFull;
@@ -1050,6 +1053,7 @@ namespace TinyDiggers.Units
             if (_designations.DumpZoneCount == 0)
                 return false;
 
+            _zoneFloor = ZoneFloor();
             _tipHighRimsOnly = true;
             if (TryPlan(CrewJobKind.DumpZone, start))
                 return true;
@@ -1058,6 +1062,30 @@ namespace TinyDiggers.Units
                 return true;
             DumpZoneFull = true;
             return false;
+        }
+
+        /// <summary>
+        /// The lowest cell of any dump zone: the bottom of the heap, which is where the next load
+        /// belongs. Zones are a few dozen cells, so this is cheap enough to ask each time a tip is
+        /// planned, and asking each time is what keeps it honest as the ground changes.
+        /// </summary>
+        float ZoneFloor()
+        {
+            var lowest = float.MaxValue;
+            var cells = _designations.DumpZoneCells;
+            var width = _grid.Width;
+            for (var i = 0; i < cells.Count; i++)
+            {
+                var x = cells[i] % width;
+                var z = cells[i] / width;
+                if (_designations.GetKind(x, z) != DesignationKind.None)
+                    continue;
+                var height = _grid.GetSurfaceHeight(x, z);
+                if (height < lowest)
+                    lowest = height;
+            }
+
+            return lowest == float.MaxValue ? float.MinValue : lowest;
         }
 
         /// <summary>Drives to a free cell beside the digger it serves, and parks there.</summary>
@@ -1204,6 +1232,14 @@ namespace TinyDiggers.Units
                     return _designations.IsDumpZone(x, z)
                         && _designations.GetKind(x, z) == DesignationKind.None
                         && !_dispatcher.IsClaimedByOther(x, z, Id)
+                        // Build out before building up: only the low ground of the zone takes a
+                        // load, so the floor fills before anything rises. A tip is capped a climb
+                        // above where the unit stands, which is the right cap and the wrong
+                        // reference — the unit walks up onto its own heap, and the cap goes up
+                        // with it. Nine and three quarter cubic metres made a tower 2.5 m tall
+                        // that walled the tip in, where spread over the zone it would have stood
+                        // 0.8 m (2026-09-22).
+                        && _grid.GetSurfaceHeight(x, z) <= _zoneFloor + _dispatcher.Climb + Epsilon
                         && CanTipOnto(standX, standZ, standHeight, x, z, _designations.DumpZoneCap(x, z));
                 default:
                     return false;
