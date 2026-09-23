@@ -5384,3 +5384,46 @@ One measurement in this round was junk and is recorded as such: a "road" laid wi
 `SetColumn(Dirt 3.9, Road 0.1)` sits two metres *below* ground built as `Bedrock 2 + Dirt 4`, so it
 was a cliff and no unit would step onto it. The suite's own road test is the one that means
 anything, and it passes.
+
+---
+
+## 2026-09-23 — The stutter while digging: every scoop re-floods the island
+
+Ronan: *"the stuttering seems to be coming from when they are digging and dumping, but I can't be
+sure."* He was right, and the measurement says exactly why.
+
+**The shape of it.** Sampling frames while the crew worked: **mean 35 ms, worst 1,414 ms**. Not a
+uniformly slow frame — occasional enormous ones, which is what a stutter is. The height lag added
+this morning was the obvious suspect and is not guilty: with it on, mean 35.4 ms and 1.2 chunks
+rebuilt a frame; with it off, 38.5 ms and 0.6 chunks. No difference worth the name.
+
+**What it is.** `RegionMap.OnCellChanged` marks any changed cell dirty, and `RebuildDirty` then
+unlabels every member of every region that touches a dirty cell and floods them again. The crew dig
+on the main landmass, which is *one region* covering nearly the whole island. Measured on the live
+island:
+
+```
+one scoop -> region rebuild 140.8 ms, 794,803 cells relabelled
+839 rebuilds so far this session; the island is 9,634,816 cells
+```
+
+Every cut, by every unit, pays that. Six units digging is the stutter, and a tip does the same.
+
+**Why it is not needed.** Taking half a metre off a cell almost never changes what connects to
+what: the neighbours were within a step before and are within a step after. The rebuild is
+incremental in the number of *dirty cells* and not at all in the size of the *region*, so the one
+case it is built for — a cut that finally severs a landmass — makes every ordinary scoop pay a
+continent-sized flood.
+
+**The fix to make, and the judgement in it.** `TerrainGrid.CellHeightChanged` (added this morning
+for the drawn-height lag) carries the height a cell had before. That is enough to ask whether the
+changed cell still connects to the same neighbours it did: if every one of the eight agrees before
+and after, and the cell's blocked flag has not moved, the regions cannot have changed and the cell
+need not be marked dirty at all.
+
+The judgement: comparing step heights on the eight neighbours is the dominant rule but not the
+whole of `GridPathfinder.CanStep`, which also refuses a diagonal that cuts a corner over a step. A
+change that alters only a corner-cut would be missed and leave the region map stale. The cost of
+being wrong is bounded — a unit may take a job it cannot reach, and the pathfinder's own budget
+caps that at about 90 ms once, until the next real change fixes the labels — but it is a
+correctness risk in reachability, which is load-bearing, so it wants Ronan's word before it lands.
