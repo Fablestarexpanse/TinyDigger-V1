@@ -113,10 +113,6 @@ island in play, not only in tests: four shapes over 2,803 cells planned in **1.1
   its own tests. Which layers deserve a save file is Ronan's call, so it has been left alone
   deliberately rather than invented inside a terraform slice.
 
-**Known and cosmetic:** a committed shape's outline is drawn at one height while its overlay tiles
-follow the ground, so on a slope the two separate visibly. Drawing the outline along the ground would
-fix it.
-
 **Also noted while building:** `Landform.Spoil` is a `MaterialId`, which Unity's serialisation skips
 (warning UAC1001). It costs nothing today because nothing is serialised, and would need an int field
 the day a save file exists.

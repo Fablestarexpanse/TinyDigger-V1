@@ -75,17 +75,25 @@ namespace TinyDiggers.Interaction
         }
 
         public static void Line(Vector2 from, Vector2 to, float height, float half, Color32 color,
-            List<Vector3> vertices, List<Color32> colors, List<int> triangles, float cell = 1f)
+            List<Vector3> vertices, List<Color32> colors, List<int> triangles, float cell = 1f) =>
+            Line(from, to, height, height, half, color, vertices, colors, triangles, cell);
+
+        /// <summary>
+        /// A line whose two ends are at different heights, so a run of them can follow the ground
+        /// without breaking into dashes wherever it crosses a step.
+        /// </summary>
+        public static void Line(Vector2 from, Vector2 to, float fromHeight, float toHeight, float half,
+            Color32 color, List<Vector3> vertices, List<Color32> colors, List<int> triangles, float cell = 1f)
         {
             var along = to - from;
             if (along.sqrMagnitude < 1e-6f)
                 return;
             var across = new Vector2(-along.y, along.x).normalized * half;
             var start = vertices.Count;
-            vertices.Add(new Vector3((from.x - across.x) * cell, height, (from.y - across.y) * cell));
-            vertices.Add(new Vector3((from.x + across.x) * cell, height, (from.y + across.y) * cell));
-            vertices.Add(new Vector3((to.x - across.x) * cell, height, (to.y - across.y) * cell));
-            vertices.Add(new Vector3((to.x + across.x) * cell, height, (to.y + across.y) * cell));
+            vertices.Add(new Vector3((from.x - across.x) * cell, fromHeight, (from.y - across.y) * cell));
+            vertices.Add(new Vector3((from.x + across.x) * cell, fromHeight, (from.y + across.y) * cell));
+            vertices.Add(new Vector3((to.x - across.x) * cell, toHeight, (to.y - across.y) * cell));
+            vertices.Add(new Vector3((to.x + across.x) * cell, toHeight, (to.y + across.y) * cell));
             for (var i = 0; i < 4; i++)
                 colors.Add(color);
             triangles.Add(start); triangles.Add(start + 2); triangles.Add(start + 1);
@@ -106,6 +114,38 @@ namespace TinyDiggers.Interaction
             for (var i = 0; i < outline.Count; i++)
                 Line(outline[i], outline[(i + 1) % outline.Count], height, half, color,
                     vertices, colors, triangles, cell);
+        }
+
+        /// <summary>
+        /// The same loop, but lying on the ground rather than at one height: each edge is walked in
+        /// short pieces and each piece takes the height <paramref name="heightAt"/> gives it.
+        ///
+        /// An outline marks a boundary *on the land*, and a shape drawn across a slope with its
+        /// outline pinned at a single height leaves the line hanging in the air on one side and
+        /// buried on the other — it stops looking like the edge of the thing it belongs to.
+        /// </summary>
+        public static void LoopOnGround(IReadOnlyList<Vector2> outline, Func<Vector2, float> heightAt, float half,
+            Color32 color, List<Vector3> vertices, List<Color32> colors, List<int> triangles, float cell = 1f,
+            float step = 2f)
+        {
+            if (outline == null || outline.Count < 2 || heightAt == null)
+                return;
+
+            for (var i = 0; i < outline.Count; i++)
+            {
+                var from = outline[i];
+                var to = outline[(i + 1) % outline.Count];
+                var pieces = Mathf.Max(1, Mathf.CeilToInt(Vector2.Distance(from, to) / Mathf.Max(0.5f, step)));
+                for (var piece = 0; piece < pieces; piece++)
+                {
+                    var a = Vector2.Lerp(from, to, piece / (float)pieces);
+                    var b = Vector2.Lerp(from, to, (piece + 1) / (float)pieces);
+                    // Each piece takes its own two end heights, so consecutive pieces meet instead
+                    // of leaving a gap wherever the ground steps — flat pieces at their midpoints
+                    // drew the outline as an accidental dashed line (2026-09-23).
+                    Line(a, b, heightAt(a), heightAt(b), half, color, vertices, colors, triangles, cell);
+                }
+            }
         }
     }
 }

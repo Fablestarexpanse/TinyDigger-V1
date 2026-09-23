@@ -497,14 +497,14 @@ namespace TinyDiggers.Interaction
                         heap ? HeapColor : PitColor, _vertices, _colors, _triangles, cell);
                 }
 
-                // The outline itself, at the height it is asking for, and its corners. A stroke has
+                // The outline itself, on the ground it is drawn round, and its corners. A stroke has
                 // neither: the tiles above are the whole of what it is.
                 if (Draft.Any && Draft.Form.Kind != LandformKind.Brush)
                 {
                     Edge(Draft.Form, Draft.Form.Height + 0.15f, 0.12f, OutlineColor, cell);
                     var nodes = Draft.Form.Nodes;
                     for (var i = 0; i < nodes.Count; i++)
-                        GhostMesh.Disc(nodes[i].Position, Draft.Form.Height + 0.2f, 0.55f,
+                        GhostMesh.Disc(nodes[i].Position, GroundAt(nodes[i].Position) + 0.2f, 0.55f,
                             i == nodes.Count - 1 ? ActiveNodeColor : OutlineColor,
                             _vertices, _colors, _triangles, cell);
                 }
@@ -539,7 +539,11 @@ namespace TinyDiggers.Interaction
             }
 
             LandformSpline.Polygon(form, LandformPlan.SampleSpacing, _samples, _outline);
-            GhostMesh.Loop(_outline, height, half, colour, _vertices, _colors, _triangles, cell);
+            // On the ground it is drawn round, not at the shape's own height: a pad across a slope
+            // would otherwise have its outline hanging in the air on one side and buried on the
+            // other, and stop reading as the edge of the thing it belongs to.
+            GhostMesh.LoopOnGround(_outline, at => GroundAt(at) + 0.15f, half, colour,
+                _vertices, _colors, _triangles, cell);
         }
 
         GUIStyle _label;

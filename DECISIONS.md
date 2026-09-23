@@ -5828,3 +5828,17 @@ frame late).
 
 This is the argument for the project's own rule — *show a real run* — in one example: the arithmetic
 was right, every test passed, and the feature was unusable.
+
+### The outline lies on the ground it is drawn round (2026-09-23)
+
+Noticed in the verification picture: a shape's outline was drawn at the shape's own height while its
+overlay tiles follow the land, so a pit cut into a slope had its outline hanging in the air on one
+side and buried on the other, eight metres from the thing it belonged to. An outline marks a boundary
+*on the land* — the tiles already say what height is being asked for — so `GhostMesh.LoopOnGround`
+walks each edge in short pieces and takes the ground under each.
+
+The first attempt drew each piece flat at its midpoint's height, which left a gap wherever the ground
+stepped and turned the outline into an accidental dashed line. `GhostMesh.Line` now takes a height
+for each end, so consecutive pieces meet.
+
+The node discs moved onto the ground with it, for the same reason.
