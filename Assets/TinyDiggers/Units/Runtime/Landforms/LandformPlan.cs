@@ -92,7 +92,11 @@ namespace TinyDiggers.Units
         /// Cells no shape covers are not in the map: the plan says nothing about them, which is not
         /// the same as saying they should stay as they are.
         /// </summary>
-        public void Surface(TerrainGrid grid, Dictionary<int, float> into)
+        /// <param name="owners">
+        /// Filled, if given, with which shape decided each cell — the site a unit is posted to when
+        /// it is sent to work there, and how the tool knows which shape the pointer is over.
+        /// </param>
+        public void Surface(TerrainGrid grid, Dictionary<int, float> into, Dictionary<int, int> owners = null)
         {
             if (grid == null)
                 throw new ArgumentNullException(nameof(grid));
@@ -100,6 +104,7 @@ namespace TinyDiggers.Units
                 throw new ArgumentNullException(nameof(into));
 
             into.Clear();
+            owners?.Clear();
             foreach (var form in _forms)
             {
                 if (form.Kind != LandformKind.Area || !form.IsDrawn)
@@ -121,6 +126,8 @@ namespace TinyDiggers.Units
                         };
 
                     into[cell] = height;
+                    if (owners != null)
+                        owners[cell] = form.Id;
                 }
             }
         }
