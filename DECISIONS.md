@@ -4553,3 +4553,26 @@ than a formality, and the banner says so plainly.
 
 For the trial it just means the dump has to be worth the name: **441 cells at three metres**, some
 330 m³, which is room to watch the whole job rather than the first three quarters of it.
+
+### The larger tip unblocks it, and a pairing bug shows up on its own
+
+Queried live, mid-run: **52 designations left of 202, 441 tip cells, 0 over cap**, and the whole
+crew working — two hauling, two heading for the face. The sequence across the three runs:
+
+| | designations left | the spoil |
+| --- | --- | --- |
+| no cap | 32 | **7 m tower**, crew walled in, ramp planner stuck |
+| cap, 225-cell tip | 73 | 1.5 m, tip full, crew stopped and said so |
+| cap, 441-cell tip | **52 and still working** | 1.5 m, nothing over cap |
+
+Which is the shape worth having: a tip with a real capacity, spoil that builds a mound inside it,
+and a game that says "this is full" rather than growing a tower through its own crew.
+
+The same roll turned up something else, unasked:
+
+> `[4 WaitingForHauler :: Full: waiting for a hauler] [5 Idle :: Idle: no digger to serve]`
+
+The digger mech is full and waiting for its dumper; the dumper believes it has no digger to serve.
+They have lost each other. That is trial F — haulage balance — arriving on its own, and it is a
+pairing bug rather than anything to do with dirt: look at `JobDispatcher.AssignDigger` /
+`HaulerFor` / `DiggerFor` and what clears a pairing.

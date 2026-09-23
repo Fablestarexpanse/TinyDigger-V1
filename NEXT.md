@@ -10,33 +10,25 @@ is done, what is running, what comes next.
 
 ## NEXT
 
-**A unit is told to start again every tick.** Confirmed, not guessed:
+**Road cut (Ronan's current ask) — working, two things left.**
 
-```
-[0 Moving at (15.50, 21.39) ... waited 0.0 path 1/8 RETHINK :: Moving to ramp (14, 13) to 5.5 m]
-```
+`TinyDiggers/Road Cut Capture` lays forty cells of road at width five, held **level** through a 3 m
+soil rise, with a 441-cell tip capped three metres over its own ground and a 169-cell quarry. The
+spoil now reads as tipped dirt: a rounded mound of bare material, nothing over its cap, and the
+crew works to about a quarter of the designations left.
 
-`_rethink` is set every tick, so the unit re-chooses its job, `TryPlan` rebuilds the same
-eight-waypoint path, `_pathIndex` goes back to nought, it walks one waypoint and starts again.
-Nothing is blocking it. **This is very likely the whole of the "congestion" that was blamed on the
-traffic rule, the heap and the keep-apart radius in turn** — a unit whose job is re-chosen faster
-than it can walk looks exactly like one that is stuck.
+1. **A digger and its dumper lose each other.** `[4 Full: waiting for a hauler]` beside
+   `[5 Idle: no digger to serve]`. That is trial F arriving on its own — look at
+   `JobDispatcher.AssignDigger` / `HaulerFor` / `DiggerFor` and what clears a pairing.
+2. **The heap terraces on the half-metre step grid** rather than rounding. Loose spoil at its angle
+   of repose wants a slope of about 0.35 m a cell and the grid cannot express less than 0.5, so
+   `AngleOfReposeSimulator` can never settle the last step. Presentation, most likely, not physics.
 
-Narrowed by reading the two handlers, which are already careful: unit 0 is **Moving**, so the only
-branch of `OnDesignationChanged` that can fire is `x == JobTarget.x && z == JobTarget.y` — and its
-JobTarget **is** the ramp step. So the thing changing every tick is the auto step itself.
+The slump pacing (`TerrainView.SlumpTilesPerSecond`, ninety, unscaled) needs judging live — a still
+cannot show it.
 
-**Suspect, not yet confirmed:** `JobDispatcher.UpdateRamp` runs every tick and calls `EndRamp` as
-soon as any unit reports `CanWorkFromSomewhereReachable(target)`; `RequestRamp` re-plans it on the
-next rethink, and now that every digger asks on every rethink the two can trade the same
-designation back and forth for ever.
-
-**Confirm before fixing** — log `EndRamp` and `PlaceRampStep` for a few ticks. This is the fourth
-explanation for these cells and the first three were wrong.
-
-If it holds, the fix is narrow: **a ramp should not be ended while a unit is on its way to cut its
-step.** Hysteresis on one decision, rather than changing how every unit hears about the world.
-
+**Pit (earlier thread, still open).** A unit is told to start again every tick; see below and
+DECISIONS.md. Not the road's problem — the road crew's paths advance normally.
 
 ### Done since the last note
 
