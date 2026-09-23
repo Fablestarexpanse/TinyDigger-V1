@@ -50,9 +50,10 @@ see `DECISIONS.md`, 2026-09-22.
 typed Node at ... m, an over the ground ... m box, and a Bends line beside the Grades line.
 `RoadsHost.SelectNode` picks which node those fields act on without a mouse.
 
-**Nothing is left open on the road tool.** Next time Ronan looks: the crew has never actually
-*built* one of these shaped roads — every picture so far is the ghost. Worth running the crew over
-a cut-corner road before calling Part C finished.
+**Nothing is left open on the road tool**, and the crew has now built one: `5_built.png` is a
+laid, fully paved road with two 4 m arcs, 0 designations left after 265 game seconds. The capture
+marks a quarry as well as a tip, because a road that needs fill and has no quarry stops the crew
+dead (they say so plainly: "Nothing to fill with: mark a Quarry").
 
 **Still open from the digging run:** the rethink loop in the deep pit (`path 1/8 RETHINK`; suspect
 `UpdateRamp`/`RequestRamp` trading the designation — confirm with logs before changing), heap

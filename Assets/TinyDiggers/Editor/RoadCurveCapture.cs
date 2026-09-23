@@ -23,6 +23,13 @@ namespace TinyDiggers.EditorTools
     {
         const string Folder = "Screenshots/RoadCurve";
 
+        /// <summary>
+        /// Game seconds the crew gets to build the road, at <see cref="Speed"/>× time. Game
+        /// seconds, not real ones: an editor that is not the window in front barely ticks.
+        /// </summary>
+        const float BuildSeconds = 900f;
+        const float Speed = 20f;
+
         [MenuItem("TinyDiggers/Road Curve Capture")]
         static void Run()
         {
@@ -108,9 +115,53 @@ namespace TinyDiggers.EditorTools
                 Debug.Log($"Road curve capture: two metres up — cut {roads.Cut:0.#} m³, fill {roads.Fill:0.#} m³, highest fill {roads.HighestFill:0.#} m");
                 yield return Shoot("4_causeway");
 
+                // And the thing none of the other pictures show: the crew building a road whose
+                // corners were cut to arcs. Back onto the ground first — a causeway two metres up
+                // is a lot of fill to carry, and what is being tested here is the shape.
+                for (var i = 0; i < draft.Nodes.Count; i++)
+                    roads.SetGroundOffset(i, 0f);
+                yield return Frames(3);
+                var cut = roads.Cut;
+                var fill = roads.Fill;
+
+                // Spoil has to go somewhere, and fill has to come from somewhere.
+                var zone = Vector2Int.FloorToInt(p0 - new Vector2(14f, 14f));
+                var zoned = 0;
+                for (var z = zone.y - 6; z <= zone.y + 6; z++)
+                    for (var x = zone.x - 6; x <= zone.x + 6; x++)
+                        if (tools.Map.SetDumpZone(x, z, true, grid.GetSurfaceHeight(x, z) + 2f))
+                            zoned++;
+
+                // And somewhere to dig it from. Without this the crew stands still and says
+                // "Nothing to fill with: mark a Quarry" — which is the game telling the truth, but
+                // it makes for a poor picture of a finished road.
+                var pit = Vector2Int.FloorToInt(p0 + new Vector2(-14f, 14f));
+                var quarried = 0;
+                for (var z = pit.y - 5; z <= pit.y + 5; z++)
+                    for (var x = pit.x - 5; x <= pit.x + 5; x++)
+                        if (tools.Map.SetQuarry(x, z, true, grid.GetSurfaceHeight(x, z) - 3f))
+                            quarried++;
+
+                var laid = roads.Commit();
+                Debug.Log($"Road curve capture: laid the road: {laid} — {tools.LastAction}; {tools.Map.Count} designations, {zoned} cells of tip, {quarried} of quarry");
+                if (laid)
+                {
+                    Time.timeScale = Speed;
+                    var clock = Time.time;
+                    while (Time.time - clock < BuildSeconds
+                           && (tools.Map.Count > 0 || roads.Builder.Waiting > 0))
+                        yield return null;
+                    Time.timeScale = 1f;
+                    Debug.Log($"Road curve capture: after {Time.time - clock:0} game seconds, {tools.Map.Count} designations left and {roads.Builder.Waiting} road cells unpaved");
+                    tools.SetMode(ToolMode.Select);
+                    Pose(camera, pose, look);
+                    yield return Frames(6);
+                    yield return Shoot("5_built");
+                }
+
                 roads.Cancel();
                 rts.enabled = true;
-                Debug.Log("Road curve capture: done");
+                Debug.Log($"Road curve capture: done (ghost said cut {cut:0.#} m³, fill {fill:0.#} m³)");
                 Destroy(gameObject);
             }
 

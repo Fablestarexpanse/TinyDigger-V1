@@ -4766,3 +4766,21 @@ of slack, since an arc cut to exactly the minimum measures a hair under it.
 
 Evidence: one dog-leg, drawn at 2.2 m, rounded to **4 m with both corners cut to arcs**, judged
 Fine. Suite green: 541 passed, 1 skipped.
+
+---
+
+## 2026-09-22 — The crew builds a shaped road
+
+Every picture of the curve tools so far had been the ghost. The capture now lays the smoothed road
+and lets the crew build it, which is the only way to find out whether an arc survives being
+rasterised into designations and dug.
+
+It does. **30 designations, 0 left and 0 road cells unpaved after 265 game seconds**, and the
+paving follows the two 4 m arcs without a kink. Nothing about the fillet upsets `RoadPlanner.
+Footprint` — the concern was that a 4 m radius on half-metre cells with a three-cell road might
+fold its inner edge over itself, and at this radius it does not.
+
+**The first run built four cells and stopped**, with every unit saying *"Nothing to fill with:
+mark a Quarry"*. That was the trial's fault, not the crew's: the road needed 4 m³ of fill and
+there was nowhere to get it. Worth writing down because the status line named the missing thing
+exactly, and the fix was to mark a quarry, not to touch any code. A tip alone is not a site.
