@@ -5009,3 +5009,43 @@ made it look.
 
 The test is renamed `ABigCutComesDownInBenchesRatherThanStalling` and now asserts what it actually
 shows: the crew keep working and the first bench comes down.
+
+---
+
+## 2026-09-23 — Trial B: a cutting through a hill jams on its own width
+
+Run in play mode with Ronan watching. A through-cut is marked across a rise near the crew — the
+classic road cutting, floored level with the ground on the low side — and the crew let at it at
+20× time.
+
+**42 cells through a 5 m rise, 32.63 m³. Moved 19.25 m³, then stalled with 13.38 m³ left** after
+1701 game seconds, at 0.0113 m³ a game second (0.68 m³/min).
+
+**Where the time went, which is the finding:**
+
+```
+Waiting 41%   Moving 30%   Parked 15%   Digging 14%
+171 cuts landed, 28 refused on arrival, 0 waited off its own stand
+```
+
+Four of the six units finished on *"Waiting for a unit at (1523, 1562)"* — two cells between them.
+Nothing was out of reach, no ramp was wanted, nothing was refused for want of somewhere to stand
+(`0 waited off its own stand`). They were queueing.
+
+**The cutting is three cells wide — a metre and a half — and there are six units in it**, one of
+them a 0.7 m digger with a dumper parked behind it. At 0.68 m³/min against the 1.0 the same crew
+manage in the open forty-metre cut, a third of their output goes on standing in each other's way.
+
+**This is a gameplay finding, not a bug.** A working face has to be wide enough for the crew sent
+at it, and choosing between a wider cut and a smaller gang is exactly the decision the player
+should be making. What the game does not yet do is *tell* them: six units queueing on two cells
+reads as "Waiting for a unit", which says what a unit is doing and not that the site is too narrow
+for the crew. A crew panel that said "four units are queueing — this face is too narrow" would
+turn a stall into a decision.
+
+Worth keeping in mind against the throughput ladder: the ladder's m³/min were measured on a strip
+three cells wide chosen to measure the unit rather than the site. Six units do not get six times
+one unit's rate in a cutting that width, and the ladder should not be read as if they do.
+
+**Also noted:** the trial's own camera ended up inside the hill for the "worked" shot, so the
+picture shows the crew from within the spoil. Cosmetic, in the trial harness rather than the game.
