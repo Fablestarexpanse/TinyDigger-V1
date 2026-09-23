@@ -235,6 +235,32 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
+        public void ARampDroppedBecauseItIsDoneIsNotTreatedAsCancelled()
+        {
+            // Ending a ramp clears its Auto step, and clearing an Auto step is how the player
+            // cancels one — so ending a ramp normally looked to the dispatcher exactly like the
+            // player cancelling it: the target got held off for the cancel timeout and every unit
+            // was told to think again. That is the "path 1/8 RETHINK" the deep pit sat in
+            // (2026-09-22).
+            BuildTwoTiers();
+            Spawn(3, 10);
+            _map.Designate(16, 10, DesignationKind.Dig, 11f);
+            Run(5f, () => _map.AutoCount > 0);
+            Assert.That(_unit.HasRamp, Is.True, "a ramp was wanted in the first place");
+
+            // A way up appears elsewhere, so the ramp is no longer needed and is dropped.
+            SetHeight(9, 3, 9f);
+            SetHeight(10, 3, 10f);
+            SetHeight(11, 3, 11f);
+            _unit.RequestRethink();
+            _unit.Tick(TickSeconds);
+
+            Assert.That(_unit.HasRamp, Is.False, "the ramp went, as it should");
+            Assert.That(_unit.IsRampSuppressed(16, 10), Is.False,
+                "and the target is not held off: nobody cancelled anything");
+        }
+
+        [Test]
         public void CancellingAnAutoStepHoldsOffThatTargetForTheTimeout()
         {
             BuildTwoTiers();

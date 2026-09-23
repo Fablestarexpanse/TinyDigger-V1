@@ -55,6 +55,12 @@ laid, fully paved road with two 4 m arcs, 0 designations left after 265 game sec
 marks a quarry as well as a tip, because a road that needs fill and has no quarry stops the crew
 dead (they say so plainly: "Nothing to fill with: mark a Quarry").
 
-**Still open from the digging run:** the rethink loop in the deep pit (`path 1/8 RETHINK`; suspect
-`UpdateRamp`/`RequestRamp` trading the designation — confirm with logs before changing), heap
-terracing on the half-metre step grid, and trials B, D and F unrun.
+**The pit's "rethink loop" was a wrong diagnosis and is now closed.** Measured: 0 Auto cancels in
+240 s, rethinks on 0.6% of ticks. The real fault is that `PlaceRampStep` never looks at the last
+step of its corridor, which in a pit is the only steep one — so no way in is ever cut and the pit
+stops at four fifths. Reproduction is `[Ignore]`d in `DeepPitTests` with the numbers; the fix
+needs a ruling from Ronan on what a ramp step into the target cell should cut. See `DECISIONS.md`,
+2026-09-22.
+
+**Still open from the digging run:** heap terracing on the half-metre step grid, and trials B, D
+and F unrun.

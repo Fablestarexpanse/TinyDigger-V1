@@ -4784,3 +4784,44 @@ fold its inner edge over itself, and at this radius it does not.
 mark a Quarry"*. That was the trial's fault, not the crew's: the road needed 4 m³ of fill and
 there was nowhere to get it. Worth writing down because the status line named the missing thing
 exactly, and the fix was to mark a quarry, not to touch any code. A tip alone is not a site.
+
+---
+
+## 2026-09-22 — The pit's "rethink loop" does not exist
+
+The deep pit has been carrying an open note for two sessions: `path 1/8 RETHINK` in the status
+line, blamed on the auto-ramp and `RequestRethink` trading a designation back and forth. It was
+never measured. It is now, and it is not what was happening.
+
+**A counting test rather than a guess** (`DeepPitTests.TheCrewIsNotToldToThinkAgainOverAndOver`):
+four robots, a six-step pit, 240 s of work, watching `DesignationMap.AutoCancelled` and each
+unit's `Rethinking`. Result: **0 Auto cancels, units wanting a rethink on 0.6% of ticks, and
+30.75 m³ still outstanding.** There is no loop. `RETHINK` in a status line is a unit about to
+choose a job, which is the ordinary thing for it to be doing.
+
+Two candidate mechanisms were checked and both ruled out:
+
+- **Ending a ramp is not mistaken for the player cancelling one.** `EndRamp` clears its Auto step
+  with `DesignationMap.Clear`, which deliberately does not raise `AutoCancelled` — only `Cancel`
+  and `CancelDesignation` do. A test now holds that line down
+  (`AutoRampTests.ARampDroppedBecauseItIsDoneIsNotTreatedAsCancelled`), and it passed the moment
+  it was written, which is how the idea was dropped.
+- **The `ramp would cut into designated` guard is not what blocks the pit.** Skipping it for a Dig
+  whose target is already at or below the ramp's step changed nothing at all, so that change was
+  reverted rather than kept as an unproven branch.
+
+**What is actually wrong.** `JobDispatcher.PlaceRampStep` walks the corridor `for (i = 1; i <
+_corridor.Count - 1; i++)`, so the last step is never examined — and in a pit the last step is the
+only steep one there is: the drop off the plateau into the cut. The planner falls out of the loop
+and reports `nowhere to stand beside (9, 18)`, which is true and beside the point. The crew never
+gets a way in, two units end up inside the cut holding barrows they cannot carry out, and the pit
+stops at four fifths dug.
+
+Fixing it means deciding what a ramp step cut *into the target cell itself* should take down, and
+by how much, without eating the player's own order for that cell. That is a design question for
+Ronan, not a patch, so it is written down here and the reproduction is `[Ignore]`d beside
+`AShallowPitIsDug` with the same numbers in it.
+
+**Worth keeping as a rule:** the status line is not the diagnosis, and this is the third time on
+this one bug. Counting the thing being blamed took one test and one run; the two sessions before
+it were spent reading status text.

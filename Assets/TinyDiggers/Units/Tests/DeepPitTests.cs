@@ -279,6 +279,83 @@ namespace TinyDiggers.Units.Tests
         /// making no ground.
         /// </summary>
         [Test]
+        public void TheCrewIsNotToldToThinkAgainOverAndOver()
+        {
+            // The deep pit sat showing "path 1/8 RETHINK", and two guesses at why were wrong: the
+            // crew was not actually in a rethink loop the first time (paths were advancing), and
+            // ending a ramp is not mistaken for the player cancelling one (DesignationMap.Clear
+            // deliberately does not raise AutoCancelled). So this counts instead of guessing: how
+            // often an Auto step is cancelled, and how often a unit is thinking again, per second
+            // of work. A ramp being cancelled every second or two is a loop; a handful over a
+            // whole shift is the crew doing its job.
+            Crew(4);
+            MarkThePit(6);
+            var cancels = 0;
+            _map.AutoCancelled += (x, z) => cancels++;
+
+            var rethinks = 0;
+            var seconds = 0f;
+            const float cap = 240f;
+            while (seconds < cap && _map.Count > 0)
+            {
+                _dispatcher.Tick(TickSeconds);
+                foreach (var unit in _units)
+                {
+                    unit.Tick(TickSeconds);
+                    if (unit.Rethinking)
+                        rethinks++;
+                }
+
+                seconds += TickSeconds;
+            }
+
+            var perMinute = cancels / (seconds / 60f);
+            var thinkingShare = rethinks / (float)Mathf.Max(1, Mathf.RoundToInt(seconds / TickSeconds) * _units.Count);
+            Debug.Log($"RETHINK COUNT {seconds:0} s: {cancels} auto cancels ({perMinute:0.#}/min), "
+                                  + $"units wanting a rethink on {thinkingShare * 100f:0.#}% of ticks, "
+                                  + $"{Outstanding():0.##} m³ left, ramp note: {_dispatcher.RampNote}");
+
+            Assert.That(perMinute, Is.LessThan(12f),
+                "an Auto step cancelled every few seconds is a ramp being laid and torn up in a loop");
+            Assert.That(thinkingShare, Is.LessThan(0.5f),
+                "a crew that wants to think again on most ticks is not working");
+        }
+
+        [Test]
+        [Ignore("Known fault, 2026-09-22. Measured, not guessed: 240 s of a six-step pit ends with "
+                + "30.75 m³ outstanding, 0 Auto cancels and units wanting a rethink on 0.6% of "
+                + "ticks — so the 'rethink loop' this was blamed on for two sessions does not "
+                + "exist. What does is that no way in is ever cut. JobDispatcher.PlaceRampStep "
+                + "walks the corridor from i = 1 to Count - 2, so the last step — the drop off the "
+                + "plateau into the cut, which in a pit is the only steep one there is — is never "
+                + "examined, and it ends at the 'nowhere to stand beside' branch instead. Skipping "
+                + "the designated-cell guard above it changes nothing, which is how that was ruled "
+                + "out. Fixing it means deciding what a ramp step into the target cell itself "
+                + "should cut, and that is a design question, not a patch.")]
+        public void ARampCanBeCutIntoTheBlockTheCrewIsDigging()
+        {
+            // The ramp planner would not route a corridor through a cell that carries a
+            // designation unless that cell was already reachable — so it could never plan a way
+            // into the pit, because every cell of the pit is designated. 240 s of a six-step pit
+            // ended with 30.75 m³ still to go and "ramp blocked: no ramp route to (9, 18)"
+            // (2026-09-22). A ramp exists to cut through exactly those cells.
+            Crew(4);
+            MarkThePit(6);
+
+            var seconds = 0f;
+            while (seconds < 120f && _map.AutoCount == 0)
+            {
+                _dispatcher.Tick(TickSeconds);
+                foreach (var unit in _units)
+                    unit.Tick(TickSeconds);
+                seconds += TickSeconds;
+            }
+
+            Assert.That(_map.AutoCount, Is.GreaterThan(0),
+                $"no way in was ever cut in {seconds:0} s — {_dispatcher.RampNote}");
+        }
+
+        [Test]
         public void ADeepPitEitherGetsDugOrSaysWhyNot()
         {
             Crew(4);
