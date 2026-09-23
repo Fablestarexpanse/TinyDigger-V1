@@ -262,11 +262,6 @@ namespace TinyDiggers.Interaction
             LastAction = mode == ToolMode.Select ? "Select: click or drag over units, right-click to send them" : mode + " tool";
         }
 
-        public void UnlockHeight()
-        {
-            HeightLocked = false;
-        }
-
         /// <summary>Takes back an unfinished rectangle or road.</summary>
         public void CancelDrawing()
         {

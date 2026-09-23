@@ -103,7 +103,7 @@ namespace TinyDiggers.Interaction
             {
                 var a = i * Mathf.PI * 2f / Segments;
                 var direction = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
-                var ground = GroundAt(grid, centre + direction * radius) + Lift;
+                var ground = SmoothGroundAt(grid, centre + direction * radius) + Lift;
                 _vertices.Add(new Vector3(centre.x + direction.x * inner, ground, centre.y + direction.y * inner));
                 _vertices.Add(new Vector3(centre.x + direction.x * outer, ground, centre.y + direction.y * outer));
                 _colors.Add(color);
@@ -121,7 +121,7 @@ namespace TinyDiggers.Interaction
         }
 
         /// <summary>The ground under a local point, averaged with its neighbours so the ring does not stair-step.</summary>
-        static float GroundAt(TerrainGrid grid, Vector2 local)
+        static float SmoothGroundAt(TerrainGrid grid, Vector2 local)
         {
             var fx = local.x / grid.CellSize - 0.5f;
             var fz = local.y / grid.CellSize - 0.5f;

@@ -162,13 +162,7 @@ namespace TinyDiggers.Interaction
 
         TerrainGrid Grid => _terrain.Grid;
 
-        float GroundAt(Vector2 cells)
-        {
-            var grid = Grid;
-            var x = Mathf.Clamp(Mathf.FloorToInt(cells.x), 0, grid.Width - 1);
-            var z = Mathf.Clamp(Mathf.FloorToInt(cells.y), 0, grid.Height - 1);
-            return grid.IsGround(x, z) ? grid.GetSurfaceHeight(x, z) : World.SeaLevel;
-        }
+        float GroundAt(Vector2 cells) => TerrainSpace.GroundAt(Grid, cells);
 
         // --- input, from PlayerTools while the Road tool is in hand ---------------------------------
 

@@ -31,5 +31,22 @@ namespace TinyDiggers.Terrain
 
         /// <summary>Cells in <paramref name="metres"/>, at least 1.</summary>
         public static int Cells(TerrainGrid grid, float metres) => Mathf.Max(1, Mathf.RoundToInt(metres / grid.CellSize));
+
+        /// <summary>
+        /// The ground under a point given in cells: the surface of the cell it falls in, clamped to
+        /// the map, and sea level where there is no ground — which is what a tool wants when the
+        /// cursor runs off the edge of the island.
+        ///
+        /// The nearest cell, not a blend between four. Something drawing a smooth cursor wants the
+        /// blend and has its own; a tool placing a node on a cell wants the cell it is on.
+        /// </summary>
+        public static float GroundAt(TerrainGrid grid, Vector2 cells)
+        {
+            if (grid == null)
+                return 0f;
+            var x = Mathf.Clamp(Mathf.FloorToInt(cells.x), 0, grid.Width - 1);
+            var z = Mathf.Clamp(Mathf.FloorToInt(cells.y), 0, grid.Height - 1);
+            return grid.IsGround(x, z) ? grid.GetSurfaceHeight(x, z) : World.SeaLevel;
+        }
     }
 }
