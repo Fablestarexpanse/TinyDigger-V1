@@ -4969,3 +4969,43 @@ a hole in a plain. That is Trial B, still unrun, and it is a different shape of 
 start on top of the material and work down from above, which is the case the reach rules are
 happiest with. Worth running before any ramp ruling, because it may show the digging is fine and
 only the descent is broken.
+
+---
+
+## 2026-09-23 — Correction: the big cut was never stalled, and the face model is already in
+
+Ronan: *"How can we set where they start digging from the front, where they can reach, first
+what's above ground, then dig into the ground — isn't this how Captains of Industry does it?"*
+That is the right model, and answering it properly meant going back and checking the previous
+entry, which turned out to be wrong.
+
+**The correction.** The entry above says the crew "cut the top of the ramp and stop" in the
+forty-metre cut. They do not. Sampling what they move per hundred game seconds gives **2.88, 2,
+2.13, 1.88, 1.75, 1.5 m³** — declining gently as the haul to the tip lengthens, never stopping.
+That is about a cubic metre a minute, which is exactly what four starter robots with barrows move
+(the throughput ladder says 1.575 m³/min for a pair). The hole is **1200 m³**. They are working
+normally on a site that would take them thirteen game hours.
+
+I read `RampNote` and called it a stall. That is the third time on this bug that a status line has
+been taken for a diagnosis, and the second time in two days. The rate took one helper and one run.
+
+**"Deepest a unit stood: 1 m" is benching working, not a crew stuck on a rim.** `DigFloor` already
+holds every dig cell within one `BenchDepth` of its highest dig-designated neighbour, so a
+designated block comes down a metre at a time and nobody ever stands deeper than the bench they
+have finished. At one per cent into the first bench of a forty-metre cut, a metre is exactly where
+they should be.
+
+**So the face model Ronan describes is in and working.** Cells come off in benches from the ground
+the crew can already stand on, the cut advances into the block rather than dropping a cliff, and
+the comment on `DigFloor` says as much: *"keeps a designated hill coming down in benches rather
+than as a cliff, so its upper cells always have somewhere within reach to be worked from."*
+
+**What is left is the small-block case, and it is now properly narrow.** A bench needs room to
+lie down in. Seven cells across wanting three metres of depth cannot hold one, so nothing can come
+off until a ramp is cut, and the ramp planner has the blind spot (`PlaceRampStep` never examines
+the last step of its corridor). That is a real fault, and it is a fault about *small* cuts, not
+about digging in general — which is a much smaller and less urgent thing than two days of notes
+made it look.
+
+The test is renamed `ABigCutComesDownInBenchesRatherThanStalling` and now asserts what it actually
+shows: the crew keep working and the first bench comes down.

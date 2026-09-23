@@ -123,6 +123,34 @@ namespace TinyDiggers.Units.Tests
             return (elapsed, start - Outstanding(), deepest);
         }
 
+        /// <summary>
+        /// The same run, but reporting how much moved in each stretch of it. A crew that is merely
+        /// slow moves the same amount every stretch; a crew that is stuck moves less and less and
+        /// then none. Reading a status line cannot tell those apart, and has twice been wrong.
+        /// </summary>
+        string Rate(float cap, int stretches)
+        {
+            var text = "";
+            var was = Outstanding();
+            for (var s = 0; s < stretches; s++)
+            {
+                var until = 0f;
+                while (until < cap / stretches && _map.Count > 0)
+                {
+                    _dispatcher.Tick(TickSeconds);
+                    foreach (var unit in _units)
+                        unit.Tick(TickSeconds);
+                    until += TickSeconds;
+                }
+
+                var now = Outstanding();
+                text += $"{was - now:0.##} ";
+                was = now;
+            }
+
+            return text.Trim();
+        }
+
         [Test]
         public void ABigCutHasRoomForARealHaulRoadDownIntoIt()
         {
@@ -146,7 +174,7 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
-        public void AHaulRoadDrawnIntoABigCutTakesTheCrewToTheFloor()
+        public void ABigCutComesDownInBenchesRatherThanStalling()
         {
             // The claim under test: at a real size the road tool *is* the way in. The pit is
             // marked as the player would mark it, the haul road is drawn down the middle of it,
@@ -176,21 +204,32 @@ namespace TinyDiggers.Units.Tests
                 if (cell.IsDig)
                     _map.Designate(cell.X, cell.Z, DesignationKind.Dig, cell.Height);
 
+            var rate = Rate(600f, 6);
             var (seconds, moved, deepest) = Work(900f);
             Debug.Log($"BIG CUT: haul road at {RoadSpline.Grade(chain, 0, _grid.CellSize) * 100f:0.#}%; "
                       + $"{moved:0.#} m³ moved in {seconds:0} game s, deepest a unit stood: {deepest:0.##} m "
-                      + $"of {depth} m, {Outstanding():0.#} m³ left, ramp note: {_dispatcher.RampNote}");
+                      + $"of {depth} m, {Outstanding():0.#} m³ left, ramp note: {_dispatcher.RampNote}; "
+                      + $"m³ per 100 game s over the first 600: {rate}");
 
-            // Written down because it settles the question it was built to ask. Making the hole
-            // big enough fixes the *geometry* — a 12% haul road fits in a forty-metre cut, which
-            // ABigCutHasRoomForARealHaulRoadDownIntoIt now holds — but it does not fix the crew.
-            // They cut the first step of the ramp, half a metre, and stop: 16 m³ of 1200 in 900
-            // game seconds, with "nowhere to stand beside" (2026-09-23). That is the same fault as
-            // in the seven-cell pit, so the fault is in how a step is cut, not in how much room
-            // there is, and no amount of size will get round it.
-            Assert.That(deepest, Is.LessThan(depth * 0.6f),
-                $"if the crew now walk down into the cut ({deepest:0.##} m of {depth} m), the ramp "
-                + "fault is fixed and this test should assert that instead");
+            // This looked like a stall and is not one, and reading the status line said "stall"
+            // for the third time on this bug (2026-09-23). The rate settles it: 2.88, 2, 2.13,
+            // 1.88, 1.75, 1.5 m³ per hundred game seconds — declining gently as the haul to the
+            // tip lengthens, never stopping. That is about 1 m³ a minute, which is what four
+            // starter robots with barrows move. The hole is 1200 m³.
+            //
+            // "Deepest a unit stood: 1 m" is benching doing its job, not a crew stuck on a rim:
+            // DigFloor holds every cell within a metre of its highest designated neighbour, so a
+            // forty-metre block comes down a metre at a time and nobody stands deeper than the
+            // bench they have finished. They are about one per cent into the first bench.
+            //
+            // So the big cut is not the ramp fault. That one is specific to a block too small to
+            // hold a bench slope at all — seven cells across wanting three metres — where nothing
+            // can come down until a ramp is cut, and the ramp planner has its blind spot.
+            Assert.That(rate, Is.Not.Empty);
+            Assert.That(moved, Is.GreaterThan(5f),
+                $"the crew should keep working a big cut rather than stalling on its rim — {moved:0.#} m³ moved");
+            Assert.That(deepest, Is.GreaterThanOrEqualTo(0.5f),
+                "and should get at least the first bench down");
         }
     }
 }

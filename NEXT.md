@@ -67,10 +67,12 @@ for anywhere with room (3 m down wants 25 m of run at 12%, and Max grade is a fi
 drawn steeper), no as a way round the pit fault: a 100% ramp moved 10.75 of 42.38 m³ against about
 8 with none, because the deep end of a drawn ramp is itself a cut behind the same wall.
 
-**Size does not get round the ramp fault** (Ronan, 2026-09-23, and he was right about the
-geometry): in a forty-metre cut a haul road comes out at 11.1% and the tool is happy — but the
-crew still moved 16.5 m³ of 1200 in 900 game seconds, deepest anyone stood 1 m of 3 m. See
-`BigSiteTests` and `DECISIONS.md`.
+**The big cut was never stalled — that claim was wrong and is corrected** (`DECISIONS.md`,
+2026-09-23). Rate per 100 game s: 2.88, 2, 2.13, 1.88, 1.75, 1.5 m³ — normal throughput on a
+1200 m³ hole, declining only as the haul lengthens. Benching already does the face model Ronan
+described: cells come off a metre at a time from ground the crew can stand on. The ramp fault is
+real but narrow: it only bites on a block too small to hold a bench (seven cells wanting three
+metres).
 
 **Next, and Ronan's other half:** cutting a hill down for fill rather than digging a hole in a
 plain (Trial B). The crew start on top of the material there, which is the case the reach rules
