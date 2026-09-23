@@ -5083,3 +5083,39 @@ the machines rather than a second rule in the code.
 controller has that state, so a missing state would leave the body playing whatever it was playing
 with nothing to say so. Every controller has all four states today, so this is a trap rather than
 a bug, and it is not being "fixed" on spec.
+
+---
+
+## 2026-09-23 — Dig and tip feel, step 1: the earth moves at the bite
+
+Ronan's brief: terrain changes fire from animation events, at the frame the bucket enters the
+ground, not at job start. Verified by a test that `Remove()` is not called before the event.
+
+**What was already true.** The sim does not change the ground at job start — it never did. A cut
+is committed at the *end* of its interval, and the interval is the clip's length, which the view
+hands over (`DigSeconds`, `TipSeconds`). So the seam the brief asks for exists; what was wrong was
+the moment, which was the end of the swing rather than the bite.
+
+**How it is done, and the one decision in it.** The crew logic is plain C# and cannot be called
+back into from an animator, so it is *told when the bite lands* rather than driven by the event:
+`BiteAt` and `TipAt` are fractions of the swing, and `CrewView` sets them exactly as it already
+sets the swing's length. An `OnBite` or `OnTip` event on the clip is read for its **timestamp**
+(`EventAt`), so the authoring is still "put the event on the frame the bucket lands"; without an
+event, two serialized fields on `CrewView` stand in (0.5 dig, 0.45 tip) so the frame can be found
+by eye first. `Work()` now fires the step at that fraction and plays the rest of the swing out,
+with the cycle still one interval long.
+
+**Two things learned the hard way, both by running rather than reasoning:**
+
+- **Transferring is a rate, not a swing.** Splitting its cycle too made a parked hauler read its
+  digger as stopped and leave part loaded. Only a cut and a tip have a moment; everything else
+  keeps the plain cycle.
+- **The sim's own defaults must not change.** Defaulting `BiteAt` to 0.5 shifted every unit's
+  cadence and broke a hauler-patience test whose timing was tighter than it looked. The defaults
+  are 1 — the end of the swing, exactly as before — and only a unit with a body drawing it is told
+  otherwise. That is the same rule as `DigSeconds`: the crew logic's defaults are not the game's
+  numbers.
+
+Tests: `TheGroundDoesNotMoveUntilTheBucketReachesIt` holds that nothing comes off before the bite,
+and `ABiteLateInTheSwingMovesTheGroundLaterThanAnEarlyOne` holds that moving the event moves the
+moment. Suite 549 passed, 2 skipped.

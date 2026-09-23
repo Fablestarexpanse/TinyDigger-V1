@@ -104,6 +104,12 @@ namespace TinyDiggers.Interaction
         [Tooltip("Seconds to blend from one clip to the next.")]
         [SerializeField, Min(0f)] float _clipBlend = 0.15f;
 
+        /// <summary>How far through the dig clip the bucket reaches the ground, 0 to 1.</summary>
+        [SerializeField, Range(0f, 1f)] float _biteAt = 0.5f;
+
+        /// <summary>How far through the tip clip the bed lets go of its load, 0 to 1.</summary>
+        [SerializeField, Range(0f, 1f)] float _tipAt = 0.45f;
+
         /// <summary>
         /// Size of the robot body; 1 is as modelled, human scale: a ball 0.285 m across floating
         /// 0.125 m up. Read every frame.
@@ -361,10 +367,16 @@ namespace TinyDiggers.Interaction
         /// Unity's animator — so whatever draws a unit tells it how long the work looks. A body
         /// with no clips leaves the times alone and the unit keeps its own interval.
         /// </summary>
-        static void TimeWorkToTheClips(CrewUnit unit, Animator animator)
+        void TimeWorkToTheClips(CrewUnit unit, Animator animator)
         {
             if (animator == null || animator.runtimeAnimatorController == null)
                 return;
+
+            // A body means a swing to watch, so the earth moves part way through it rather than at
+            // the end. An OnBite or OnTip event on the clip says exactly where; without one these
+            // stand in, and they are fields so the frame can be found by eye before it is authored.
+            unit.BiteAt = _biteAt;
+            unit.TipAt = _tipAt;
 
             foreach (var clip in animator.runtimeAnimatorController.animationClips)
             {
@@ -373,10 +385,39 @@ namespace TinyDiggers.Interaction
                 // The states are named for what the unit is doing: Work is the cut for a digging
                 // unit and the tip for a hauler, which is exactly how CrewAnimation picks them.
                 if (clip.name.EndsWith("dig"))
+                {
                     unit.DigSeconds = clip.length;
+                    var at = EventAt(clip, "OnBite");
+                    if (at >= 0f)
+                        unit.BiteAt = at;
+                }
                 else if (clip.name.EndsWith("tip"))
+                {
                     unit.TipSeconds = clip.length;
+                    var at = EventAt(clip, "OnTip");
+                    if (at >= 0f)
+                        unit.TipAt = at;
+                }
             }
+        }
+
+        /// <summary>
+        /// How far through <paramref name="clip"/> the event called <paramref name="name"/> sits,
+        /// 0 to 1, or -1 if the clip carries no such event.
+        ///
+        /// The event's *time* is what is wanted, not its callback: the crew logic is plain C# and
+        /// cannot be called back into from an animator, so it is told when the bite lands the same
+        /// way it is told how long the swing takes. Putting the event on the frame the bucket
+        /// enters the ground is still how it is authored.
+        /// </summary>
+        static float EventAt(AnimationClip clip, string name)
+        {
+            if (clip.length <= 0f)
+                return -1f;
+            foreach (var e in clip.events)
+                if (e.functionName == name)
+                    return Mathf.Clamp01(e.time / clip.length);
+            return -1f;
         }
 
         /// <summary>A flat ring on the ground, hidden until wanted; null without a marker material.</summary>

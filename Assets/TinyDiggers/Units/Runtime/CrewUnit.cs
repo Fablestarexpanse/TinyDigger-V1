@@ -256,6 +256,24 @@ namespace TinyDiggers.Units
         /// <summary>Seconds for one tip, or nought to use <see cref="WorkInterval"/>.</summary>
         public float TipSeconds;
 
+        /// <summary>
+        /// How far through a cut the ground actually changes, 0 to 1 — the frame the bucket enters
+        /// it, not the end of the swing (Ronan, 2026-09-23: terrain changes fire at the bite).
+        ///
+        /// Whatever draws a unit sets this from an <c>OnBite</c> event on the clip, the same way it
+        /// already sets <see cref="DigSeconds"/> from the clip's length: the crew logic stays plain
+        /// C# and is told when the bite lands rather than calling back into an animator.
+        ///
+        /// One means the end of the swing, which is where the earth moved before there was any
+        /// notion of a bite, and is what a unit with nothing drawing it keeps. Only a unit with a
+        /// body gets told otherwise, the same as with <see cref="DigSeconds"/>: the crew logic's
+        /// own defaults are not the game's numbers.
+        /// </summary>
+        public float BiteAt = 1f;
+
+        /// <summary>How far through a tip the ground changes, 0 to 1: the bed passing its angle.</summary>
+        public float TipAt = 1f;
+
         /// <summary>Loose m³ a second moved from a digger's scoop into a hauler.</summary>
         public float TransferRate = 5f;
 
@@ -340,6 +358,9 @@ namespace TinyDiggers.Units
         bool _rethink = true;
         float _rethinkTimer;
         float _workTimer;
+
+        /// <summary>Whether this swing has already moved its earth; cleared as the cycle comes round.</summary>
+        bool _bitten;
         float _waitTimer;
 
         /// <summary>Seconds it has stood on the same spot while blocked. See <see cref="Move"/>.</summary>
@@ -1826,6 +1847,7 @@ namespace TinyDiggers.Units
         {
             ClearPath();
             _workTimer = 0f;
+            _bitten = false;
             var toTarget = new Vector2(JobTarget.x + 0.5f, JobTarget.y + 0.5f) - Position;
             if (toTarget.sqrMagnitude > 1e-6f)
                 Heading = (float)(Math.Atan2(toTarget.x, toTarget.y) * 180.0 / Math.PI);
@@ -1884,9 +1906,40 @@ namespace TinyDiggers.Units
             var interval = State == CrewUnitState.Digging
                 ? StepSeconds(JobTarget.x, JobTarget.y)
                 : TipSeconds > 0f ? TipSeconds : WorkInterval;
-            if (_workTimer < interval)
-                return;
-            _workTimer -= interval;
+
+            // The ground changes when the bucket reaches it, part way through the swing, and the
+            // rest of the swing plays out after. The cycle is still one interval long: only the
+            // moment the earth moves has come forward.
+            //
+            // Only a cut and a tip have a moment like that. Handing a load to a hauler is a rate,
+            // not a swing, and splitting its cycle made a parked hauler read its digger as stopped
+            // and leave part loaded (2026-09-23), so anything else keeps the plain cycle.
+            var fraction = State == CrewUnitState.Digging ? BiteAt
+                : State == CrewUnitState.Tipping ? TipAt
+                : 1f;
+            if (fraction >= 1f)
+            {
+                if (_workTimer < interval)
+                    return;
+                _workTimer -= interval;
+            }
+            else
+            {
+                if (_bitten)
+                {
+                    if (_workTimer >= interval)
+                    {
+                        _workTimer -= interval;
+                        _bitten = false;
+                    }
+
+                    return;
+                }
+
+                if (_workTimer < interval * Mathf.Clamp01(fraction))
+                    return;
+                _bitten = true;
+            }
 
             if (Cell != JobStand)
             {
