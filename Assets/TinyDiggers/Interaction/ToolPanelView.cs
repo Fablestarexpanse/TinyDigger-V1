@@ -28,12 +28,15 @@ namespace TinyDiggers.Interaction
         ToolMode _builtFor = (ToolMode)(-1);
 
         RectTransform _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow;
-        RectTransform _rampRow, _roadGradeRow, _roadOptionsRow, _roadHintRow, _quarryRow;
+        RectTransform _roadBendRow;
+        RectTransform _rampRow, _roadGradeRow, _roadOptionsRow, _roadShapeRow, _roadNodeRow, _roadHintRow, _quarryRow;
         Text _quarryNote;
         Toggle _ramp;
         InputField _rampField;
         Text _grades;
-        InputField _maxGradeField;
+        InputField _maxGradeField, _minBendField, _nodeHeightField, _overGroundField;
+        Toggle _holdGrade;
+        Text _bends;
         Toggle _snap45;
         Toggle _lockNode;
         Slider _brush;
@@ -129,6 +132,8 @@ namespace TinyDiggers.Interaction
 
             _roadGradeRow = Row("Grades");
             _grades = UiKit.NewLabel(_roadGradeRow, "", 0f, 0f, Width - 2 * Pad, RowHeight, 14);
+            _roadBendRow = Row("Bends");
+            _bends = UiKit.NewLabel(_roadBendRow, "", 0f, 0f, Width - 2 * Pad, RowHeight, 14);
 
             _roadOptionsRow = Row("Road options");
             UiKit.NewLabel(_roadOptionsRow, "Max grade", 0f, 0f, 80f, RowHeight);
@@ -141,8 +146,37 @@ namespace TinyDiggers.Interaction
             UiKit.Place((RectTransform)_lockNode.transform, 290f, 4f, 170f, RowHeight - 8f);
             UiKit.AddTooltip(_lockNode, () => "The selected node follows the ground; scroll over a node (or PageUp/PageDown) to set its height");
 
+            // Shaping: how tight a bend the crew will take, and the two things that shape one.
+            _roadShapeRow = Row("Road shaping");
+            UiKit.NewLabel(_roadShapeRow, "Min bend", 0f, 0f, 80f, RowHeight);
+            _minBendField = UiKit.NewNumberField(_roadShapeRow, SubmitMinBend);
+            UiKit.Place((RectTransform)_minBendField.transform, 84f, 2f, 56f, RowHeight - 4f);
+            UiKit.NewLabel(_roadShapeRow, "m", 144f, 0f, 20f, RowHeight);
+            var smooth = UiKit.NewButton(_roadShapeRow, "Smooth", () => _tools.Roads.SmoothWholeRoad());
+            UiKit.Place((RectTransform)smooth.transform, 170f, 2f, 90f, RowHeight - 4f);
+            UiKit.AddTooltip(smooth, () => "Round every bend out to the minimum, cutting a corner into a proper arc where pulling its handle cannot reach (C, or Shift+C)");
+            _holdGrade = UiKit.NewToggle(_roadShapeRow, "Hold the grade", false, on =>
+            {
+                var draft = _tools.Roads.Draft;
+                draft.GradeLock = on ? draft.MaxGrade : (float?)null;
+            });
+            UiKit.Place((RectTransform)_holdGrade.transform, 268f, 4f, 200f, RowHeight - 8f);
+            UiKit.AddTooltip(_holdGrade, () => "Nodes placed climb at the max grade instead of sitting on the ground (G); Shift+G re-cuts the road already drawn");
+
+            // The selected node's own height: typed outright, or held over the ground as a causeway.
+            _roadNodeRow = Row("Road node");
+            UiKit.NewLabel(_roadNodeRow, "Node at", 0f, 0f, 70f, RowHeight);
+            _nodeHeightField = UiKit.NewNumberField(_roadNodeRow, SubmitNodeHeight);
+            UiKit.Place((RectTransform)_nodeHeightField.transform, 74f, 2f, 70f, RowHeight - 4f);
+            UiKit.NewLabel(_roadNodeRow, "m", 148f, 0f, 20f, RowHeight);
+            UiKit.NewLabel(_roadNodeRow, "over the ground", 172f, 0f, 130f, RowHeight);
+            _overGroundField = UiKit.NewNumberField(_roadNodeRow, SubmitOverGround);
+            UiKit.Place((RectTransform)_overGroundField.transform, 304f, 2f, 70f, RowHeight - 4f);
+            UiKit.NewLabel(_roadNodeRow, "m", 378f, 0f, 20f, RowHeight);
+            UiKit.AddTooltip(_overGroundField, () => "Carry the node this far over the land, still following it — a causeway (H, Shift+H)");
+
             _roadHintRow = Row("Road hints");
-            UiKit.NewLabel(_roadHintRow, "Click: node · drag: shape · scroll a node: height · Enter: lay · Del: remove",
+            UiKit.NewLabel(_roadHintRow, "Click: node · drag: shape · scroll a node: height · C: round a bend · X: corner · Enter: lay · Del: remove",
                 0f, 0f, Width - 2 * Pad, RowHeight, 12).color = new Color(0.75f, 0.77f, 0.8f);
 
             _clearRow = Row("Clear");
@@ -184,7 +218,7 @@ namespace TinyDiggers.Interaction
 
         void Show(params RectTransform[] rows)
         {
-            foreach (var row in new[] { _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow, _rampRow, _roadGradeRow, _roadOptionsRow, _roadHintRow, _quarryRow })
+            foreach (var row in new[] { _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow, _rampRow, _roadGradeRow, _roadBendRow, _roadOptionsRow, _roadShapeRow, _roadNodeRow, _roadHintRow, _quarryRow })
                 row.gameObject.SetActive(false);
             _shown.Clear();
             var y = 30f;
@@ -222,7 +256,7 @@ namespace TinyDiggers.Interaction
                         Show(_heightRow, _followRow, _pickRow, _capRow);
                         break;
                     case ToolMode.Road:
-                        Show(_widthRow, _roadOptionsRow, _roadGradeRow, _volumeRow, _roadHintRow);
+                        Show(_widthRow, _roadOptionsRow, _roadShapeRow, _roadNodeRow, _roadGradeRow, _roadBendRow, _volumeRow, _roadHintRow);
                         break;
                     case ToolMode.Quarry:
                         Show(_heightRow, _followRow, _pickRow, _quarryRow);
@@ -338,6 +372,52 @@ namespace TinyDiggers.Interaction
                 _grades.color = roads.State == TinyDiggers.Units.RoadGradeState.Refused ? new Color(1f, 0.45f, 0.4f)
                     : roads.State == TinyDiggers.Units.RoadGradeState.Steep ? UiKit.Warning : Color.white;
             }
+
+            if (_roadShapeRow.gameObject.activeSelf)
+            {
+                var roads = _tools.Roads;
+                var draft = roads.Draft;
+                if (!_minBendField.isFocused)
+                    _minBendField.SetTextWithoutNotify(draft.MinTurnRadius.ToString("0.#", CultureInfo.InvariantCulture));
+                _holdGrade.SetIsOnWithoutNotify(draft.GradeLock.HasValue);
+
+                var node = roads.ActiveNode >= 0 && roads.ActiveNode < draft.Nodes.Count ? draft.Nodes[roads.ActiveNode] : null;
+                _nodeHeightField.interactable = node != null;
+                _overGroundField.interactable = node != null;
+                if (node != null && !_nodeHeightField.isFocused)
+                    _nodeHeightField.SetTextWithoutNotify(node.Height.ToString("0.##", CultureInfo.InvariantCulture));
+                if (node != null && !_overGroundField.isFocused)
+                    _overGroundField.SetTextWithoutNotify(node.GroundOffset.ToString("0.##", CultureInfo.InvariantCulture));
+                if (node == null)
+                {
+                    _nodeHeightField.SetTextWithoutNotify("");
+                    _overGroundField.SetTextWithoutNotify("");
+                }
+            }
+
+            if (_roadBendRow.gameObject.activeSelf)
+            {
+                var roads = _tools.Roads;
+                var bends = new System.Text.StringBuilder();
+                if (roads.Turns.Count == 0)
+                {
+                    bends.Append("Bends: place two nodes");
+                }
+                else
+                {
+                    bends.Append("Bends: ");
+                    for (var i = 0; i < roads.Turns.Count; i++)
+                        bends.Append(i > 0 ? "  " : "").Append(Bend(roads.Turns[i]));
+                    if (roads.TurnState == TinyDiggers.Units.RoadGradeState.Refused)
+                        bends.Append("   too tight to drive");
+                    else if (roads.TurnState == TinyDiggers.Units.RoadGradeState.Steep)
+                        bends.Append("   tighter than the minimum");
+                }
+
+                _bends.text = bends.ToString();
+                _bends.color = roads.TurnState == TinyDiggers.Units.RoadGradeState.Refused ? new Color(1f, 0.45f, 0.4f)
+                    : roads.TurnState == TinyDiggers.Units.RoadGradeState.Steep ? UiKit.Warning : Color.white;
+            }
         }
 
         void SubmitHeight(string text)
@@ -359,6 +439,31 @@ namespace TinyDiggers.Interaction
             if (float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var percent)
                 || float.TryParse(text, out percent))
                 _tools.Roads.Draft.MaxGrade = Mathf.Clamp(percent, 1f, 100f) / 100f;
+        }
+
+        /// <summary>A bend in metres, or "straight" — a road that does not turn has no radius.</summary>
+        static string Bend(float radius) =>
+            float.IsInfinity(radius) || radius > 999f ? "straight" : radius.ToString("0.#") + " m";
+
+        void SubmitMinBend(string text)
+        {
+            if (float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var metres)
+                || float.TryParse(text, out metres))
+                _tools.Roads.Draft.MinTurnRadius = Mathf.Clamp(metres, 0.5f, 200f);
+        }
+
+        void SubmitNodeHeight(string text)
+        {
+            if (float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var metres)
+                || float.TryParse(text, out metres))
+                _tools.Roads.SetActiveHeight(metres);
+        }
+
+        void SubmitOverGround(string text)
+        {
+            if (float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var metres)
+                || float.TryParse(text, out metres))
+                _tools.Roads.SetGroundOffset(_tools.Roads.ActiveNode, metres);
         }
 
         void SubmitCap(string text)

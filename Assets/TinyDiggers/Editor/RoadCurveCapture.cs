@@ -101,6 +101,7 @@ namespace TinyDiggers.EditorTools
 
                 for (var i = 0; i < draft.Nodes.Count; i++)
                     roads.SetGroundOffset(i, 2f);
+                roads.SelectNode(1);   // so the panel's node fields show what they act on
                 yield return Frames(5);
                 Pose(camera, pose, look);
                 yield return Frames(2);

@@ -46,8 +46,13 @@ absolute coordinates, so every bend on the island read about 7% tight and the to
 turns it had just built properly. Sampling relative to the segment's own first node fixed it —
 see `DECISIONS.md`, 2026-09-22.
 
-**Still unbuilt on the road tool:** a panel row for the new numbers (the keys work; the panel has
-no turn-radius field or typed-height box yet).
+**The panel now carries all of it**: a Min bend field, a Smooth button, a Hold the grade toggle, a
+typed Node at ... m, an over the ground ... m box, and a Bends line beside the Grades line.
+`RoadsHost.SelectNode` picks which node those fields act on without a mouse.
+
+**Nothing is left open on the road tool.** Next time Ronan looks: the crew has never actually
+*built* one of these shaped roads — every picture so far is the ghost. Worth running the crew over
+a cut-corner road before calling Part C finished.
 
 **Still open from the digging run:** the rethink loop in the deep pit (`path 1/8 RETHINK`; suspect
 `UpdateRamp`/`RequestRamp` trading the designation — confirm with logs before changing), heap

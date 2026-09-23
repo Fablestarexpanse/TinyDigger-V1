@@ -401,6 +401,16 @@ namespace TinyDiggers.Interaction
             _tools.Say(metres <= 0f ? "Node back on the ground" : $"Node held {metres:0.#} m over the ground");
         }
 
+        /// <summary>
+        /// Picks the node the panel's height and lock fields act on. The mouse sets this by
+        /// clicking a node; this is the same thing said out loud, for anything not holding a
+        /// mouse. Out of range clears the selection.
+        /// </summary>
+        public void SelectNode(int index)
+        {
+            ActiveNode = index >= 0 && index < Draft.Nodes.Count ? index : -1;
+        }
+
         /// <summary>Sets the active node's height outright, in metres, as a typed height does.</summary>
         public void SetActiveHeight(float metres)
         {
