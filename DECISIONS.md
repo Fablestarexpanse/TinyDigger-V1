@@ -4576,3 +4576,38 @@ The digger mech is full and waiting for its dumper; the dumper believes it has n
 They have lost each other. That is trial F — haulage balance — arriving on its own, and it is a
 pairing bug rather than anything to do with dirt: look at `JobDispatcher.AssignDigger` /
 `HaulerFor` / `DiggerFor` and what clears a pairing.
+
+### Correction, and a real finding: a level cut divides the site
+
+The "pairing bug" is not one. Asked the dispatcher directly:
+
+```
+[4 Digger cell (1585,1512) haulerFor=-1 diggerFor=-1 :: Full: waiting for a hauler]
+[5 Hauler cell (1569,1528) haulerFor=-1 diggerFor=-1 :: Idle: no digger to serve]
+ dumper->digger reachable=False
+```
+
+**Every pairing is clean** — nothing is desynced. The dumper simply **cannot get to its digger**.
+And three of the four robots are saying the same thing in different words: *"UNREACHABLE … ramp
+blocked: no ramp route to (1598, 1510)"*.
+
+So the crew has cut the road so well that it has **cut the site in two**. A road held level through
+a rise is a trench, and a trench divides the ground either side of it. The digger is in the cut,
+the dumper is out by the tip, the remaining work is on the far side, and there is no way across.
+
+That is not a fault to patch — it is the thing a real earthworks crew spends its life managing, and
+it is what the road is *for*: once it is finished it is the way through. The problem is the order
+of work. The crew takes the middle of the cutting out first, which makes a pit before it makes a
+through-cut, and a pit with no ends open strands whatever is inside it.
+
+Worth thinking about rather than patching:
+
+- **Cut from the ends in**, so the corridor is a through route at every stage rather than only at
+  the end. That is how a real cutting is driven, and it needs no new rule — only an ordering.
+- **Or let the unfinished corridor be a haul road**: the cut floor is level and drivable along its
+  length; what is missing is a way down into it, which is exactly the auto ramp's job, and the
+  ramp planner is currently answering "no ramp route" instead.
+
+Either way the lesson is the same one this session keeps finding: **the status line is not the
+diagnosis.** "Waiting for a hauler" beside "no digger to serve" reads like a pairing bug and is
+nothing of the kind.
