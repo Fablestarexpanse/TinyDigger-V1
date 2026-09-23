@@ -37,7 +37,41 @@ namespace TinyDiggers.Interaction
             scaler.referenceResolution = new Vector2(1920f, 1080f);
             scaler.matchWidthOrHeight = 0.5f;
             canvasObject.AddComponent<GraphicRaycaster>();
+            EnsureEventSystem();
             return canvas;
+        }
+
+        /// <summary>
+        /// Makes the one <see cref="EventSystem"/> the UI needs, if the scene has none.
+        ///
+        /// Without it no uGUI raycast ever happens, so every button, toggle and typed field in the
+        /// game is dead to the mouse — and worse than dead: <c>PlayerTools.PointerOverUi</c> asks
+        /// <see cref="EventSystem.current"/> whether the pointer is over the interface, gets null,
+        /// and says no, so a click meant for a panel digs the ground behind it. The scene had none
+        /// and nobody made one (Ronan, 2026-09-23: "I can't use my mouse on any of the tools").
+        ///
+        /// It is made here rather than put in the scene so it cannot go missing again: every
+        /// canvas in the game comes through this method.
+        /// </summary>
+        public static void EnsureEventSystem()
+        {
+            if (EventSystem.current != null)
+                return;
+
+            // Resources.FindObjectsOfTypeAll, not FindAnyObjectByType: the one made here is marked
+            // DontSave, and FindAnyObjectByType cannot see objects with that flag — so asking it
+            // made a second event system every time a second canvas was built, and two of them
+            // fight over the input (2026-09-23).
+            foreach (var existing in Resources.FindObjectsOfTypeAll<EventSystem>())
+                if (existing.gameObject.scene.IsValid())
+                    return;
+
+            var holder = new GameObject("Event System") { hideFlags = HideFlags.DontSave };
+            holder.AddComponent<EventSystem>();
+            // The project is Input System only (activeInputHandler = 1), so the old
+            // StandaloneInputModule would throw on the first frame it tried to read the mouse.
+            var module = holder.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+            module.AssignDefaultActions();
         }
 
         public static RectTransform NewRect(Transform parent, string name)

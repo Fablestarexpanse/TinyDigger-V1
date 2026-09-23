@@ -5219,3 +5219,38 @@ times a minute of film. Most of the ten seconds is swing and travel. The effects
 cadence is right; there is simply not much earth moved in ten seconds by one machine. If the answer
 to "does material look like it moves because the machine moved it" is "I can't tell, nothing
 happened", the fix is a longer film or a faster clip, not more dust.
+
+---
+
+## 2026-09-23 — No event system: nothing in the interface was ever clickable
+
+Ronan: *"I can't use my mouse on any of the tools."* The scene has no `EventSystem` and nothing in
+the project made one. Without it uGUI does not raycast at all, so **every button, toggle and typed
+field in the game was dead** — the toolbar, the tool panel, the crew panel, the road fields, all of
+it. It had never worked.
+
+It was worse than dead. `PlayerTools.PointerOverUi` asks `EventSystem.current` whether the pointer
+is over the interface; with no event system it gets null and answers no, so a click aimed at a
+panel fell through and dug the ground behind it.
+
+Why it went unnoticed: the world mouse does not use uGUI. `PlayerTools` reads the mouse itself
+through the Input System, so painting designations, dragging pads and placing road nodes all
+worked, and the keys worked. Only the panels were dead, and every one of them was built in code
+this week or last.
+
+**The fix is in `UiKit.NewCanvas`, not in the scene**: every canvas in the game comes through that
+method, so it makes the event system if there is not one, with an `InputSystemUIInputModule` —
+the project is Input System only (`activeInputHandler: 1`), so the old `StandaloneInputModule`
+would throw on the first frame it read the mouse. Put in the scene it could go missing again;
+here it cannot.
+
+**`FindAnyObjectByType` cannot see objects flagged `DontSave`**, which is what the whole interface
+is flagged. Using it to check for an existing event system made a *second* one for every extra
+canvas, and two of them fight over the input. It scans `Resources.FindObjectsOfTypeAll` instead.
+The same blind spot made the first diagnosis harder: it reported the `GroundEffects` object
+missing when it was there.
+
+Checked in play, end to end rather than by raycast alone: **26 controls take a click and none do
+not**, a simulated click on the crew panel's Digger button took the crew from **7 to 8**, and the
+panel raycasts, so clicks no longer fall through to the terrain. `UiKitTests` holds both halves —
+a canvas brings an event system, and a second canvas does not bring a second one.
