@@ -1053,13 +1053,20 @@ namespace TinyDiggers.Units
             if (_designations.DumpZoneCount == 0)
                 return false;
 
-            _zoneFloor = ZoneFloor();
-            _tipHighRimsOnly = true;
-            if (TryPlan(CrewJobKind.DumpZone, start))
-                return true;
-            _tipHighRimsOnly = false;
-            if (TryPlan(CrewJobKind.DumpZone, start))
-                return true;
+            // Build out before building up — but never stand there holding a load because of it.
+            // The floor of the zone is tried first, and if every low cell is taken or out of
+            // reach the whole zone is tried, which is what it did before.
+            for (var pass = 0; pass < 2; pass++)
+            {
+                _zoneFloor = pass == 0 ? ZoneFloor() : float.MaxValue;
+                _tipHighRimsOnly = true;
+                if (TryPlan(CrewJobKind.DumpZone, start))
+                    return true;
+                _tipHighRimsOnly = false;
+                if (TryPlan(CrewJobKind.DumpZone, start))
+                    return true;
+            }
+
             DumpZoneFull = true;
             return false;
         }

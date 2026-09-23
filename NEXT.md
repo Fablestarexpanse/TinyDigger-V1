@@ -10,24 +10,24 @@ is done, what is running, what comes next.
 
 ## NEXT
 
-One fault left, reproducible in a one-second test (`DeepPitTests.AShallowPitReportsWhereItStops`,
-which prints its diagnosis every run):
+**The keep-apart radius wedges a cluster, and it cannot be simply relaxed.**
 
-**Make the ramp corridor honest about where a unit may put its feet.**
-`JobDispatcher.PlaceRampStep` plans a corridor from the unit to the cell it cannot reach and looks
-along it for the first step too steep to drive. In a pit there is no such step: the undug middle
-stands at the same height as the ground outside, so the corridor runs straight over the top of the
-block and the planner answers "nowhere to stand beside". What actually stops the unit is
-`CrewUnit.CanStandHere` — it may not stand on ground still to be dug — and the corridor's
-passability test knows nothing about that (it is about designations and regions).
+Four robots end a pit trial packed into a two-by-two, each saying it waits for a unit on a cell that
+is **empty**. What stops them is `JobDispatcher.CanMoveTo`: a crew radius is 0.35 and a cell is half
+a metre, so two robots on neighbouring cells are 0.5 apart and want 0.7. They are in breach wherever
+they stand, every move that does not strictly open the gap is refused, and the square never unwinds.
 
-Make a cell the unit may not stand on impassable to the corridor, and it is forced round to the
-ring already cut, where there *is* a metre step to take down. That is the ramp. Mind the two
-endpoints: the target is itself a cell the unit cannot stand on, and so is the high side of the
-step it is about to cut, so the rule has to apply to the middle of the corridor rather than its
-ends.
+Letting cell-sized units off the radius test entirely **does** free them — the same trial goes from
+6.88 to 8.5 m³ and the waiting disappears — but it breaks
+`FootprintTests.TwoRobotsKeepTheGapTheyAlwaysDid`, which says that gap is deliberate. So it was
+taken back out, and the answer has to keep both: the gap in ordinary running, and a way out of a
+wedge. Likeliest shape — once a unit's traffic wait has run out, let it take one step that closes
+the gap, so a cluster can unwind a unit at a time. Two smaller things worth doing alongside:
+a unit blocked by a radius should not name an empty cell in its status, and `TryYield` is no use
+here because it is refused by the same test.
 
-Fix that and the two-step pit should finish; then carry on down the trial list below.
+Then: the last twelve to twenty-three cells of the two-step pit should go, and
+`DeepPitTests.AShallowPitIsDug` can come off its `[Ignore]`.
 
 ## Plan
 
