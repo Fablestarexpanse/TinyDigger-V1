@@ -5357,3 +5357,30 @@ stand.
 **Still open:** the crew repaths every slice, and a frame can hold several slices. Pathing once a
 frame, or only when the way actually changed, is the next and probably larger win. The suite's own
 run time fell from 67 s to 43.6 s on this change alone.
+
+---
+
+## 2026-09-23 — The road discount, paid only where a road could help
+
+The previous entry's caveat came true immediately: Ronan's session had **226 road cells** on the
+island, so the "are there any roads at all?" test was true and every search went back to being led
+by seven tenths of the real distance. Still stuttering.
+
+A road can only save a journey something if it is near enough to that journey to be worth the
+detour. `TerrainGrid` now remembers which 32-cell blocks hold road (maintained as cells change,
+beside the road count), and `AnyRoadNear` asks whether any of them lies within the journey's own
+length of either end — a road further off than the whole trip cannot pay for itself. The search
+takes the discount only then, and is led by the true distance otherwise.
+
+Measured with a road laid right across the far side of a 1024² map, as one built elsewhere would
+be: a hundred-cell path — the distance a crew actually walks — went from **8,156 cells expanded to
+101**. The path is the length it always was.
+
+**Where it still costs:** a five-hundred-cell path whose far end comes within five hundred cells of
+a road still takes the discount and still expands 161,385 cells. The rule is deliberately generous,
+because being wrong in the other direction means a crew that walks past its own road.
+
+One measurement in this round was junk and is recorded as such: a "road" laid with
+`SetColumn(Dirt 3.9, Road 0.1)` sits two metres *below* ground built as `Bedrock 2 + Dirt 4`, so it
+was a cliff and no unit would step onto it. The suite's own road test is the one that means
+anything, and it passes.

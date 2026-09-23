@@ -265,6 +265,56 @@ namespace TinyDiggers.Terrain
         /// <summary>How many cells have road as their top layer. Maintained as cells change.</summary>
         public int RoadCellCount { get; private set; }
 
+        /// <summary>Cells on a side of the blocks road presence is remembered in.</summary>
+        public const int RoadBlock = 32;
+
+        readonly Dictionary<int, int> _roadBlocks = new Dictionary<int, int>();
+
+        /// <summary>
+        /// Whether any road lies near enough to the line from (x0, z0) to (x1, z1) to be worth a
+        /// detour: within the length of that line of either end. A road further off than the whole
+        /// journey cannot save anything, so a search between two points with no road near them can
+        /// be led by the true distance instead of the cheapest-possible one.
+        ///
+        /// Blocks of 32 cells, so the check is over a handful of entries rather than the map.
+        /// </summary>
+        public bool AnyRoadNear(int x0, int z0, int x1, int z1)
+        {
+            if (_roadBlocks.Count == 0)
+                return false;
+
+            var dx = x1 - x0;
+            var dz = z1 - z0;
+            var reach = Math.Sqrt((double)dx * dx + (double)dz * dz) + RoadBlock;
+            var reachSquared = reach * reach;
+            foreach (var block in _roadBlocks.Keys)
+            {
+                var blocksAcross = (Width + RoadBlock - 1) / RoadBlock;
+                var bx = (block % blocksAcross) * RoadBlock + RoadBlock / 2;
+                var bz = (block / blocksAcross) * RoadBlock + RoadBlock / 2;
+                double ax = bx - x0, az = bz - z0;
+                if (ax * ax + az * az <= reachSquared)
+                    return true;
+                double cx = bx - x1, cz = bz - z1;
+                if (cx * cx + cz * cz <= reachSquared)
+                    return true;
+            }
+
+            return false;
+        }
+
+        void NoteRoadBlock(int x, int z, int change)
+        {
+            var blocksAcross = (Width + RoadBlock - 1) / RoadBlock;
+            var block = z / RoadBlock * blocksAcross + x / RoadBlock;
+            _roadBlocks.TryGetValue(block, out var count);
+            count += change;
+            if (count <= 0)
+                _roadBlocks.Remove(block);
+            else
+                _roadBlocks[block] = count;
+        }
+
         public event Action<int, int> CellChanged;
 
         /// <summary>
@@ -699,9 +749,16 @@ namespace TinyDiggers.Terrain
             if (wasTop != nowTop)
             {
                 if (wasTop == MaterialTable.Road)
+                {
                     RoadCellCount--;
+                    NoteRoadBlock(x, z, -1);
+                }
+
                 if (nowTop == MaterialTable.Road)
+                {
                     RoadCellCount++;
+                    NoteRoadBlock(x, z, 1);
+                }
             }
 
             // The height it had before this change, for anything that draws the ground moving

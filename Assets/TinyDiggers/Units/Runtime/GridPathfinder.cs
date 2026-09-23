@@ -152,6 +152,9 @@ namespace TinyDiggers.Units
         /// <summary>Whether the last search stopped on its budget rather than finishing.</summary>
         public bool GaveUp { get; private set; }
 
+        /// <summary>The cheapest a step can be along the way this search is going; see Search.</summary>
+        float _cheapestStep = 1f;
+
         public bool TryFindPath(int startX, int startZ, int goalX, int goalZ, List<Vector2Int> path, Func<int, int, bool> avoid = null)
         {
             var goal = goalZ * _grid.Width + goalX;
@@ -335,6 +338,13 @@ namespace TinyDiggers.Units
             // of the lag. A budget turns "no" from the most expensive answer into a cheap one.
             var budget = MaxExpanded > 0 ? MaxExpanded : int.MaxValue;
 
+            // Whether this search has to allow for a road being cheaper. Only if there is one near
+            // enough to the way it is going: a road on the far side of the island cannot save this
+            // journey anything, and assuming it might is what makes the search crawl.
+            _cheapestStep = _grid.RoadCellCount > 0 && _grid.AnyRoadNear(startX, startZ, headingX, headingZ)
+                ? Math.Min(1f, RoadCost)
+                : 1f;
+
             unchecked
             {
                 _generation++;
@@ -443,8 +453,7 @@ namespace TinyDiggers.Units
             // (2026-09-23). Once a road exists the scaling comes back and the search goes back to
             // being exact, because a crew that will not walk onto its own roads is worse than a
             // slow one.
-            var cheapest = _grid.RoadCellCount > 0 ? Math.Min(1f, RoadCost) : 1f;
-            return Math.Max(0f, octile - slack) * _grid.CellSize * cheapest * HeuristicWeight;
+            return Math.Max(0f, octile - slack) * _grid.CellSize * _cheapestStep * HeuristicWeight;
         }
 
         void Push(int cell, float key)
