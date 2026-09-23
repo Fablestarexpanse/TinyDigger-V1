@@ -5585,3 +5585,49 @@ Left for later: the sea is 1.1M triangles at 2 m spacing, and the disc really is
 the rim, 69% seabed below sea level), so the count is honest. Per-tile bounds mean only the tiles on
 screen are drawn now, which they were not before. Coarser tiles out in deep water would cut it
 further and would need care at the resolution seam, where a displaced surface cracks.
+
+## 2026-09-23 — Landforms: a terraforming plan layer (slice A)
+
+Ronan saw TerraSplines and wants that feel — draw how the landscape should look, see a ghost, commit
+— and in the same breath said dump sites and quarries are primitive. Both are the same job.
+
+**Not buying the asset.** It writes Unity `TerrainData` heightmaps in the editor. Our ground is a
+column stack of material layers dug by a crew; none of it transfers, and we already own the spline
+half in the road tool.
+
+**Rulings taken.** The crew does the work: committing writes Dig/Fill designations, exactly as a road
+does, and nothing snaps. Areas, ribbons and a free brush. A pit is dug **when you post units to it**
+— *"when I tell them to dig it, select units, assign, type deal"* — which makes a landform a work
+site, a thing the game has never had. A heap keeps growing past its crown; the crown is what you
+drew, not a wall. Re-editing leaves the ground alone: what is dug stays dug and the plan is
+recomputed against the ground as it now is. Materials stay deferred.
+
+**What makes it cheap.** `DesignationMap` has stored a dump cap and a quarry floor *per cell* since
+it was written, `CrewUnit` honours both per cell, and undo round-trips them. Shaped heaps and benched
+pits need **no crew change at all** — the tools are primitive, not the data.
+
+Slice A is the arithmetic, with no UI: `LandformSpline.SampleLoop`, `LandformRaster` (fill, inside
+distance, perimeter), `Landform`, `LandformPlan`.
+
+**Three things worth recording from building it:**
+
+1. **A loop is not a chain with its ends touching.** `RoadSpline.Tangent` treats the first and last
+   node as ends and gives them a doubled one-sided tangent, so sampling a closed outline as an open
+   chain kinks it exactly at the join. `SampleLoop` wraps the chain — last node before the first, the
+   first two after the last — so every node of the loop is interior and takes a proper Catmull-Rom
+   tangent, then drops the padding. No second spline.
+2. **Inside distance is the whole of the shaping.** One two-pass chamfer from the outline inward —
+   the same walk `WaterField.ShoreDistances` uses — gives heap batters, pit benches and edge falloff,
+   and by carrying the ground height of the nearest outside cell it makes all three follow the lie of
+   the land instead of one flat number.
+3. **Only a shape's rim can batter the ground outside it.** For an outside cell the binding
+   constraint is decided by the *nearest* planned cell, which is always on the rim. `Settle` is 841
+   probes a cell at reach 14, so a 60 × 60 pad would be 3.6 M probes a replan; the rim of that pad is
+   ~240 cells. `LandformRaster.Perimeter` is what slice D will feed to `Settle`.
+
+4. **Corners, not curves, by default** — found by the first test run rather than by thinking. Drawing
+   a square pad through four nodes gave a fill of 132 cells instead of 100: a Catmull-Rom curve
+   through four corners bows out past every edge, and a ten-cell pad came out twelve by eleven. That
+   is right for a road and wrong for a pad, a terrace or a quarry outline, so `Landform.Curved` is
+   off by default and a curve is something you ask for. A test pins the bulge so nobody quietly
+   turns it back on.

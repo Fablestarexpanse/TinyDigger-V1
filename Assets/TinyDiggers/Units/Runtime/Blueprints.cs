@@ -235,7 +235,7 @@ namespace TinyDiggers.Units
         /// <paramref name="includeSettled"/> is set, which the ghost does so the shape draws as
         /// one piece rather than with holes where no work is needed.
         /// </summary>
-        static void AddCell(TerrainGrid grid, int x, int z, float height, List<PlannedCell> into, bool includeSettled)
+        public static void AddCell(TerrainGrid grid, int x, int z, float height, List<PlannedCell> into, bool includeSettled)
         {
             if (!grid.IsGround(x, z))
                 return;
