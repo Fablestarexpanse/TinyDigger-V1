@@ -10,14 +10,22 @@ is done, what is running, what comes next.
 
 ## NEXT
 
-**A unit sent to cut a ramp never arrives.**
+**A path that is re-planned every tick.** The unit sent to cut the ramp has a good eight-waypoint
+path and never gets past the first of them:
 
-> `[0: Moving to ramp (14, 13) to 5.5 m, toward (11, 14)]` — for 1337 game seconds.
+```
+[0 Moving at (15.50, 21.39) ... waited 0.0 path 7/8 :: Moving to ramp (14, 13) to 5.5 m]
+```
 
-The ramp is planned and its step is designated; the unit that should cut it spends the rest of the
-trial on its way there. One unit, one job, never finished — the cleanest fault left, and the last
-thing between the two-step pit and finishing. Read `CrewUnit.TryPlan`'s path to an Auto step and
-whether `Arrive` is ever reached; trace it before changing anything, as ever.
+Seven waypoints still ahead, nothing blocking it, position alternating between z 21.46 and 21.39
+for ever. That is `Replan` putting `_pathIndex` back every tick. **Log `_repath` and `_pathIndex`
+next to the path length and one run should name it** — the suspects are the designation `Changed`
+event (the ramp step being re-placed on every rethink) and `OnCellChanged`, and neither ought to be
+firing on a site where nothing is being dug.
+
+This is the last thing between the two-step pit and finishing, and it is very likely the same cause
+as the "waiting" that has been mistaken for congestion three times: a unit whose path is reset
+faster than it can walk it looks exactly like a unit that is stuck.
 
 ### Done since the last note
 
