@@ -318,11 +318,11 @@ namespace TinyDiggers.Terrain
         public event Action<int, int> CellChanged;
 
         /// <summary>
-        /// A cell's surface height changed, with the height it had before: (x, z, oldHeight).
+        /// A cell's surface height changed, with what it was: (x, z, oldHeight, wasBlocked).
         /// Raised only when the height actually moved, and only just before
         /// <see cref="CellChanged"/>.
         /// </summary>
-        public event Action<int, int, float> CellHeightChanged;
+        public event Action<int, int, float, bool> CellHeightChanged;
 
         public bool InBounds(int x, int z) => (uint)x < (uint)Width && (uint)z < (uint)Height;
 
@@ -738,6 +738,7 @@ namespace TinyDiggers.Terrain
             // legitimately between steps, and rounding it would make material appear or vanish.
             var surface = Snap(Datum + height);
             var was = _surfaceHeights[cell];
+            var wasBlocked = _blocked[cell];
             _surfaceHeights[cell] = surface;
             _blocked[cell] = _void[cell] || IsDeep(cell);
             var wasTop = _topMaterials[cell];
@@ -764,8 +765,8 @@ namespace TinyDiggers.Terrain
             // The height it had before this change, for anything that draws the ground moving
             // rather than jumping: CellChanged fires after the write, so the old height is gone by
             // then and a renderer easing toward the new one has nothing to ease from.
-            if (CellHeightChanged != null && surface != was)
-                CellHeightChanged(x, z, was);
+            if (CellHeightChanged != null && (surface != was || wasBlocked != _blocked[cell]))
+                CellHeightChanged(x, z, was, wasBlocked);
             CellChanged?.Invoke(x, z);
         }
 

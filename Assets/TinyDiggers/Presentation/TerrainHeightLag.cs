@@ -115,7 +115,7 @@ namespace TinyDiggers.Presentation
         /// <summary>Forgets every lagging cell, so the ground is drawn where it is.</summary>
         public void Clear() => _lagging.Clear();
 
-        void Note(int x, int z, float was)
+        void Note(int x, int z, float was, bool wasBlocked)
         {
             var cell = z * _grid.Width + x;
             if (_lagging.ContainsKey(cell))

@@ -315,8 +315,42 @@ namespace TinyDiggers.Units
         }
 
         bool Climbable(int ax, int az, int bx, int bz) =>
-            Open(ax, az) && Open(bx, bz)
-            && Math.Abs(_grid.GetSurfaceHeight(ax, az) - _grid.GetSurfaceHeight(bx, bz)) <= MaxStepHeight + Tolerance;
+            OpenWithOverride(ax, az) && OpenWithOverride(bx, bz)
+            && Math.Abs(HeightWithOverride(ax, az) - HeightWithOverride(bx, bz)) <= MaxStepHeight + Tolerance;
+
+        // --- asking what a cell was, not what it is -------------------------------------------
+
+        int _overrideCell = -1;
+        float _overrideHeight;
+        bool _overrideBlocked;
+
+        /// <summary>
+        /// Makes <see cref="CanStep"/> answer as though cell (x, z) were still at
+        /// <paramref name="height"/>, so a caller can ask what connected to what *before* a change.
+        /// Call <see cref="EndPretending"/> after. Only <see cref="CanStep"/> is affected: the A*
+        /// hot loop reads the height array directly and is untouched.
+        /// </summary>
+        public void PretendCellWas(int x, int z, float height, bool blocked)
+        {
+            _overrideCell = z * _grid.Width + x;
+            _overrideHeight = height;
+            _overrideBlocked = blocked;
+        }
+
+        public void EndPretending() => _overrideCell = -1;
+
+        float HeightWithOverride(int x, int z) =>
+            _overrideCell >= 0 && _overrideCell == z * _grid.Width + x
+                ? _overrideHeight
+                : _grid.GetSurfaceHeight(x, z);
+
+        bool OpenWithOverride(int x, int z)
+        {
+            if (_overrideCell < 0 || !_grid.InBounds(x, z) || _overrideCell != z * _grid.Width + x)
+                return Open(x, z);
+            // What it was: blocked ground was never open, and open ground still had to be ground.
+            return !_overrideBlocked && _grid.IsGround(x, z);
+        }
 
         /// <summary>
         /// A* (or Dijkstra without a heuristic). Returns the goal cell index, or -1. With

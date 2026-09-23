@@ -5427,3 +5427,41 @@ change that alters only a corner-cut would be missed and leave the region map st
 being wrong is bounded — a unit may take a job it cannot reach, and the pathfinder's own budget
 caps that at about 90 ms once, until the next real change fixes the labels — but it is a
 correctness risk in reachability, which is load-bearing, so it wants Ronan's word before it lands.
+
+---
+
+## 2026-09-23 — The digging stutter, fixed: ask whether anything actually joined up differently
+
+Ronan gave the word, so the region rebuild now happens only when a change moves a connection.
+
+**Done exactly, not approximately.** The cheap version — comparing step heights on the eight
+neighbours — is the dominant part of `GridPathfinder.CanStep` but not all of it: a diagonal that
+cuts a corner past the changed cell can start or stop being legal while every direct comparison
+agrees. Instead the pathfinder can now be asked what a cell *was*: `PretendCellWas(x, z, height,
+blocked)` makes `CanStep` answer with the old height and old blocked flag, and `RegionMap` compares
+the whole step graph of the three-by-three block around the cell — every ordered pair of adjacent
+cells in it, forty of them — before and after. That covers the steps out of the cell, the steps
+into it, and the diagonals between its neighbours that pass it. Identical graph, no possible label
+change, nothing marked dirty.
+
+The override touches only `CanStep`; the A* inner loop reads the height array directly and is not
+affected, so nothing in the hot path pays for this.
+
+**Measured on the live island.** Twenty scoops, as a shift of digging does:
+
+```
+before   140.8 ms each, a rebuild each, 794,803 cells relabelled every time
+after    36.3 ms for all twenty (1.81 ms each), one rebuild between them
+```
+
+About seventy-seven times less work, and the one rebuild that did happen is a change that really
+did move a connection.
+
+**What it cost in tests.** `ARebuildOnlyTouchesTheRegionThatChanged` went red — and was right to.
+It dug a cell down by exactly one step, which changes no connection at all, so the rebuild it was
+asserting no longer happens and it was reading a stale count from the initial full build. It now
+digs a cell too deep to step into, which is what it meant all along, and
+`ADigThatJoinsNothingUpDifferentlyRelabelsNothing` holds the new rule from both sides: an ordinary
+scoop rebuilds nothing and the answers stay right, a cut too deep to enter still rebuilds.
+
+Suite 554 passed, 2 skipped.

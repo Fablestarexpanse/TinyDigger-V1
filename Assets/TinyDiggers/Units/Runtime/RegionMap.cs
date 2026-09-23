@@ -39,6 +39,7 @@ namespace TinyDiggers.Units
             var cells = grid.Width * grid.Height;
             _label = new int[cells];
             _dirty = new bool[cells];
+            _grid.CellHeightChanged += OnHeightChanged;
             _grid.CellChanged += OnCellChanged;
             _grid.WaterChanged += OnCellChanged;
         }
@@ -118,6 +119,7 @@ namespace TinyDiggers.Units
             if (_disposed)
                 return;
             _disposed = true;
+            _grid.CellHeightChanged -= OnHeightChanged;
             _grid.CellChanged -= OnCellChanged;
             _grid.WaterChanged -= OnCellChanged;
         }
@@ -125,11 +127,90 @@ namespace TinyDiggers.Units
         void OnCellChanged(int x, int z)
         {
             var cell = z * _grid.Width + x;
+            // The height change just before this one said the ground still joins up exactly as it
+            // did, so no label can have moved and there is nothing to rebuild.
+            if (cell == _unchanged)
+            {
+                _unchanged = -1;
+                return;
+            }
+
+            _unchanged = -1;
             if (_dirty[cell])
                 return;
             _dirty[cell] = true;
             _dirtyCells.Add(cell);
         }
+
+        /// <summary>The cell whose last height change joined nothing up differently, or -1.</summary>
+        int _unchanged = -1;
+
+        /// <summary>
+        /// Asks whether a change to one cell moved any *connection*, and remembers the answer for
+        /// the <see cref="TerrainGrid.CellChanged"/> that follows it.
+        ///
+        /// This is the whole cost of digging. Relabelling is incremental in the number of dirty
+        /// cells and not at all in the size of a region, and the crew dig on a landmass that is one
+        /// region of most of the island: one scoop cost a 140.8 ms rebuild relabelling 794,803
+        /// cells, and there had been 839 of them in one session (2026-09-23). Almost none of them
+        /// were needed — taking half a metre off a cell leaves every neighbour as reachable as it
+        /// was.
+        ///
+        /// It is asked exactly, not approximately, by having the pathfinder answer as though the
+        /// cell were still what it was: every ordered pair of adjacent cells in the three by three
+        /// block around it, which covers the steps out of the cell, the steps into it, and the
+        /// diagonals between its neighbours that cut a corner past it. If all of them agree, the
+        /// labels cannot have changed.
+        /// </summary>
+        void OnHeightChanged(int x, int z, float was, bool wasBlocked)
+        {
+            _unchanged = -1;
+            if (_needsFullBuild)
+                return;
+
+            var cell = z * _grid.Width + x;
+            if (_dirty[cell])
+                return;   // already down for a rebuild; nothing to decide
+
+            _pathfinder.PretendCellWas(x, z, was, wasBlocked);
+            var before = Connections(x, z);
+            _pathfinder.EndPretending();
+            var after = Connections(x, z);
+            if (before == after)
+                _unchanged = cell;
+        }
+
+        /// <summary>
+        /// The step graph of the three by three block around (x, z), as a bit per ordered pair of
+        /// adjacent cells in it. Two blocks are the same exactly when the same things join up.
+        /// </summary>
+        ulong Connections(int x, int z)
+        {
+            var bits = 0UL;
+            var bit = 0;
+            for (var az = -1; az <= 1; az++)
+            {
+                for (var ax = -1; ax <= 1; ax++)
+                {
+                    for (var d = 0; d < 8; d++)
+                    {
+                        var bx = ax + Around[d * 2];
+                        var bz = az + Around[d * 2 + 1];
+                        // Only pairs that both lie in the block: a step from its edge to the world
+                        // outside cannot have changed, because only the middle cell moved.
+                        if (bx < -1 || bx > 1 || bz < -1 || bz > 1)
+                            continue;
+                        if (_pathfinder.CanStep(x + ax, z + az, x + bx, z + bz))
+                            bits |= 1UL << bit;
+                        bit++;
+                    }
+                }
+            }
+
+            return bits;
+        }
+
+        static readonly int[] Around = { 1, 0, -1, 0, 0, 1, 0, -1, 1, 1, 1, -1, -1, 1, -1, -1 };
 
         void FullBuild()
         {

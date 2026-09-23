@@ -112,14 +112,42 @@ namespace TinyDiggers.Units.Tests
             Assert.That(west, Is.GreaterThan(0));
             Assert.That(east, Is.GreaterThan(0));
 
-            // Dig a cell deep in the west half: only the west half is re-labelled.
-            SetHeight(4, 4, 7f);
+            // Dig a cell deep in the west half, deep enough that nothing can step into it any more
+            // so the labels really do have to move: only the west half is re-labelled.
+            SetHeight(4, 4, 4f);
             regions.Update();
 
             Assert.That(regions.CellsRelabelledLast, Is.LessThanOrEqualTo(west + 2), "the east half was left alone");
             Assert.That(regions.CellsRelabelledLast, Is.GreaterThan(0));
             Assert.That(regions.CanReach(2, 2, 20, 20), Is.False);
             Assert.That(regions.RegionSize(20, 20), Is.EqualTo(east));
+            regions.Dispose();
+        }
+
+        [Test]
+        public void ADigThatJoinsNothingUpDifferentlyRelabelsNothing()
+        {
+            // The whole cost of digging was here: relabelling is incremental in dirty cells and not
+            // at all in the size of a region, and the crew work on a landmass that is one region of
+            // most of the island — so one scoop cost 140.8 ms and relabelled 794,803 cells
+            // (2026-09-23). Taking a step off a cell leaves every neighbour as reachable as it was,
+            // and the region map now asks that before it does any work.
+            var regions = new RegionMap(_grid, _pathfinder);
+            regions.Update();
+            var rebuilds = regions.RebuildCount;
+
+            // A step down, well within what a unit can climb: nothing joins up differently.
+            SetHeight(4, 4, 7f);
+            regions.Update();
+
+            Assert.That(regions.RebuildCount, Is.EqualTo(rebuilds), "nothing needed rebuilding");
+            Assert.That(regions.CanReach(2, 2, 20, 20), Is.True, "and the answers are still right");
+            Assert.That(regions.RegionOf(4, 4), Is.EqualTo(regions.RegionOf(2, 2)));
+
+            // A cut too deep to step into has to be noticed.
+            SetHeight(4, 4, 3f);
+            regions.Update();
+            Assert.That(regions.RebuildCount, Is.GreaterThan(rebuilds), "a real change still rebuilds");
             regions.Dispose();
         }
 
