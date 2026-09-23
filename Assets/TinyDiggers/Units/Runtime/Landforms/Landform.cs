@@ -131,8 +131,14 @@ namespace TinyDiggers.Units
         /// <summary>
         /// What the batter and the heap angle are worked out from. Which material is actually dug or
         /// tipped is a separate question, and a later one.
+        ///
+        /// Not serialised, and said so rather than left to be dropped quietly: <see cref="MaterialId"/>
+        /// wraps a readonly byte to keep a layer small enough to hold chunks of the grid in cache,
+        /// and Unity will not serialise a readonly field. The day there is a save file this wants to
+        /// be written as its <see cref="MaterialId.Value"/> and read back, not made serialisable at
+        /// the cost of the struct it is built to be.
         /// </summary>
-        public MaterialId Spoil = MaterialTable.DirtLoose;
+        [NonSerialized] public MaterialId Spoil = MaterialTable.DirtLoose;
 
         /// <summary>The presses that make up a freehand stroke, in the order they were laid.</summary>
         public List<BrushDab> Dabs = new List<BrushDab>();
