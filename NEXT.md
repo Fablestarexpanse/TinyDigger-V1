@@ -80,3 +80,18 @@ handle best — worth running before any ramp ruling, since it may show only the
 
 **Still open from the digging run:** heap terracing on the half-metre step grid, and trials D and
 F unrun.
+
+## Parked: deep-water tiles (2026-09-23)
+
+The sea sheet is 169 tiles at one resolution — a vertex every 2 m across the whole disc, 1.1M
+triangles. Honest (the disc is 90% water) but larger than it needs to be: only the water near a
+shore needs that spacing, because the short waves and the breaking bands live there. Coarser tiles
+out in deep water would cut it several-fold.
+
+The catch, and why it is parked rather than done: the shader displaces the surface per vertex, so a
+seam between a 2 m tile and an 8 m one cracks unless the fine edge is stitched to the coarse one or
+the displacement is forced to agree along it. Needs care, not a flag.
+
+Everything it would build on is already in place: `WaterView.EnsureTiles` makes the tiles and
+`BuildSea(mesh, firstColumn, lastColumn, firstRow, lastRow)` takes a range, so a per-tile step is a
+small change to those two.
