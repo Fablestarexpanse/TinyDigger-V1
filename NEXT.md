@@ -10,18 +10,22 @@ is done, what is running, what comes next.
 
 ## NEXT
 
-One fault, reproducible in a one-second test (`DeepPitTests.AShallowPitReportsWhereItStops`, which
-prints its diagnosis every run):
+One fault left, reproducible in a one-second test (`DeepPitTests.AShallowPitReportsWhereItStops`,
+which prints its diagnosis every run):
 
-**A unit only asks for a ramp when it has nothing else to do.** `CrewUnit.ChooseDiggerJob` reaches
-`_dispatcher.RequestRamp` only after `TryPlan(Dig)` fails, and a crew with spoil in its barrows
-always has somewhere else to be. So the pit's outer ring is cut to its target, the ring ends up a
-metre below the ground outside — more than a climb, so nothing can drive in to work the next ring —
-and the crew shuttles spoil for ever without ever asking for a way in. Work that cannot be reached
-ought to be able to ask for a ramp while the crew is still busy.
+**Make the ramp corridor honest about where a unit may put its feet.**
+`JobDispatcher.PlaceRampStep` plans a corridor from the unit to the cell it cannot reach and looks
+along it for the first step too steep to drive. In a pit there is no such step: the undug middle
+stands at the same height as the ground outside, so the corridor runs straight over the top of the
+block and the planner answers "nowhere to stand beside". What actually stops the unit is
+`CrewUnit.CanStandHere` — it may not stand on ground still to be dug — and the corridor's
+passability test knows nothing about that (it is about designations and regions).
 
-(A second fault, "units wait on each other for ever", was a misreading of a snapshot: the fix was
-written, changed the result not at all, and was taken back out. See DECISIONS.md.)
+Make a cell the unit may not stand on impassable to the corridor, and it is forced round to the
+ring already cut, where there *is* a metre step to take down. That is the ramp. Mind the two
+endpoints: the target is itself a cell the unit cannot stand on, and so is the high side of the
+step it is about to cut, so the rule has to apply to the middle of the corridor rather than its
+ends.
 
 Fix that and the two-step pit should finish; then carry on down the trial list below.
 
