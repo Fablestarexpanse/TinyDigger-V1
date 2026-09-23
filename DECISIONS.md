@@ -4516,3 +4516,25 @@ status line was exactly the mistake this session has made four times already: **
 not the diagnosis.**
 
 The rethink loop remains real and remains the pit's problem. It is not the road's.
+
+### The heap cap ratchets, and the new metric is what caught it
+
+The honest spoil measurement earned its keep on its first run:
+
+> **the spoil stands 7 m deep at its deepest over 286 cells** — and three robots reporting
+> *"UNREACHABLE … ramp blocked: nowhere to stand beside"*.
+
+Seven metres, from a cap that was supposed to hold it to one and a half. The rule reads "no more
+than three steps proud of the **floor of the zone**", and the floor is the lowest *open* cell —
+which rises as the heap fills in. The ceiling climbs with the floor. It is the two-and-a-half-metre
+tower from this morning all over again, arriving more slowly and with a rule in place that looked
+like it should have stopped it.
+
+The fix is the mechanism that was already there and unused: `DesignationMap.SetDumpZone` takes a
+**per-cell cap**, defaulting to infinity. The trial now sets it to a metre and a half over the
+ground each cell starts at, so the ceiling is fixed to ground that cannot move. The zone-floor rule
+stays as the thing that spreads a load out; the cap is the thing that stops a tower.
+
+Two lessons, both already learned today and both re-learned: a limit measured against something
+that moves is not a limit, and **the measurement is what finds this** — the old metric would have
+said "7 m" as well, for the wrong reason, and been ignored.

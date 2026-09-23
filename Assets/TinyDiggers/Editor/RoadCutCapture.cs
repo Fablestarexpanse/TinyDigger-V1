@@ -102,11 +102,22 @@ namespace TinyDiggers.EditorTools
                 // wants both, and they have to be clear of the corridor or the crew tips into its
                 // own cut.
                 var tipAt = new Vector2Int(hill.crest.x + side.x * 14, hill.crest.y + side.y * 14);
+                // Each cell of the tip gets a cap a metre and a half over the ground it starts
+                // at. Without one the crew builds a tower: the "three steps proud of the zone
+                // floor" rule measures from the *lowest open cell*, which rises as the heap grows,
+                // so the ceiling climbs with the floor and the spoil ratcheted to seven metres
+                // (2026-09-22). A tip has a capacity; this is where it is said.
                 var dump = 0;
                 for (var dz = -7; dz <= 7; dz++)
                     for (var dx = -7; dx <= 7; dx++)
-                        if (_map.SetDumpZone(tipAt.x + dx, tipAt.y + dz, true))
+                    {
+                        var x = tipAt.x + dx;
+                        var z = tipAt.y + dz;
+                        if (!_grid.IsGround(x, z))
+                            continue;
+                        if (_map.SetDumpZone(x, z, true, _grid.GetSurfaceHeight(x, z) + 1.5f))
                             dump++;
+                    }
 
                 var quarryAt = new Vector2Int(hill.crest.x - side.x * 14, hill.crest.y - side.y * 14);
                 var quarryFloor = _grid.GetSurfaceHeight(quarryAt.x, quarryAt.y) - 3f;
