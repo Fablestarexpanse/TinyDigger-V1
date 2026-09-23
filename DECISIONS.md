@@ -5187,3 +5187,35 @@ one times and at twenty.
 
 `GroundEffects.Enabled` turns the lot off, and `Bursts` counts them, so the cost can be measured
 rather than guessed when the capture is made.
+
+---
+
+## 2026-09-23 — Dig and tip feel, step 5: the film
+
+`TinyDiggers/Feel Capture` shoots ten seconds of a digger cutting a bank and a dumper beside it,
+to `Screenshots/Feel/dig_and_tip.mp4`. Frames go out as PNGs and ffmpeg (already on this machine,
+so no Unity Recorder package was added) encodes them; the frames folder is git-ignored.
+
+**It is a film, not a screen recording.** `Time.captureFramerate = 30` makes Unity advance its
+clock a fixed step a frame, so thirty frames are exactly one second of game time however long each
+takes to render — and the dust and the height lag, both on unscaled time, come out at the speed
+they were tuned at rather than at whatever the editor managed.
+
+**The crew is cut to the two machines first.** Trial B showed six units in a narrow face spend 41%
+of their time queueing, and a film of a queue answers a different question.
+
+**Two takes were wrong before this one, both about where to point it:**
+
+- **The site.** Picking the *steepest* ground within forty cells found the mountain: the digger
+  clung to a cliff and the camera was inside it. It now looks for a bank — about two metres of
+  rise over four, in soil, not stone — which is what "cut into a hillside" means at this scale.
+- **The subject.** Pointing the camera at the unit put the bite behind it, because a digger stands
+  *beside* the cell it cuts. It now frames the midpoint of the machine and the cell it is working,
+  so the bucket and the ground it bites are both in shot.
+
+**What the film cannot show, and it is worth saying.** Only **three effect bursts land in the ten
+seconds**, because a dig cycle is the dig clip's length — 3.75 s — so a digger bites about three
+times a minute of film. Most of the ten seconds is swing and travel. The effects are right and the
+cadence is right; there is simply not much earth moved in ten seconds by one machine. If the answer
+to "does material look like it moves because the machine moved it" is "I can't tell, nothing
+happened", the fix is a longer film or a faster clip, not more dust.
