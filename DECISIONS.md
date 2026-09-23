@@ -5573,3 +5573,15 @@ Three changes:
    The known blind spot, recorded rather than hidden: digging *through* a spit narrower than the
    margin can leave a stale wave band beyond the working area until the next full bake. It cannot
    produce wrong water, only wrong waves, and a regeneration clears it.
+
+**Measured in the running game (2026-09-23).** Window rebake of a nine-by-nine cut at the coast:
+**1.804 ms**, against **1,263 ms** for the same field baked over the island — 700×. The sheet is 169
+tiles, 167 of them carrying water, biggest 8,192 triangles. A 333-cell channel cut at the shore
+rebaked in 1.552 ms and the sheet followed it; the coast renders with no seam between tiles, because
+neighbouring tiles compute the shared border vertex from the same column and row and so displace
+identically.
+
+Left for later: the sea is 1.1M triangles at 2 m spacing, and the disc really is 90% water (21% past
+the rim, 69% seabed below sea level), so the count is honest. Per-tile bounds mean only the tiles on
+screen are drawn now, which they were not before. Coarser tiles out in deep water would cut it
+further and would need care at the resolution seam, where a displaced surface cracks.
