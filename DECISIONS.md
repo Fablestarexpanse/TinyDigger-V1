@@ -4242,3 +4242,37 @@ the next thing to measure. Expect the step up to come from the pair, not from th
 
 For a new unit: put it on the bench, read its m³ a game minute at 10 m, and set its cut time so
 digging is a third of its cycle. One number to place it, one to make it feel right.
+
+### The pair is the step up, and it fixes the feel by itself
+
+Measuring the digger mech **with its dumper**, which is the way it is meant to work, settles it. The
+bench also stops when the face runs out now rather than when the clock does — the pair cleared the
+whole strip inside the window, so the first pair figure was a floor, not a rate.
+
+| | load | m³ a game minute at 10 m | digging |
+| --- | --- | --- | --- |
+| starter robot | 3 cuts | 0.45 | 4% |
+| digger mech, on its own | 6 cuts | 0.91 | 8% |
+| **digger mech + dumper** | 6 + 18 cuts | **5.76** | **41%** |
+
+The pair cleared 15.75 m³ in 164 game seconds. That is **six times** the mech working alone and
+**thirteen times** a starter robot — where the scoop on its own is only twice the barrow.
+
+Two things follow, and both answer Ronan's question without touching a load.
+
+**The ladder comes from pairing, not from load size.** Ronan's 1 : 2 : 6 holds; what makes a machine
+feel like a machine is that it never walks. A future tier should be placed the same way — measured
+as a working pair — and to feel like the same size of jump again it wants to land somewhere near
+20–25 m³ a game minute.
+
+**The dig/haul split fixes itself.** A solo unit digs between a twenty-fifth and a seventh of its
+life and reads as a commuter. A paired mech digs **41%** of the time. That is the shape worth having
+— you watch it dig rather than watch it walk — and it arrives from the design rather than from
+tuning a number. So the earlier recommendation to slow the cut down stands only for the **starter
+robot**, which really does haul its own barrow and really is a commuter: about a second a cut rather
+than 0.4, and a clip named `dig` so something times it.
+
+**And a machine needs room.** At a 3 m haul the pair manages 0.775 m³ a minute — *worse than the
+mech alone* — because the two of them get in each other's way: "Full: waiting for a hauler" beside
+"Waiting for a unit". Same congestion family as the pit's last twelve cells. A short haul should be
+the easy case, and it is the worst one.

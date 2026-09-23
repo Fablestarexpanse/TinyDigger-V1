@@ -33,6 +33,7 @@ namespace TinyDiggers.Units.Tests
         GridPathfinder _pathfinder;
         JobDispatcher _dispatcher;
         CrewUnit _unit;
+        CrewUnit _mate;
 
         [SetUp]
         public void SetUp()
@@ -54,7 +55,9 @@ namespace TinyDiggers.Units.Tests
         public void TearDown()
         {
             _unit?.Dispose();
+            _mate?.Dispose();
             _unit = null;
+            _mate = null;
             _map.Dispose();
         }
 
@@ -89,21 +92,23 @@ namespace TinyDiggers.Units.Tests
 
             var before = Standing(dig);
             var spent = new Dictionary<CrewUnitState, float>();
-            for (var elapsed = 0f; elapsed < Window; elapsed += TickSeconds)
+            var ran = 0f;
+            while (ran < Window && _map.Count > 0)
             {
                 _dispatcher.Tick(TickSeconds);
                 _unit.Tick(TickSeconds);
+                ran += TickSeconds;
                 spent.TryGetValue(_unit.State, out var so_far);
                 spent[_unit.State] = so_far + TickSeconds;
             }
 
             var moved = before - Standing(dig);
-            var split = "";
+            var split = $"over {ran:0} s: ";
             var states = new List<KeyValuePair<CrewUnitState, float>>(spent);
             states.Sort((a, b) => b.Value.CompareTo(a.Value));
             foreach (var state in states)
-                split += $"{state.Key} {100f * state.Value / Window:0}% ";
-            return (moved * 60f / Window, split);
+                split += $"{state.Key} {100f * state.Value / ran:0}% ";
+            return (moved * 60f / ran, split);
         }
 
         /// <summary>m³ still standing above the block's floor.</summary>
@@ -125,6 +130,68 @@ namespace TinyDiggers.Units.Tests
                       + $"{perMinute:0.###} m³ a game minute, load {UnitLoads.Barrow:0.###} m³ "
                       + $"({UnitLoads.Barrow / (_grid.HeightStep * _grid.CellArea):0.#} cuts). {split}");
             Assert.That(perMinute, Is.GreaterThan(0f), "it should have shifted something. " + split);
+        }
+
+        /// <summary>
+        /// The pair the digger mech is actually for: it stands at the face and loads a dumper
+        /// parked beside it, and the dumper does all the walking. Measuring the mech on its own
+        /// measures the one thing it is not meant to do, so this is the number that should set
+        /// the ladder when bigger units arrive.
+        /// </summary>
+        [TestCase(6, "digger mech and dumper, short haul")]
+        [TestCase(20, "digger mech and dumper, long haul")]
+        public void ADiggerAndDumperShift(int haulCells, string what)
+        {
+            var dig = new Vector2Int(14, 24);
+            var tip = new Vector2Int(19 + haulCells, 24);
+
+            _unit = Machine(UnitRole.Digger, UnitLoads.Scoop, 10, 24);
+            _mate = Machine(UnitRole.Hauler, UnitLoads.Bed, 10, 26);
+
+            for (var z = dig.y - 10; z <= dig.y + 10; z++)
+                for (var x = dig.x - 1; x <= dig.x + 1; x++)
+                    _map.Designate(x, z, DesignationKind.Dig, Ground - 1f);
+            for (var z = tip.y - 4; z <= tip.y + 4; z++)
+                for (var x = tip.x - 4; x <= tip.x + 4; x++)
+                    _map.SetDumpZone(x, z, true);
+
+            var before = Standing(dig);
+            var digging = 0f;
+            var hauling = 0f;
+            var ran = 0f;
+            // Stop when the face runs out, not only when the clock does. A pair cleared the whole
+            // strip inside the window, so dividing by the window quoted a rate that was really a
+            // floor — the site had run out, not the unit.
+            while (ran < Window && _map.Count > 0)
+            {
+                _dispatcher.Tick(TickSeconds);
+                _unit.Tick(TickSeconds);
+                _mate.Tick(TickSeconds);
+                ran += TickSeconds;
+                if (_unit.State == CrewUnitState.Digging)
+                    digging += TickSeconds;
+                if (_mate.State == CrewUnitState.Moving)
+                    hauling += TickSeconds;
+            }
+
+            var perMinute = (before - Standing(dig)) * 60f / ran;
+            Debug.Log($"load sizing — {what} ({haulCells} cells, {haulCells * _grid.CellSize:0.#} m): "
+                      + $"{perMinute:0.###} m³ a game minute over {ran:0} s; the mech digs "
+                      + $"{100f * digging / ran:0}% of the time, the dumper drives "
+                      + $"{100f * hauling / ran:0}%. Mech: {_unit.Status}. Dumper: {_mate.Status}.");
+            Assert.That(perMinute, Is.GreaterThan(0f),
+                $"the pair should have shifted something. Mech: {_unit.Status}. Dumper: {_mate.Status}.");
+        }
+
+        CrewUnit Machine(UnitRole role, float capacity, int x, int z)
+        {
+            var unit = new CrewUnit(_dispatcher, x, z, role, capacity);
+            unit.DigReachLevels = Mathf.RoundToInt(2f / _grid.HeightStep);
+            unit.CliffReachLevels = Mathf.RoundToInt(6f / _grid.HeightStep);
+            unit.Speed = 3f;
+            unit.WorkInterval = 0.4f;
+            unit.AsMachine();
+            return unit;
         }
 
         [TestCase(UnitRole.Digger, 6, "digger mech, scoop, short haul")]
