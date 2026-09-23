@@ -5157,3 +5157,33 @@ nothing is listening.
   the runtime Unity ships. The tick now walks a copy of the keys.
 - **Reimporting while play mode is running** left every view holding a null grid — the trap
   already written down after the last time. Exit play, refresh in edit mode, start a fresh play.
+
+---
+
+## 2026-09-23 — Dig and tip feel, step 4: dust and chunks
+
+Three effects, as the brief asked: a bite at the bucket, chunks off a tipping bed, and a bloom
+where ground lets go. Colours come from `MaterialTable`, which already carries a `Color32` per
+material, so a cut in clay throws clay and one in rock throws grey.
+
+**One system per effect, not one object per event.** The brief said a prefab each, pooled. A single
+world-space `ParticleSystem` per effect, emitted into with `EmitParams`, is the same thing without
+the pool: position, colour, size and count are all per-burst, Unity recycles the particles itself,
+and nothing is instantiated while the crew work. Two systems in total — chunks and dust — on one
+unlit vertex-coloured material so every effect on the island batches together.
+
+**Fired at the bite, not at the job.** `CrewUnit` raises `Bit` and `Tipped` with the cell, the
+material most of the move was made of, and the volume; both are raised from the step that moves
+the earth, which since this morning happens at the bite rather than the end of the swing. So the
+dust lands with the earth by construction.
+
+**The trap: a stopped system does not simulate what you hand it.** The systems were built with
+`loop = false` and `Stop()`, on the reasoning that nothing should emit by itself. Eighty-three
+bursts landed and not one particle lived. They now loop with emission disabled — idling for ever,
+costing nothing, but *running* — and a hand-fired bite gives 8 chunks and 3 puffs.
+
+Everything is on unscaled time, like the height lag and the slump budget: a puff reads the same at
+one times and at twenty.
+
+`GroundEffects.Enabled` turns the lot off, and `Bursts` counts them, so the cost can be measured
+rather than guessed when the capture is made.

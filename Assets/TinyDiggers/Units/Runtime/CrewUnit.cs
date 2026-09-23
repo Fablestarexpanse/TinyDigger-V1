@@ -359,6 +359,16 @@ namespace TinyDiggers.Units
         float _rethinkTimer;
         float _workTimer;
 
+        /// <summary>
+        /// A cut landed: the cell, the material that came off it, and in-place m³ of it. Raised at
+        /// the bite, so anything showing dust and chunks shows them when the bucket bit
+        /// (Ronan, 2026-09-23). The crew logic does nothing with it itself.
+        /// </summary>
+        public event Action<Vector2Int, MaterialId, float> Bit;
+
+        /// <summary>A load landed: the cell, the material tipped, and loose m³ of it.</summary>
+        public event Action<Vector2Int, MaterialId, float> Tipped;
+
         /// <summary>Whether this swing has already moved its earth; cleared as the cycle comes round.</summary>
         bool _bitten;
         float _waitTimer;
@@ -1954,6 +1964,22 @@ namespace TinyDiggers.Units
                 TipStep();
         }
 
+        /// <summary>The material most of a move was made of, for whatever wants to colour it.</summary>
+        static MaterialId Biggest(float[] byMaterial)
+        {
+            var best = MaterialId.None;
+            var most = 0f;
+            for (var id = 0; id < byMaterial.Length; id++)
+            {
+                if (byMaterial[id] <= most)
+                    continue;
+                most = byMaterial[id];
+                best = new MaterialId((byte)id);
+            }
+
+            return best;
+        }
+
         void DigStep()
         {
             var target = JobTarget;
@@ -1977,6 +2003,8 @@ namespace TinyDiggers.Units
             _lastCut = target;
             var report = Excavation.Dig(_grid, Inventory, target.x, target.y, 0, Step);
             _dispatcher.Ledger.Record(report.InPlaceBySource);
+            if (Bit != null && report.InPlace > 0f)
+                Bit(target, Biggest(report.InPlaceBySource), report.InPlace);
             if (report.WasFull)
             {
                 // The load has room, but not enough of it for one cell's worth. Room is measured
@@ -2050,7 +2078,11 @@ namespace TinyDiggers.Units
             {
                 var report = Excavation.Tip(_grid, Inventory, target.x, target.y, amount * _grid.CellArea);
                 if (report.Tipped > 0f)
+                {
                     _loadFull = false;
+                    if (Tipped != null)
+                        Tipped(target, Biggest(report.TippedByMaterial), report.Tipped);
+                }
             }
 
             Version++;

@@ -248,7 +248,37 @@ namespace TinyDiggers.Interaction
             pathLine.useWorldSpace = true;
             pathLine.positionCount = 0;
             _lines.Add(pathLine);
+
+            // Dust and chunks where the bucket bites and where the bed lets go. The unit raises
+            // these at the bite, so the effect lands with the earth rather than with the job.
+            var effects = Effects;
+            if (effects != null)
+            {
+                unit.Bit += (cell, material, volume) => effects.Bite(cell.x, cell.y, material, volume);
+                unit.Tipped += (cell, material, volume) => effects.Tip(cell.x, cell.y, material, volume);
+            }
+
             return unit;
+        }
+
+        GroundEffects _effects;
+
+        /// <summary>
+        /// The dust and chunks, made on first use beside the terrain so the crew can be built
+        /// before it. Null if there is no terrain to stand on.
+        /// </summary>
+        GroundEffects Effects
+        {
+            get
+            {
+                if (_effects != null || _terrain == null || _terrain.Grid == null)
+                    return _effects;
+                var holder = new GameObject("Ground Effects") { hideFlags = HideFlags.DontSave };
+                holder.transform.SetParent(_terrain.transform, false);
+                _effects = holder.AddComponent<GroundEffects>();
+                _effects.Init(_terrain.Grid, _terrain.transform);
+                return _effects;
+            }
         }
 
         /// <summary>
