@@ -4892,3 +4892,41 @@ selected.
 Checked in play: dismissing a digger that a dumper was parked by leaves the dumper saying "Idle:
 no digger to serve" on the next tick — the status read in the same frame is one tick stale, which
 is the readout catching up, not the pairing failing. Suite 543 passed, 2 skipped.
+
+---
+
+## 2026-09-23 — Can the road tool be the ramp to a lower level?
+
+Ronan: *"What if user needs to use road tools to make ramp to lower level?"* A road already is a
+grade-limited, battered, crew-built cut, so it is a fair question, and it was answered by
+measuring rather than by arguing. Two tests, both on the six-step pit.
+
+**A road drawn below the ground is dig work, and the crew starts on it.** Planning a chain from
+the plateau to the pit floor and turning its footprint into designations the way `RoadBuilder`
+does gives 12 cells of cut straight away. So the mechanism works: there is nothing to build.
+
+**But a road at the road tool's own grade does not fit.** Three metres down wants **25 m of run at
+12%**, and the run from the plateau to the pit edge is **1.5 m**. Drawn as it stands, the chain
+comes out at **200%** and the tool would refuse it — correctly. For a big quarry with a long haul
+road in, 12% is right; for a pit a few metres across it is geometrically impossible.
+
+**Drawn steeper it helps, and it is still not enough.** 12% is the default, not a law: Max grade
+is a field in the panel, and the crew's own limit is far more permissive than a haul road's — a
+metre of step across a half-metre cell is 200%, and the pathfinder allows 45°. A ramp drawn at
+**100%**, which fits in six cells, moved **10.75 of 42.38 m³** against **about 8 of 39** with no
+ramp at all. Better, and nothing like a dug pit.
+
+**Why it stops in the same place.** The deep end of a drawn ramp is itself ground that has to be
+cut before it can be walked on, and cutting it means reaching over the same wall the auto ramp
+cannot get through. A drawn ramp changes who decides where the way in goes; it does not change
+whether the crew can cut the last step of it.
+
+**So the answer to Ronan's question is yes, with a caveat worth having in the game**: the road
+tool can make a ramp to a lower level, and for anything with room — a quarry, a terrace, a haul
+road down a hillside — it is the right tool and already works. It is not a way round the pit
+fault, and the pit fault still wants the ruling: what a ramp step cut into the target cell should
+take down.
+
+Both are tests now, not notes. `ARoadRampIntoAPitNeedsMoreRunThanAPitHas` holds the geometry, and
+`ASteepRoadRampGetsTheCrewIntoThePit` is a characterization test that asserts the pit is *not*
+mostly dug — it fails, loudly and on purpose, the day the ramp fault is fixed.

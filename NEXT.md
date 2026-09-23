@@ -62,5 +62,10 @@ stops at four fifths. Reproduction is `[Ignore]`d in `DeepPitTests` with the num
 needs a ruling from Ronan on what a ramp step into the target cell should cut. See `DECISIONS.md`,
 2026-09-22.
 
+**Road tools as a ramp to a lower level** (Ronan, 2026-09-23) — measured, see `DECISIONS.md`. Yes
+for anywhere with room (3 m down wants 25 m of run at 12%, and Max grade is a field so it can be
+drawn steeper), no as a way round the pit fault: a 100% ramp moved 10.75 of 42.38 m³ against about
+8 with none, because the deep end of a drawn ramp is itself a cut behind the same wall.
+
 **Still open from the digging run:** heap terracing on the half-metre step grid, and trials B, D
 and F unrun.

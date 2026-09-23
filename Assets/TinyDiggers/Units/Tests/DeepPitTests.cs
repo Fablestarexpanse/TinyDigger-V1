@@ -279,6 +279,98 @@ namespace TinyDiggers.Units.Tests
         /// making no ground.
         /// </summary>
         [Test]
+        public void ARoadRampIntoAPitNeedsMoreRunThanAPitHas()
+        {
+            // Ronan, 2026-09-23: "what if the user needs to use road tools to make a ramp to a
+            // lower level?" A road already is a grade-limited, battered, crew-built cut, so the
+            // question is a fair one — and the answer is a measurement, not an opinion.
+            //
+            // This is the plain-C# half of the road tool: plan a chain from the plateau to the pit
+            // floor, turn its footprint into designations the way RoadBuilder does, and see what
+            // grade comes out and how far the crew gets.
+            Crew(4);
+            var floor = MarkThePit(6);
+            var drop = Ground - floor;
+
+            var chain = new List<RoadNode>
+            {
+                new RoadNode { Position = new Vector2(4.5f, Middle.y + 0.5f), Height = Ground },
+                new RoadNode { Position = new Vector2(Middle.x - Half + 0.5f, Middle.y + 0.5f), Height = floor },
+            };
+            var samples = new List<RoadSample>();
+            var footprint = new List<PlannedCell>();
+            var bed = new List<Vector2Int>();
+            RoadSpline.Sample(chain, RoadPlanner.SampleSpacing, samples);
+            RoadPlanner.Footprint(_grid, samples, 3, footprint, bed, includeSettled: true);
+
+            var grade = RoadSpline.Grade(chain, 0, _grid.CellSize);
+            var ramped = 0;
+            foreach (var cell in footprint)
+                if (cell.IsDig && _map.Designate(cell.X, cell.Z, DesignationKind.Dig, cell.Height))
+                    ramped++;
+
+            var before = Outstanding();
+            var (done, seconds, moved) = Work(600f, 60f);
+            // What a road at the tool's own limit would need, against what there is room for.
+            var runWanted = drop / RoadPlanner.DefaultMaxGrade;
+            var runThere = Vector2.Distance(chain[0].Position, chain[1].Position) * _grid.CellSize;
+            Debug.Log($"ROAD RAMP: {drop:0.##} m down in {runThere:0.#} m of run is {grade * 100f:0}% — "
+                      + $"a {RoadPlanner.DefaultMaxGrade * 100f:0}% road would want {runWanted:0.#} m. "
+                      + $"{ramped} cells cut; {moved:0.##} m³ of {before:0.##} moved in {seconds:0} s, done={done}");
+
+            Assert.That(ramped, Is.GreaterThan(0),
+                "a road drawn below the ground is dig work, so the crew has something to build");
+            Assert.That(RoadPlanner.Judge(grade, RoadPlanner.DefaultMaxGrade), Is.EqualTo(RoadGradeState.Refused),
+                "and the road tool would refuse this one: there is nothing like enough run for it");
+            Assert.That(runWanted, Is.GreaterThan(runThere * 4f),
+                "which is the whole finding — a drivable ramp wants several times the room a pit this size has");
+        }
+
+        [Test]
+        public void ASteepRoadRampGetsTheCrewIntoThePit()
+        {
+            // The follow-on from ARoadRampIntoAPitNeedsMoreRunThanAPitHas: 12% is the road tool's
+            // default, not a law — Max grade is a field in the panel. The crew's own limit is far
+            // more permissive than a haul road's (a metre of step across a half-metre cell, which
+            // is 200%, and 45° of slope), so a ramp drawn steep enough to fit beside a pit is
+            // still something they can walk. This draws one at 100% and lets them at it.
+            Crew(4);
+            var floor = MarkThePit(6);
+
+            // Six cells of run for three metres of drop: 100%, which is 45°.
+            var chain = new List<RoadNode>
+            {
+                new RoadNode { Position = new Vector2(1.5f, Middle.y + 0.5f), Height = Ground },
+                new RoadNode { Position = new Vector2(Middle.x - Half + 0.5f, Middle.y + 0.5f), Height = floor },
+            };
+            var samples = new List<RoadSample>();
+            var footprint = new List<PlannedCell>();
+            var bed = new List<Vector2Int>();
+            RoadSpline.Sample(chain, RoadPlanner.SampleSpacing, samples);
+            RoadPlanner.Footprint(_grid, samples, 3, footprint, bed, includeSettled: true);
+            foreach (var cell in footprint)
+                if (cell.IsDig)
+                    _map.Designate(cell.X, cell.Z, DesignationKind.Dig, cell.Height);
+
+            var grade = RoadSpline.Grade(chain, 0, _grid.CellSize);
+            var before = Outstanding();
+            var (done, seconds, moved) = Work(900f, 90f);
+            Debug.Log($"STEEP RAMP: {grade * 100f:0}% ramp; {moved:0.##} m³ of {before:0.##} moved "
+                      + $"in {seconds:0} s, done={done}, {Outstanding():0.##} m³ left");
+
+            // What actually happens, written down so it fails if anyone improves it: a quarter of
+            // the pit, not most of it (10.75 of 42.38 m³, 2026-09-23). Drawing a way in they can
+            // walk is better than none — the same pit with no ramp at all leaves 30.75 m³ — but it
+            // is not the answer on its own, because the deep end of the ramp has to be dug before
+            // it can be walked on, and that is the same wall the auto ramp cannot get through.
+            Assert.That(moved, Is.GreaterThan(before * 0.15f),
+                $"a drawn ramp should at least get them started — {moved:0.##} of {before:0.##} m³ moved");
+            Assert.That(moved, Is.LessThan(before * 0.5f),
+                $"and if it now gets most of the pit out ({moved:0.##} of {before:0.##} m³), the "
+                + "ramp fault is fixed and this test should say so instead");
+        }
+
+        [Test]
         public void TheCrewIsNotToldToThinkAgainOverAndOver()
         {
             // The deep pit sat showing "path 1/8 RETHINK", and two guesses at why were wrong: the
