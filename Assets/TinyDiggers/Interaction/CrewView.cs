@@ -502,6 +502,12 @@ namespace TinyDiggers.Interaction
         /// <summary>Most slices one frame may be broken into: twenty seconds of crew work.</summary>
         const int MaxTickSlices = 200;
 
+        /// <summary>
+        /// Milliseconds one frame may spend stepping the crew. A budget in *real* time, because
+        /// what it is protecting is the frame, not the simulation.
+        /// </summary>
+        const double MaxTickMilliseconds = 6.0;
+
         void Update()
         {
             Dispatcher.Benching = benching;
@@ -525,8 +531,20 @@ namespace TinyDiggers.Interaction
             // twenty times — without the simulation going blind. The slice count is capped so a
             // hitch or a long pause cannot turn one frame into minutes of work.
             var left = Mathf.Min(Time.deltaTime, MaxTickSeconds * MaxTickSlices);
+            var startedAt = Time.realtimeSinceStartupAsDouble;
             while (left > 0f)
             {
+                // However far behind the clock is, one frame spends only so long catching up.
+                //
+                // Without this the slicing feeds itself: a frame that took a second leaves
+                // Time.deltaTime at a second, which asks for ten slices, which takes longer than a
+                // second, which asks for more. Profiling a stutter found exactly that — a frame of
+                // 1,367 ms, all of it BehaviourUpdate, with the render thread sitting in
+                // Gfx.WaitForGfxCommandsFromMainThread waiting for us (2026-09-23). The crew fall
+                // a little behind the clock under load instead, which nobody can see.
+                if (Time.realtimeSinceStartupAsDouble - startedAt > MaxTickMilliseconds / 1000.0)
+                    break;
+
                 var slice = Mathf.Min(left, MaxTickSeconds);
                 left -= slice;
                 Dispatcher.Tick(slice);

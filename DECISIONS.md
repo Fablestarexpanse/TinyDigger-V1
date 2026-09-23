@@ -5465,3 +5465,46 @@ digs a cell too deep to step into, which is what it meant all along, and
 scoop rebuilds nothing and the answers stay right, a cut too deep to enter still rebuilds.
 
 Suite 554 passed, 2 skipped.
+
+---
+
+## 2026-09-23 — The stutter, named at last: the crew's slice loop feeds itself
+
+Ronan, on a fresh session: *"loaded game, placed a road slice, and as soon as they went to start
+digging the road the lag started."* Watching that session rather than a contrived one:
+
+```
+ROADWATCH  1347 frames, mean 14.85 ms, worst 1369 ms, 2.7% over 16.67 ms
+nine spikes in twenty seconds, every one of them 1,307-1,369 ms
+in each spike frame: region rebuilds 0 or 1, chunks 0-2, heap moved 0 MB
+```
+
+Nothing in the frame accounted for it, which is what sent this chase through three wrong suspects
+— the height lag (cleared: 35.4 ms mean with it on, 38.5 ms off), the region rebuild (real, fixed,
+worth 77×, and *not this*), and the heap (real, fixed, and not this either).
+
+**Dissecting the worst frame across every thread settled it:**
+
+```
+DISSECT worst frame 512 at 1367 ms.
+[Main Thread]   PlayerLoop 1364ms -> UpdateScene 1364ms -> BehaviourUpdate 1362ms
+[Render Thread] Gfx.WaitForGfxCommandsFromMainThread 1361ms
+```
+
+The render thread is idle, waiting on us. It is one MonoBehaviour `Update`, and an earlier
+drill-down named it: `CrewView.Update`, the slice loop.
+
+**It feeds itself.** The loop steps the crew in slices of at most 0.1 s to cover `Time.deltaTime`,
+capped at 200 slices — twenty seconds of simulation in one frame. So a frame that took a second
+leaves `deltaTime` at a second, which asks for ten slices, which takes longer than a second, which
+asks for more. Any hitch at all — the first real region rebuild when digging starts, a path search
+hitting its budget — is enough to start it, and it does not stop. That is exactly Ronan's "as soon
+as they went to start digging".
+
+**The fix is a budget in real time**: one frame spends at most 6 ms stepping the crew, however far
+behind the clock it is. Under load the crew fall slightly behind real time, which nobody can see;
+the alternative is the frame that everyone can see.
+
+The lesson, again and more expensively than last time: *the thing that is slow and the thing that
+caused the slowness are not the same question.* Three real inefficiencies were found and fixed on
+the way here, all worth having, none of them the stutter.
