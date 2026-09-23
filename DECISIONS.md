@@ -5508,3 +5508,37 @@ the alternative is the frame that everyone can see.
 The lesson, again and more expensively than last time: *the thing that is slow and the thing that
 caused the slowness are not the same question.* Three real inefficiencies were found and fixed on
 the way here, all worth having, none of them the stutter.
+
+---
+
+## 2026-09-23 — It was the water after all
+
+Ronan's very first guess, when he asked where the lag came from, was *"Water?"* It was, and it took
+four wrong answers to get back to it.
+
+Dissecting the worst frame of his own session, one line settles it:
+
+```
+DISSECT2 worst 370 at 1407 ms.
+BehaviourUpdate 1398ms; WaterView.Update() 1396ms;
+```
+
+`WaterView.Update` waits half a second after the ground last changed and then calls `Rebuild`,
+which bakes the water field over **every one of the island's 9,634,816 cells** and remeshes both
+the sea and the river sheets. It is marked dirty by `OnCellChanged` — *any* cell, anywhere. So
+every burst of digging costs a full-island water rebake, half a second after it stops, for ever.
+That is exactly "as soon as they went to start digging the road".
+
+**The fix is to ask whether the change could move the waterline at all.** A cell only matters if it
+is water, touches water, or sits within a couple of metres of sea level. The crew spend nearly all
+their time cutting ground nowhere near the sea, and none of that can change where the water is.
+
+**Why it hid for so long.** The first profile named `CrewView.Update` at 415 ms, which was true and
+was the biggest thing in the frame *then*; the water only became the largest once the crew was
+bounded. Each fix on the way — the region rebuild per scoop (77×), the pathfinder heuristic
+(160×), the heap churn, the self-feeding slice loop — was a real fault, measured and worth having.
+None of them was the stutter.
+
+**The lesson, and it is the expensive one of this session:** *the biggest sample in a slow frame is
+not the same question as what makes the frame slow.* Dissecting the worst frame across all threads
+names the culprit in one shot, and it should have been the first thing done, not the fifth.

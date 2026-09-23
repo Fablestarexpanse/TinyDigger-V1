@@ -198,7 +198,51 @@ namespace TinyDiggers.Presentation
             Shader.SetGlobalVectorArray(WaveBId, _waveB);
         }
 
-        void OnCellChanged(int x, int z) => _dirtyAt = Time.time;
+        /// <summary>
+        /// A cell changed. The sheets only need rebuilding if that cell could move the waterline —
+        /// if it is water, touches water, or is low enough to become water.
+        ///
+        /// It used to mark them dirty wherever the change was, and a rebuild bakes the water field
+        /// over every one of the island's 9.6 million cells and remeshes both sheets: profiling a
+        /// stutter found `WaterView.Update` taking **1,396 ms of a 1,407 ms frame** (2026-09-23).
+        /// The crew spend nearly all their time digging ground that is nowhere near the sea, and
+        /// none of that can change where the water is.
+        /// </summary>
+        void OnCellChanged(int x, int z)
+        {
+            if (_dirtyAt >= 0f)
+                return;   // already waiting to rebuild; no need to look
+            if (!CouldMoveTheWaterline(x, z))
+                return;
+            _dirtyAt = Time.time;
+        }
+
+        /// <summary>Whether a change at (x, z) could put water somewhere it was not, or take it away.</summary>
+        bool CouldMoveTheWaterline(int x, int z)
+        {
+            var grid = _terrain.Grid;
+            if (grid == null)
+                return true;
+
+            // Near enough the water's level to matter, counting the rim the field blurs over.
+            const float Margin = 2f;
+            for (var dz = -1; dz <= 1; dz++)
+            {
+                for (var dx = -1; dx <= 1; dx++)
+                {
+                    var nx = x + dx;
+                    var nz = z + dz;
+                    if (!grid.InBounds(nx, nz))
+                        continue;
+                    if (grid.IsWater(nx, nz))
+                        return true;
+                    if (grid.GetSurfaceHeight(nx, nz) <= World.SeaLevel + Margin)
+                        return true;
+                }
+            }
+
+            return false;
+        }
 
         void Update()
         {
