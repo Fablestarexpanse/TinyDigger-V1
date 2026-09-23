@@ -5049,3 +5049,37 @@ one unit's rate in a cutting that width, and the ladder should not be read as if
 
 **Also noted:** the trial's own camera ended up inside the hill for the "worked" shot, so the
 picture shows the crew from within the spoil. Cosmetic, in the trial harness rather than the game.
+
+---
+
+## 2026-09-23 — Machines walking on the spot
+
+Ronan: *"the mechs' not-moving animation — when they are standing still their legs are still
+walking."*
+
+`CrewAnimation.StateFor` returned `Carry` for any loaded unit, "moving or not", and that was
+written for the crew robot, whose Carry is a standing pose with the load held up. It is not true
+of the machines. Listing the controllers settles it in one line each:
+
+```
+crew_unit.controller: Idle(Idle) Move(Move) Work(Work) Carry(Carry)
+digger.controller:    Idle(idle) Move(walk) Work(dig)  Carry(walk)
+dumper.controller:    Idle(idle) Move(walk) Work(tip)  Carry(walk_loaded)
+```
+
+The digger's Carry **is** its walk cycle and the dumper's is `walk_loaded`. So a loaded machine
+standing still played a walk, and its legs went on walking.
+
+**Carry now means carrying *along*, not holding**: anything not moving plays Idle, loaded or not,
+and Carry is only for a loaded unit actually going somewhere. One rule for all three bodies rather
+than a special case for machines, because the old rule was wrong about what Carry means, not just
+wrong about mechs.
+
+The crew robot loses its raised-load pose while standing still as a result. That is a real change
+to how it looks and Ronan may want it back; the way to have both is a standing-with-load clip on
+the machines rather than a second rule in the code.
+
+**Left alone deliberately:** `CrewView.PlayClip` records the clip it asked for whether or not the
+controller has that state, so a missing state would leave the body playing whatever it was playing
+with nothing to say so. Every controller has all four states today, so this is a trap rather than
+a bug, and it is not being "fixed" on spec.

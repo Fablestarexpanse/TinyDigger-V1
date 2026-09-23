@@ -26,10 +26,12 @@ namespace TinyDiggers.Interaction.Tests
         [TestCase(CrewUnitState.Parked)]
         [TestCase(CrewUnitState.Waiting)]
         [TestCase(CrewUnitState.Unreachable)]
-        public void StandingEmptyIsIdleAndStandingLoadedHoldsTheLoad(CrewUnitState state)
+        public void AnythingStandingStillIsIdleLoadedOrNot(CrewUnitState state)
         {
             Assert.That(CrewAnimation.StateFor(state, false), Is.EqualTo(CrewAnimation.Idle));
-            Assert.That(CrewAnimation.StateFor(state, true), Is.EqualTo(CrewAnimation.Carry));
+            // Standing still is Idle whether or not it is loaded: a machine's Carry is its walk
+            // cycle, so a loaded one standing on Carry walked on the spot (2026-09-23).
+            Assert.That(CrewAnimation.StateFor(state, true), Is.EqualTo(CrewAnimation.Idle));
         }
     }
 }
