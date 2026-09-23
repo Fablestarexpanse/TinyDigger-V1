@@ -24,6 +24,9 @@ namespace TinyDiggers.Interaction
         [SerializeField] Color32 _digColor = new Color32(230, 50, 40, 110);
         [SerializeField] Color32 _fillColor = new Color32(40, 110, 240, 110);
         [SerializeField] Color32 _dumpZoneColor = new Color32(60, 200, 80, 100);
+
+        /// <summary>Amber, matching the Quarry tool's own colour so the mark and the tool agree.</summary>
+        [SerializeField] Color32 _quarryColor = new Color32(220, 160, 70, 90);
         [SerializeField] Color32 _autoStripeColor = new Color32(230, 50, 40, 190);
         [SerializeField, Range(2, 8)] int _autoStripes = 4;
 
@@ -101,7 +104,9 @@ namespace TinyDiggers.Interaction
             for (var dz = -1; dz <= 1 && !_dirty; dz++)
                 for (var dx = -1; dx <= 1 && !_dirty; dx++)
                     if (_terrain.Grid.InBounds(x + dx, z + dz)
-                        && (_map.GetKind(x + dx, z + dz) != DesignationKind.None || _map.IsDumpZone(x + dx, z + dz)))
+                        && (_map.GetKind(x + dx, z + dz) != DesignationKind.None
+                            || _map.IsDumpZone(x + dx, z + dz)
+                            || _map.IsQuarry(x + dx, z + dz)))
                         _dirty = true;
         }
 
@@ -115,6 +120,12 @@ namespace TinyDiggers.Interaction
             _colors.Clear();
             _triangles.Clear();
             var grid = _terrain.Grid;
+            // Quarries under everything else. They were drawn nowhere at all until now, which was
+            // survivable while a quarry was a dragged rectangle you had just made and could
+            // remember, and is not once a pit is a shape with sixteen hundred cells and benches in
+            // it: you commit one and the only thing on screen is a thin outline (2026-09-23).
+            foreach (var cell in _map.QuarryCells)
+                AddSurfaceTile(grid, cell % grid.Width, cell / grid.Width, _quarryColor, _vertices, _colors, _triangles, Lift);
             foreach (var cell in _map.DumpZoneCells)
                 AddSurfaceTile(grid, cell % grid.Width, cell / grid.Width, _dumpZoneColor, _vertices, _colors, _triangles, Lift);
             foreach (var cell in _map.ActiveCells)

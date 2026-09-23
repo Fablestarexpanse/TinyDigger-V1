@@ -5810,3 +5810,21 @@ had not: 28:1.0 29:1.5 30:2.0 31:2.0 32:1.5 33:1.5.
 That is worth naming, because it is the session's pattern: **when a test disagrees, probe the code
 directly before touching either.** It has been the build twice and the test's own arithmetic three
 times, and the production code none.
+
+### Verifying the whole tool in play (2026-09-23)
+
+Most of the tool had only ever run in tests, so the finished thing was put on the real island: a pit,
+a heap, a ribbon and a brush stroke together. **2,803 cells across four shapes, planned in 1.1 ms.**
+The pit held 1,055 m³ in four benches, the heap 418.9 m³, and posting the crew to the pit's site
+took on all 1,600 of its quarry cells.
+
+**It found a fault no test could have.** A committed pit was *invisible*: `DesignationsView` drew
+dig, fill and dump zones and had never drawn quarry cells at all. That was survivable while a quarry
+was a rectangle you had just dragged and could remember, and is not once a pit is sixteen hundred
+cells with benches in it — you committed one and the only thing on screen was a thin white outline.
+Quarries are now drawn in the Quarry tool's own amber, under the other layers, and a quarry-only
+change marks the overlay dirty (it did not before, so even the old rectangle tool's marks could be a
+frame late).
+
+This is the argument for the project's own rule — *show a real run* — in one example: the arithmetic
+was right, every test passed, and the feature was unusable.

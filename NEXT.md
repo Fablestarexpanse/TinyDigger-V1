@@ -95,3 +95,28 @@ the displacement is forced to agree along it. Needs care, not a flag.
 Everything it would build on is already in place: `WaterView.EnsureTiles` makes the tiles and
 `BuildSea(mesh, firstColumn, lastColumn, firstRow, lastRow)` takes a range, so a per-tile step is a
 small change to those two.
+
+## Terraform tool — where it stands (2026-09-23)
+
+Slices A–H are in and the tool answers the whole of what Ronan asked for. Verified on the real
+island in play, not only in tests: four shapes over 2,803 cells planned in **1.1 ms**, a pit of
+1,055 m³ in four benches, a heap holding 418.9 m³, and the crew posted to the pit's site.
+`Screenshots/Terraform/` has the pictures.
+
+**Left, and neither is part of the ask:**
+
+- **A pit proposing its own haul road.** The ribbon machinery is there; it would descend the inside
+  of the outline at `RoadPlanner.DefaultMaxGrade` and cut a corridor through the benches. It may also
+  settle the `PlaceRampStep` blind spot below.
+- **Nothing in this game persists.** Not landforms, not roads, not designations, not the terrain —
+  the world is generated from a seed each time play starts and `RoadNetwork.ToJson` is used only by
+  its own tests. Which layers deserve a save file is Ronan's call, so it has been left alone
+  deliberately rather than invented inside a terraform slice.
+
+**Known and cosmetic:** a committed shape's outline is drawn at one height while its overlay tiles
+follow the ground, so on a slope the two separate visibly. Drawing the outline along the ground would
+fix it.
+
+**Also noted while building:** `Landform.Spoil` is a `MaterialId`, which Unity's serialisation skips
+(warning UAC1001). It costs nothing today because nothing is serialised, and would need an int field
+the day a save file exists.
