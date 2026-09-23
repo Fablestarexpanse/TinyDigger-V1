@@ -183,7 +183,8 @@ namespace TinyDiggers.Units.Tests
                             + $"{unit.Position.y:0.00}) cell ({unit.Cell.x}, {unit.Cell.y}) "
                             + $"job ({unit.JobTarget.x}, {unit.JobTarget.y}) from ({unit.JobStand.x}, "
                             + $"{unit.JobStand.y}) load {unit.Inventory.Total:0.###} "
-                            + $"waited {unit.WaitingFor:0.0} :: {unit.Status}] ";
+                            + $"waited {unit.WaitingFor:0.0} path {unit.PathLeft}/{unit.PathLength} "
+                            + $":: {unit.Status}] ";
                 Debug.Log(said);
             }
         }

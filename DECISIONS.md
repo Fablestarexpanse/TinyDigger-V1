@@ -4364,3 +4364,24 @@ The trial also stops calling a ramp a stall — but only for twice its patience,
 
 The ramp is planned, the step is designated, and the unit that should cut it never arrives. That is
 the next fault, and it is a clean one: a single unit with a single job that it does not finish.
+
+### The ramp is never cut because the unit never gets there
+
+`CrewUnit.PathLeft` / `PathLength` in the trace, and the ramp fault is down to one line:
+
+```
+tick 5: [0 Moving Dig at (15.50, 21.39) cell (15, 21) job (14, 13) from (15, 14)
+         load 0.25 waited 0.0 path 7/8 :: Moving to ramp (14, 13) to 5.5 m]
+```
+
+Eight waypoints, **seven still ahead**, `waited 0.0` — so it is not blocked by anything — and its
+position alternates between z 21.46 and 21.39 tick after tick. It has a good path to the ramp and
+walks the first hundredth of it for ever.
+
+A path that never advances past its first waypoint is a path being **re-planned every tick**:
+`Replan` puts `_pathIndex` back and the unit starts again from where it stands. What sets `_repath`
+that often is the thing to find — the suspects are the designation `Changed` event (the ramp step
+being re-placed each rethink) and `OnCellChanged`, neither of which should be firing on a site
+where nothing is being dug.
+
+Next session: log `_repath` and `_pathIndex` alongside the path length. One run should name it.

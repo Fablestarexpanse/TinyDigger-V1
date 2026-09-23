@@ -293,6 +293,16 @@ namespace TinyDiggers.Units
         readonly JobDispatcher _dispatcher;
         readonly bool _ownsDispatcher;
         readonly List<Vector2Int> _path = new List<Vector2Int>();
+
+        /// <summary>
+        /// Waypoints still ahead of it, and where it is up to. A unit that says it is moving and
+        /// does not move is either blocked — which the wait says — or walking a path that is not
+        /// taking it anywhere, and only this tells the two apart.
+        /// </summary>
+        public int PathLeft => Math.Max(0, _path.Count - _pathIndex);
+
+        /// <summary>How many waypoints the path it is walking has altogether.</summary>
+        public int PathLength => _path.Count;
         readonly bool[] _onPath;
         readonly List<int> _onPathCells = new List<int>();
         readonly List<int> _unreachableDigs = new List<int>();
