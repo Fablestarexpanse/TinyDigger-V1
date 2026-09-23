@@ -5657,3 +5657,36 @@ Two things learned in the doing:
   bridge, and entering play again then runs *that* — no terrain, no tools, and a confusing "not
   ready" from every probe. Check the open scene before blaming the code;
   `Assets/TinyDiggers/Scenes/TerrainSandbox.unity` is the game.
+
+### Slice D — batters, and the mouse bug coming back the other way (2026-09-23)
+
+`LandformPlanner.Batters` settles a shape's **rim** rather than its whole footprint. The claim is
+exact, not an approximation: for a cell outside the shape the binding constraint is decided by the
+nearest planned cell, and the nearest cell of a filled shape is always on its rim. A test asserts
+the rim gives the same faces, cell for cell and height for height, as settling all of them — on a
+square and on a concave shape with a notch, which is the case that could break it.
+
+**The first version was wrong and the test caught it.** `RoadPlanner.Settle` uses the footprint it is
+handed for two jobs: the cells that do the battering, and the cells that are already spoken for and
+must not be battered themselves. Given the rim alone it got the first right and the second wrong, so
+the shape's own interior came back as faces — 720 where the slow way gives 460. The insides are
+dropped afterwards, which is exact, because Settle works a cell out from its own previous value and
+the shape's cells, never from another outside cell.
+
+Reach is derived from the tallest step the shape makes over the gentler of the two angles, rather
+than fixed at 14: a shallow pad stops probing ground it could never touch, and a deep cut is not
+clipped short of where its face really ends.
+
+**And the mouse bug came back, from the other end.** The event system every canvas brings with it was
+made with `HideFlags.DontSave`, which also means *survive a scene load* — so every play session left
+one behind and **five had piled up**, all belonging to no scene. `EventSystem.current` went on
+pointing at an orphan, and the early return on it meant the next session never built a live one: no
+uGUI raycast, and every panel dead to the click again. It is now
+`DontSaveInEditor | DontSaveInBuild` — in the scene, never written to it, and gone when the scene
+goes — and the early return is gone. Two tests hold it: a leftover from another session does not
+count as this one's, and the one that is made must not carry `DontSave`.
+
+The lesson is the same one this project keeps relearning: **a flag that means two things will one day
+mean the wrong one.** `DontSave` bundles "do not write to disk" with "outlive the scene", and only
+the first was ever wanted; `Settle`'s footprint bundles "batter with these" with "do not batter
+these", and only the first was ever wanted.

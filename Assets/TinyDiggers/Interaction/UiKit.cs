@@ -55,18 +55,25 @@ namespace TinyDiggers.Interaction
         /// </summary>
         public static void EnsureEventSystem()
         {
-            if (EventSystem.current != null)
-                return;
-
-            // Resources.FindObjectsOfTypeAll, not FindAnyObjectByType: the one made here is marked
-            // DontSave, and FindAnyObjectByType cannot see objects with that flag — so asking it
-            // made a second event system every time a second canvas was built, and two of them
-            // fight over the input (2026-09-23).
+            // Resources.FindObjectsOfTypeAll, not FindAnyObjectByType, and only ones that are
+            // actually in a scene: an event system belonging to no scene is a leftover, not a live
+            // one, and cannot raycast for this session.
             foreach (var existing in Resources.FindObjectsOfTypeAll<EventSystem>())
                 if (existing.gameObject.scene.IsValid())
                     return;
 
-            var holder = new GameObject("Event System") { hideFlags = HideFlags.DontSave };
+            // Not saved, but still part of the scene and still destroyed when play ends.
+            //
+            // It was HideFlags.DontSave, which *also* means "survive a scene load" — so every play
+            // session left its event system behind, five of them piled up, and
+            // EventSystem.current went on pointing at an orphan belonging to no scene. The early
+            // return on that made the next session skip building a live one, and the whole
+            // interface went dead to the mouse again — the same fault as 2026-09-23, arrived at
+            // from the other end. An orphan cannot raycast for a scene it is not in.
+            var holder = new GameObject("Event System")
+            {
+                hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontSaveInBuild,
+            };
             holder.AddComponent<EventSystem>();
             // The project is Input System only (activeInputHandler = 1), so the old
             // StandaloneInputModule would throw on the first frame it tried to read the mouse.

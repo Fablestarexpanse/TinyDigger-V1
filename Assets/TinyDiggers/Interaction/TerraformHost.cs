@@ -30,6 +30,8 @@ namespace TinyDiggers.Interaction
         static readonly Color32 DigColor = new Color32(235, 70, 60, 90);
         static readonly Color32 FillColor = new Color32(70, 140, 245, 90);
         static readonly Color32 FlatColor = new Color32(200, 205, 210, 55);
+        static readonly Color32 CutFaceColor = new Color32(215, 150, 95, 95);
+        static readonly Color32 FillFaceColor = new Color32(110, 165, 235, 95);
         static readonly Color32 OutlineColor = new Color32(255, 255, 255, 230);
         static readonly Color32 ActiveNodeColor = new Color32(255, 220, 60, 240);
         static readonly Color32 BuiltColor = new Color32(250, 240, 200, 150);
@@ -44,6 +46,8 @@ namespace TinyDiggers.Interaction
         readonly List<Color32> _colors = new List<Color32>();
         readonly List<int> _triangles = new List<int>();
         readonly List<PlannedCell> _preview = new List<PlannedCell>();
+        readonly List<PlannedCell> _faces = new List<PlannedCell>();
+        readonly List<int> _rim = new List<int>();
         readonly List<PlannedCell> _committedCells = new List<PlannedCell>();
         readonly List<Vector2> _outline = new List<Vector2>();
         readonly List<RoadSample> _samples = new List<RoadSample>();
@@ -220,6 +224,10 @@ namespace TinyDiggers.Interaction
             if (form == null)
                 return;
 
+            // Only the shape is designated. The batters are not work the crew are given: they are
+            // what the ground will do to itself once the shape is cut, and the slump does them. They
+            // are shown, and counted in the cost, because you are paying for them either way —
+            // which is the same bargain the road tool strikes.
             _tools.History?.Begin("terraform");
             Plan.Rasterise(Grid, _committedCells);
             var made = Builder.Commit(_committedCells);
@@ -307,6 +315,7 @@ namespace TinyDiggers.Interaction
 
             Draft.CellSize = Grid.CellSize;
             _preview.Clear();
+            _faces.Clear();
             Cut = Fill = 0f;
             Cells = 0;
             if (!Draft.CanCommit)
@@ -315,9 +324,15 @@ namespace TinyDiggers.Interaction
             var one = new LandformPlan();
             one.Add(Draft.Form);
             one.Rasterise(Grid, _preview, includeSettled: true);
+
+            // What the ground round the shape does once it is built. Only the rim can batter
+            // anything, which is what keeps this in microseconds on a shape of thousands of cells.
+            LandformPlanner.Batters(Grid, _preview, Draft.Form.Spoil, _faces, _rim);
+
             Blueprints.Volumes(_preview, out var cut, out var fill, Grid.CellArea);
-            Cut = cut;
-            Fill = fill;
+            Blueprints.Volumes(_faces, out var faceCut, out var faceFill, Grid.CellArea);
+            Cut = cut + faceCut;
+            Fill = fill + faceFill;
             Cells = _preview.Count;
         }
 
@@ -330,6 +345,15 @@ namespace TinyDiggers.Interaction
             if (_tools.Mode == ToolMode.Terraform)
             {
                 var cell = Grid.CellSize;
+
+                // The batters first, under the shape itself. A cut face is drawn on the ground it
+                // takes away rather than at the height it settles to, or it is buried in the hill.
+                foreach (var face in _faces)
+                {
+                    var top = Mathf.Max(face.Height, Grid.GetSurfaceHeight(face.X, face.Z)) + 0.05f;
+                    DesignationsView.AddTile(face.X, face.Z, top, top, top, top,
+                        face.IsDig ? CutFaceColor : FillFaceColor, _vertices, _colors, _triangles, cell);
+                }
 
                 // What the draft would do, cell by cell: red where the ground comes off, blue where
                 // it goes on, and a neutral tile where it is already right — so the shape reads as

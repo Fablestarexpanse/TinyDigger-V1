@@ -60,6 +60,54 @@ namespace TinyDiggers.Interaction.Tests
         }
 
         [Test]
+        public void AnEventSystemLeftOverFromAnotherSessionDoesNotCountAsThisOnesEventSystem()
+        {
+            // The mouse bug, arrived at from the other end. The event system used to be made with
+            // HideFlags.DontSave, which also means "survive a scene load", so every play session
+            // left one behind — five had piled up — and they belong to no scene. EventSystem.current
+            // went on pointing at one of those orphans, the early return on it skipped building a
+            // live one, and the whole interface went dead to the mouse again (2026-09-23).
+            //
+            // An orphan cannot raycast for a scene it is not in, so it must not be mistaken for one.
+            var orphan = new GameObject("Leftover Event System") { hideFlags = HideFlags.DontSave };
+            orphan.AddComponent<EventSystem>();
+            try
+            {
+                var already = InScene();
+
+                UiKit.NewCanvas(_holder.transform, "After the leftover", 0);
+
+                Assert.That(InScene(), Is.Not.Null,
+                    "a canvas still needs an event system of its own, whatever is left lying about");
+                if (already == null)
+                    _madeHere = InScene();
+            }
+            finally
+            {
+                Object.DestroyImmediate(orphan);
+            }
+        }
+
+        [Test]
+        public void TheEventSystemDoesNotOutliveTheSceneItWasMadeFor()
+        {
+            // What stops them piling up in the first place: it is not saved, but it *is* in a scene,
+            // so it goes when the scene does rather than lingering for the next session to trip over.
+            var already = InScene();
+            UiKit.NewCanvas(_holder.transform, "Owned by a scene", 0);
+            var made = InScene();
+            if (already == null)
+                _madeHere = made;
+
+            Assert.That(made, Is.Not.Null);
+            Assert.That(made.gameObject.scene.IsValid(), Is.True, "it belongs to a scene");
+            Assert.That(made.gameObject.hideFlags.HasFlag(HideFlags.DontSaveInEditor), Is.True,
+                "and is not written into it");
+            Assert.That(made.gameObject.hideFlags, Is.Not.EqualTo(HideFlags.DontSave),
+                "DontSave would make it outlive the scene, which is how five of them piled up");
+        }
+
+        [Test]
         public void ASecondCanvasDoesNotBringASecondEventSystem()
         {
             // Two of them fight over the input and Unity warns about it every frame.
