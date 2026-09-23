@@ -245,6 +245,54 @@ namespace TinyDiggers.Interaction
             return unit;
         }
 
+        /// <summary>
+        /// Lets a unit go: it leaves the dispatcher (which releases its job, unpairs whatever it
+        /// was working with and frees the cell it stood on), its body, ring and path line are
+        /// destroyed, and everything the view holds per unit drops the same slot.
+        ///
+        /// Every one of those lists is indexed by the unit's place in <see cref="Units"/>, so one
+        /// missed list would silently attach a unit to another's body; they are removed together
+        /// here for that reason. The selection holds indices too, so entries past the gap come
+        /// down one.
+        ///
+        /// Whatever it was carrying goes with it. A unit is not a container the site can get its
+        /// spoil back out of, and dismissing a full dumper to avoid a trip to the tip should cost
+        /// what it was holding.
+        /// </summary>
+        public bool Dismiss(int index)
+        {
+            if (index < 0 || index >= _units.Count)
+                return false;
+
+            _units[index].Dispose();
+            if (_bodies[index] != null)
+                Destroy(_bodies[index].gameObject);
+            if (_rings[index] != null)
+                Destroy(_rings[index]);
+            if (_lines[index] != null)
+                Destroy(_lines[index].gameObject);
+
+            _units.RemoveAt(index);
+            _bodies.RemoveAt(index);
+            _renderers.RemoveAt(index);
+            _robotRenderers.RemoveAt(index);
+            _animators.RemoveAt(index);
+            _clips.RemoveAt(index);
+            _tinted.RemoveAt(index);
+            _rings.RemoveAt(index);
+            _lines.RemoveAt(index);
+
+            for (var i = _selection.Count - 1; i >= 0; i--)
+            {
+                if (_selection[i] == index)
+                    _selection.RemoveAt(i);
+                else if (_selection[i] > index)
+                    _selection[i]--;
+            }
+
+            return true;
+        }
+
         void AddBox(UnitRole role, int i, float cellSize)
         {
             var body = GameObject.CreatePrimitive(PrimitiveType.Cube);

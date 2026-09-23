@@ -4859,3 +4859,36 @@ Verified in play: 6 units to 9 and 9 to 12, each with the right capacity (0.375 
 scoop, 2.25 bed), each on its own cell, each with a body and an animator, and the spare dumper
 pairing itself off — it says "no digger to serve", which is the right thing for a third dumper on
 a two-digger site to say. Suite 543 passed, 2 skipped.
+
+---
+
+## 2026-09-23 — Letting a unit go, and the stale icon it uncovered
+
+The hire row only went one way, so `CrewView.Dismiss(int)` is the other half: the unit leaves the
+dispatcher (which releases its job, unpairs whatever it was working with and frees its cell), its
+body, ring and path line are destroyed, and the ten lists the view keeps per unit drop the same
+slot together. The selection holds indices too, so entries past the gap come down one and the
+dismissed one goes.
+
+**Those ten parallel lists are the whole risk.** One list missed and a unit is quietly wearing
+another's body, with nothing to say so. They are removed in one block for that reason, and the
+check in play mode was not "does it look right" but *which unit is each body actually standing
+on*: after dismissing from the middle of the list, every body was still on its own unit, and the
+selection `1, 4, 5` came back as `1, 3, 4` — the shift, exactly.
+
+**Whatever it was carrying goes with it.** A unit is not a container the site can get its spoil
+back out of, and dismissing a full dumper to save it a trip to the tip should cost what it was
+holding.
+
+**The row icon was set once and never again.** It never mattered while roles could not change at a
+given row, but after a dismissal everything below the gap moves up, and a row read "Dumper mech 1"
+beside a robot's icon. It is now set every frame beside the name. A real bug, found by looking at
+the picture rather than the numbers — the numbers were all correct.
+
+**Where the button is.** A × on the row of the unit going, not a Dismiss button elsewhere acting
+on "the selected unit", which is a button that can be pressed by accident with the wrong thing
+selected.
+
+Checked in play: dismissing a digger that a dumper was parked by leaves the dumper saying "Idle:
+no digger to serve" on the next tick — the status read in the same frame is one tick stale, which
+is the readout catching up, not the pairing failing. Suite 543 passed, 2 skipped.

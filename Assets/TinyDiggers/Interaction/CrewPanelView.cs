@@ -23,6 +23,7 @@ namespace TinyDiggers.Interaction
         {
             public RectTransform Rect;
             public Image Background;
+            public Image Icon;
             public Text Name;
             public Text State;
             public RectTransform Load;
@@ -85,13 +86,26 @@ namespace TinyDiggers.Interaction
             UiKit.AddTooltip(button, () => captured < _crew.Units.Count ? _crew.Units[captured].Status + "   (double-click to go to it)" : "");
 
             var icon = UiKit.Place(UiKit.NewRect(row.Rect, "Role"), 6f, 4f, 32f, 32f).gameObject.AddComponent<Image>();
-            icon.sprite = ToolIcons.Get(RoleIcon(_crew.Units[index].Role));
             icon.raycastTarget = false;
+            row.Icon = icon;
             row.Name = UiKit.NewLabel(row.Rect, "", 44f, 2f, 110f, 18f, 14);
             row.State = UiKit.NewLabel(row.Rect, "", 44f, 20f, Width - 150f, 18f, 12);
             row.State.color = new Color(0.8f, 0.82f, 0.85f);
 
-            var loadBack = UiKit.Place(UiKit.NewRect(row.Rect, "Load"), Width - 100f, 8f, 88f, 10f);
+            // Letting one go, on the row of the one going: the alternative is a button somewhere
+            // else that acts on "the selected unit", which is a button you can press by accident
+            // with the wrong thing selected (2026-09-23).
+            var dismiss = UiKit.NewButton(row.Rect, "×", () =>
+            {
+                if (captured < _crew.Units.Count)
+                    _crew.Dismiss(captured);
+            });
+            UiKit.Place((RectTransform)dismiss.transform, Width - 40f, 8f, 24f, 22f);
+            UiKit.AddTooltip(dismiss, () => captured < _crew.Units.Count
+                ? $"Let {UnitNames.Of(_crew.Units[captured].Role).ToLowerInvariant()} go — anything it is carrying goes with it"
+                : "");
+
+            var loadBack = UiKit.Place(UiKit.NewRect(row.Rect, "Load"), Width - 136f, 8f, 88f, 10f);
             loadBack.gameObject.AddComponent<Image>().color = UiKit.FieldColor;
             row.Load = UiKit.NewRect(loadBack, "Fill");
             row.Load.anchorMin = Vector2.zero;
@@ -150,6 +164,11 @@ namespace TinyDiggers.Interaction
                 row.Rect.gameObject.SetActive(true);
                 UiKit.Place(row.Rect, 4f, y, Width - 8f, RowHeight - 2f);
                 y += RowHeight;
+
+                // The role at a given row changes when a unit is let go, so the icon is set every
+                // frame rather than once when the row is built: a row read "Dumper mech 1" beside
+                // a robot's icon after a dismissal (2026-09-23).
+                row.Icon.sprite = ToolIcons.Get(RoleIcon(unit.Role));
 
                 counts.TryGetValue(unit.Role, out var n);
                 counts[unit.Role] = ++n;
