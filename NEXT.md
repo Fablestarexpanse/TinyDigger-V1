@@ -10,24 +10,25 @@ is done, what is running, what comes next.
 
 ## NEXT
 
-**The keep-apart radius wedges a cluster, and it cannot be simply relaxed.**
+**The pit's last cells: a tip nobody can reach.** The two-step pit now cuts itself an auto ramp —
+the whole chain works — and still stops at about half, with a robot saying *"no room it can reach in
+any Dump Zone"* while the zone is only a third of a metre deep on average. So it is reachability
+into the heap, not a full heap: the crew can see room it cannot drive to. Trace the zone the way the
+pair was traced (six ticks, positions and statuses) before changing anything — three of the four
+guesses at the congestion family were wrong, and the one that worked came from a trace.
 
-Four robots end a pit trial packed into a two-by-two, each saying it waits for a unit on a cell that
-is **empty**. What stops them is `JobDispatcher.CanMoveTo`: a crew radius is 0.35 and a cell is half
-a metre, so two robots on neighbouring cells are 0.5 apart and want 0.7. They are in breach wherever
-they stand, every move that does not strictly open the gap is refused, and the square never unwinds.
+Worth checking at the same time: whether the zone-floor cap's fallback pass is handing the unit a
+cell it has no stand for, which would produce exactly this message.
 
-Letting cell-sized units off the radius test entirely **does** free them — the same trial goes from
-6.88 to 8.5 m³ and the waiting disappears — but it breaks
-`FootprintTests.TwoRobotsKeepTheGapTheyAlwaysDid`, which says that gap is deliberate. So it was
-taken back out, and the answer has to keep both: the gap in ordinary running, and a way out of a
-wedge. Likeliest shape — once a unit's traffic wait has run out, let it take one step that closes
-the gap, so a cluster can unwind a unit at a time. Two smaller things worth doing alongside:
-a unit blocked by a radius should not name an empty cell in its status, and `TryYield` is no use
-here because it is refused by the same test.
+### Done since the last note
 
-Then: the last twelve to twenty-three cells of the two-step pit should go, and
-`DeepPitTests.AShallowPitIsDug` can come off its `[Ignore]`.
+- The wedge is fixed. "Moved" now means a quarter of a cell rather than any twitch, so the escape
+  hatch (stand still long enough and the keep-apart radius stops applying for one step) actually
+  fires. The pair at a 3 m haul went from 0.775 m³/min and never finishing to **7.998 and done in
+  118 s**, with the mech digging 58% of its life instead of 6%.
+- `LoadSizingTests` is the bench for unit sizes: m³ a game minute at a given haul, printed every
+  run. Ladder as it stands — robot 0.80 / 0.45, mech alone 1.48 / 0.91, **pair 8.00 / 5.79** at
+  3 m / 10 m.
 
 ## Plan
 
