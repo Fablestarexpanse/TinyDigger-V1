@@ -16,6 +16,7 @@ namespace TinyDiggers.Interaction
         const float Width = 330f;
         const float RowHeight = 40f;
         const float BannerHeight = 30f;
+        const float HireHeight = 30f;
         const float DoubleClickSeconds = 0.35f;
 
         sealed class Row
@@ -53,7 +54,26 @@ namespace TinyDiggers.Interaction
             _bannerText = UiKit.NewLabel(_banner, "", 36f, 0f, Width - 40f, BannerHeight, 14);
             _bannerText.color = Color.black;
             _banner.gameObject.SetActive(false);
+
+            // Taking someone on. The counts in the inspector only ever applied at load, so trying
+            // a second dumper meant stopping the game, editing and starting over (Ronan,
+            // 2026-09-23). The row sits under the crew, where the crew it adds to is.
+            _hireRow = UiKit.Place(UiKit.NewRect(_panel, "Hire"), 4f, 0f, Width - 8f, HireHeight);
+            UiKit.NewLabel(_hireRow, "Take on", 6f, 0f, 56f, HireHeight, 14);
+            // One word a button, not the full name: three full names side by side ran into each
+            // other at this width (2026-09-23). The full name is in the tooltip.
+            var x = 60f;
+            foreach (var role in new[] { UnitRole.Worker, UnitRole.Digger, UnitRole.Hauler })
+            {
+                var captured = role;
+                var button = UiKit.NewButton(_hireRow, UnitNames.Short(role), () => _crew.Hire(captured));
+                UiKit.Place((RectTransform)button.transform, x, 2f, 82f, HireHeight - 4f);
+                UiKit.AddTooltip(button, () => $"Take on one more {UnitNames.Of(captured).ToLowerInvariant()}; it turns up in the yard with the rest");
+                x += 86f;
+            }
         }
+
+        RectTransform _hireRow;
 
         Row AddRow(int index)
         {
@@ -142,7 +162,8 @@ namespace TinyDiggers.Interaction
                 row.Background.color = _crew.IsSelected(i) ? new Color(0.3f, 0.27f, 0.12f, 0.95f) : UiKit.ButtonColor;
             }
 
-            _panel.sizeDelta = new Vector2(Width, y + 6f);
+            UiKit.Place(_hireRow, 4f, y + 2f, Width - 8f, HireHeight);
+            _panel.sizeDelta = new Vector2(Width, y + HireHeight + 8f);
         }
 
         /// <summary>The unit's state in a few words, without the detail its full status carries.</summary>

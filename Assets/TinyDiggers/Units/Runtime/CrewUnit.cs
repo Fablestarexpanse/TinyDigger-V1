@@ -17,6 +17,20 @@ namespace TinyDiggers.Units
         public const string Digger = "Digger mech";
         public const string Hauler = "Dumper mech";
 
+        /// <summary>
+        /// The one word that tells the three apart, for somewhere too narrow for the full name —
+        /// a button, a column heading. "Robot", "Digger", "Dumper".
+        /// </summary>
+        public static string Short(UnitRole role)
+        {
+            switch (role)
+            {
+                case UnitRole.Digger: return "Digger";
+                case UnitRole.Hauler: return "Dumper";
+                default: return "Robot";
+            }
+        }
+
         /// <summary>What to call a unit of this role.</summary>
         public static string Of(UnitRole role)
         {

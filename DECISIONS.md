@@ -4825,3 +4825,37 @@ Ronan, not a patch, so it is written down here and the reproduction is `[Ignore]
 **Worth keeping as a rule:** the status line is not the diagnosis, and this is the third time on
 this one bug. Counting the thing being blamed took one test and one run; the two sessions before
 it were spent reading status text.
+
+---
+
+## 2026-09-23 — Taking on more units while the game is running
+
+Ronan: *"Add a way for me to add more of any of the three units I want."* The counts were three
+serialized fields read once in `CrewView.Start`, so trying a second dumper meant stopping the
+game, editing the inspector and starting over — no way to find out how many of a thing a site
+wants, which is the whole question the throughput ladder is for.
+
+`CrewView.Hire(UnitRole)` is the per-unit half of that start-up loop lifted out whole: the unit,
+its capacity, `AsMachine()` for the two machines, the body from its prefab, the animator, the work
+times taken from the clips, and its path line. Nothing was rewritten for it, so a unit taken on
+mid-game is the same unit the crew starts with, by construction rather than by inspection. Start
+now just calls it in a loop.
+
+Two things it does that the loop did not have to:
+
+- **It looks for clear ground.** The yard fills up as the crew grows, and the old loop's
+  side-by-side arithmetic would drop the ninth unit on top of the third. `CrewSpawn.TryFind` from
+  the spot the arithmetic picks takes the nearest clear cell instead.
+- **It sets the speed.** `Update` assigns speeds every frame anyway, but a unit that spends its
+  first frame at the class default is a unit that behaves differently from its neighbours for a
+  frame, and there is no reason to allow it.
+
+The panel row is under the crew list, where the crew it adds to is: `Take on  [Robot] [Digger]
+[Dumper]`. The buttons carry `UnitNames.Short` — one word each — because the full names ("Starter
+robot", "Digger mech", "Dumper mech") ran into one another at 330 px and read as a single word.
+The full name is in the tooltip.
+
+Verified in play: 6 units to 9 and 9 to 12, each with the right capacity (0.375 barrow, 0.75
+scoop, 2.25 bed), each on its own cell, each with a body and an animator, and the spare dumper
+pairing itself off — it says "no digger to serve", which is the right thing for a third dumper on
+a two-digger site to say. Suite 543 passed, 2 skipped.

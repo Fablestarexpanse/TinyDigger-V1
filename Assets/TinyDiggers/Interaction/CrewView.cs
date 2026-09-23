@@ -170,47 +170,79 @@ namespace TinyDiggers.Interaction
                 spawn = new Vector2Int(wishX, wishZ);
             }
 
-            var spawnX = spawn.x;
-            var spawnZ = spawn.y;
+            _yard = spawn;
             var total = _workerCount + _diggerCount + _haulerCount;
             for (var i = 0; i < total; i++)
+                Hire(i < _workerCount ? UnitRole.Worker
+                    : i < _workerCount + _diggerCount ? UnitRole.Digger : UnitRole.Hauler);
+        }
+
+        /// <summary>
+        /// Where the crew starts, and where anyone taken on later turns up. Set once the ground
+        /// under the yard is known, which is why hiring before <see cref="Start"/> does nothing.
+        /// </summary>
+        Vector2Int _yard;
+
+        /// <summary>
+        /// Takes on one more unit of <paramref name="role"/> and puts it in the yard with the
+        /// rest: the same unit, body, animator and path line the crew starts with, because this is
+        /// the code the crew starts with. Returns it, or null before the scene is running.
+        ///
+        /// Ronan, 2026-09-23: "add a way for me to add more of any of the three units I want" —
+        /// the counts in the inspector only ever applied at load, so trying a second dumper meant
+        /// stopping, editing and starting over, which is no way to find out how many of a thing a
+        /// site wants.
+        /// </summary>
+        public CrewUnit Hire(UnitRole role)
+        {
+            if (Dispatcher == null || _terrain == null || _terrain.Grid == null)
+                return null;
+
+            var grid = _terrain.Grid;
+            var i = _units.Count;
+            // Side by side, so no two start on the same cell — and the machines further out than
+            // that, because a machine is over a metre long and two of them a metre apart stand
+            // inside each other.
+            var apart = role == UnitRole.Worker ? 2 : MachineSpacing;
+            var x = Mathf.Clamp(_yard.x + i % 2 * apart - apart / 2, 0, grid.Width - 1);
+            var z = Mathf.Clamp(_yard.y + i / 2 * apart - apart / 2, 0, grid.Height - 1);
+            // The yard fills up as the crew grows, and a unit dropped on top of another has to
+            // shove its way out; take the nearest clear ground instead when there is any.
+            if (CrewSpawn.TryFind(grid, x, z, MachineSpacing * 3, out var clear))
             {
-                var role = i < _workerCount ? UnitRole.Worker
-                    : i < _workerCount + _diggerCount ? UnitRole.Digger : UnitRole.Hauler;
-                // Side by side, so no two start on the same cell — and the machines further out
-                // than that, because a machine is over a metre long and two of them a metre apart
-                // stand inside each other.
-                var apart = role == UnitRole.Worker ? 2 : MachineSpacing;
-                var x = Mathf.Clamp(spawnX + i % 2 * apart - apart / 2, 0, grid.Width - 1);
-                var z = Mathf.Clamp(spawnZ + i / 2 * apart - apart / 2, 0, grid.Height - 1);
-                var capacity = role == UnitRole.Worker ? _workerCapacity : role == UnitRole.Digger ? _capacity : _haulerCapacity;
-                var unit = new CrewUnit(Dispatcher, x, z, role, capacity);
-                // In the game a digger or a hauler is a machine, with a machine's room and, for
-                // the digger, a rock cutter. The crew logic itself makes no such assumption.
-                if (role != UnitRole.Worker)
-                    unit.AsMachine();
-                _units.Add(unit);
-
-                var prefab = BodyFor(role);
-                if (prefab != null)
-                    AddRobot(prefab, role, i);
-                else
-                    AddBox(role, i, grid.CellSize);
-
-                // A machine takes as long over a cut as the scoop takes to swing: the clip it
-                // plays is what says how long the work looks, so the clip sets the time.
-                TimeWorkToTheClips(unit, _animators[_animators.Count - 1]);
-
-                var line = new GameObject($"{role} {i} Path") { hideFlags = HideFlags.DontSave };
-                line.transform.SetParent(transform, false);
-                var pathLine = line.AddComponent<LineRenderer>();
-                pathLine.sharedMaterial = _pathMaterial;
-                pathLine.widthMultiplier = 0.06f;
-                pathLine.startColor = pathLine.endColor = new Color(1f, 1f, 1f, 0.85f);
-                pathLine.useWorldSpace = true;
-                pathLine.positionCount = 0;
-                _lines.Add(pathLine);
+                x = clear.x;
+                z = clear.y;
             }
+
+            var capacity = role == UnitRole.Worker ? _workerCapacity : role == UnitRole.Digger ? _capacity : _haulerCapacity;
+            var unit = new CrewUnit(Dispatcher, x, z, role, capacity);
+            // In the game a digger or a hauler is a machine, with a machine's room and, for the
+            // digger, a rock cutter. The crew logic itself makes no such assumption.
+            if (role != UnitRole.Worker)
+                unit.AsMachine();
+            unit.Speed = role == UnitRole.Worker ? _workerSpeed : _speed;
+            _units.Add(unit);
+
+            var prefab = BodyFor(role);
+            if (prefab != null)
+                AddRobot(prefab, role, i);
+            else
+                AddBox(role, i, grid.CellSize);
+
+            // A machine takes as long over a cut as the scoop takes to swing: the clip it plays is
+            // what says how long the work looks, so the clip sets the time.
+            TimeWorkToTheClips(unit, _animators[_animators.Count - 1]);
+
+            var line = new GameObject($"{role} {i} Path") { hideFlags = HideFlags.DontSave };
+            line.transform.SetParent(transform, false);
+            var pathLine = line.AddComponent<LineRenderer>();
+            pathLine.sharedMaterial = _pathMaterial;
+            pathLine.widthMultiplier = 0.06f;
+            pathLine.startColor = pathLine.endColor = new Color(1f, 1f, 1f, 0.85f);
+            pathLine.useWorldSpace = true;
+            pathLine.positionCount = 0;
+            _lines.Add(pathLine);
+            return unit;
         }
 
         void AddBox(UnitRole role, int i, float cellSize)
