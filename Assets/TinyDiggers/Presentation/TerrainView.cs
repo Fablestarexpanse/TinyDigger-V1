@@ -101,10 +101,20 @@ namespace TinyDiggers.Presentation
         /// </summary>
         [Min(0f)] public float SlumpTilesPerSecond = 90f;
 
+        /// <summary>
+        /// Seconds a cell takes to be drawn at its new height after a cut or a tip, or 0 to draw
+        /// it there at once. What makes material look like it was moved rather than swapped: the
+        /// simulation has almost nothing to pace (one scoop tipped on the flat moves two cells and
+        /// settles in a frame), so the run-down has to be in the drawing.
+        /// </summary>
+        [Min(0f)] public float HeightLagSeconds = 0.25f;
+
         /// <summary>Carried-over fraction of a cell, so the rate does not depend on the frame rate.</summary>
         float _slumpBudget;
 
         ChunkedTerrainRenderer _terrainRenderer;
+        TerrainHeightLag _heightLag;
+        readonly System.Collections.Generic.List<int> _lagging = new System.Collections.Generic.List<int>();
         AngleOfReposeSimulator _slump;
         TerrainDetail _detail;
 
@@ -206,6 +216,15 @@ namespace TinyDiggers.Presentation
                 : new SmoothedTerrainRenderer(Grid, transform, material, _chunkSize, LevelsOfDetail());
             var built = stopwatch.Elapsed.TotalMilliseconds;
 
+            // Ground that has just been cut or tipped on is drawn easing into place rather than
+            // jumping. Only the smoothed renderer reads it; the walled one draws steps and has
+            // nothing to ease.
+            if (HeightLagSeconds > 0f && _terrainRenderer is SmoothedTerrainRenderer smoothed)
+            {
+                _heightLag = new TerrainHeightLag(Grid) { Seconds = HeightLagSeconds };
+                smoothed.Lag = _heightLag;
+            }
+
             Debug.Log(
                 $"TerrainView: {_width}x{_height} cells, {_renderer} renderer, " +
                 $"{_terrainRenderer.ChunkCountX * _terrainRenderer.ChunkCountZ} chunks, " +
@@ -287,6 +306,17 @@ namespace TinyDiggers.Presentation
 
         void LateUpdate()
         {
+            // Ease the cells that moved recently, and rebuild exactly those. Unscaled, like the
+            // slump budget: what is being paced is the eye, not the work.
+            if (_heightLag != null && _heightLag.Any)
+            {
+                _lagging.Clear();
+                _heightLag.Tick(Time.unscaledDeltaTime, _lagging);
+                var width = Grid.Width;
+                foreach (var cell in _lagging)
+                    _terrainRenderer.MarkDirty(cell % width, cell / width);
+            }
+
             if (_levelsOfDetail && TryViewer(out var viewer))
                 _terrainRenderer.UpdateLod(viewer);
             using (RebuildMarker.Auto())
@@ -304,6 +334,7 @@ namespace TinyDiggers.Presentation
         void OnDestroy()
         {
             _slump?.Dispose();
+            _heightLag?.Dispose();
             _terrainRenderer?.Dispose();
             _detail?.Dispose();
         }

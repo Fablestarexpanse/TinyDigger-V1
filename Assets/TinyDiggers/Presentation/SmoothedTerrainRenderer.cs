@@ -37,6 +37,13 @@ namespace TinyDiggers.Presentation
 
         readonly List<Workspace> _workspaces = new List<Workspace>();
 
+        /// <summary>
+        /// Where the ground is drawn while it is still catching up with where it is, or null to
+        /// draw it where it is. Set by whatever owns the renderer; read by every chunk build, so
+        /// it must not be changed while one is running.
+        /// </summary>
+        public TerrainHeightLag Lag { get; set; }
+
         public SmoothedTerrainRenderer(TerrainGrid grid, Transform parent, Material material, int chunkSize = DefaultChunkSize, TerrainLod lod = null)
             : base(grid, parent, material, chunkSize, lod)
         {
@@ -351,8 +358,15 @@ namespace TinyDiggers.Presentation
                         _cellInWorld[at] = inWorld;
                         if (inWorld)
                         {
-                            _cellHeights[at] = heights[z * gridWidth + x];
-                            _cellTops[at] = tops[z * gridWidth + x];
+                            // The height it is *drawn* at, which is the height it is except for the
+                            // handful of cells still easing after a cut or a tip. Taking it here
+                            // means corners, normals and edge lines all follow from one number and
+                            // stay consistent with each other.
+                            var cell = z * gridWidth + x;
+                            var height = heights[cell];
+                            var lag = _renderer.Lag;
+                            _cellHeights[at] = lag == null ? height : lag.Drawn(cell, height);
+                            _cellTops[at] = tops[cell];
                         }
                     }
                 }

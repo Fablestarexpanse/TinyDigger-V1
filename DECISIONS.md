@@ -5119,3 +5119,41 @@ with the cycle still one interval long.
 Tests: `TheGroundDoesNotMoveUntilTheBucketReachesIt` holds that nothing comes off before the bite,
 and `ABiteLateInTheSwingMovesTheGroundLaterThanAnEarlyOne` holds that moving the event moves the
 moment. Suite 549 passed, 2 skipped.
+
+---
+
+## 2026-09-23 — Dig and tip feel, steps 2 and 3: the run-down is in the drawing, not the slump
+
+**Step 3 was already built, and measuring it showed it cannot do what the brief wanted.**
+`TerrainView.SlumpTilesPerSecond` (90, public, budgeted in unscaled seconds, with
+`SlumpTilesPerTick` = 1000 as the landslide ceiling) has been there since 2026-09-22. But a tipped
+load has almost nothing to pace: **a 0.75 m³ scoop tipped on flat ground moves two cells**, and
+settles in one tick at any budget worth having — 3 cells a tick still finishes it in 0.1 s. Capping
+the simulator harder cannot make a load run down a heap, because the load never spread far enough
+to need capping. The number stays as it is, for landslides, which is what it was for.
+
+**So the feel has to come from the drawing, which is step 2.** `TerrainHeightLag` keeps a drawn
+height per recently-moved cell and `SmoothDamp`s it toward the real one over `HeightLagSeconds`
+(0.25 by default). Measured on the live island: a scoop tipped on a cell takes its ground from
+6.5 m to 7.5 m, and the drawn height goes **6.5 → 6.69 → 6.98 → 7.19 → 7.33 → 7.43** over half a
+second. Dropped cells sink, raised cells swell.
+
+**Where it hooks in, and why there.** `SmoothedTerrainRenderer`'s chunk builder caches cell heights
+in one line before it builds anything, and every corner, normal and edge line follows from that
+cache. Putting the drawn height in there means the whole mesh stays consistent with itself for
+free. The renderer's existing dirty-cell pipeline does the rebuilding: `TerrainView` ticks the lag
+each frame and marks exactly the cells still easing, so the cost is the chunks that were being
+rebuilt anyway.
+
+**The grid gained one event.** `CellChanged` fires after the write, so the old height is gone by
+then and there is nothing to ease *from*. `CellHeightChanged(x, z, oldHeight)` is raised from
+`OnCellMutated`, the single funnel every write already passes through, just before `CellChanged`
+and only when the height actually moved. Three lines, no behaviour change, and a null check when
+nothing is listening.
+
+**Two traps, both hit rather than foreseen:**
+
+- **Writing a dictionary value back while enumerating it** is allowed on modern .NET and throws on
+  the runtime Unity ships. The tick now walks a copy of the keys.
+- **Reimporting while play mode is running** left every view holding a null grid — the trap
+  already written down after the last time. Exit play, refresh in edit mode, start a fresh play.
