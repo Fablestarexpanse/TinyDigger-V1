@@ -1,0 +1,56 @@
+# The house style, written down rather than left to whichever editor opens the file next.
+# It describes what the code already does — four spaces, braces on their own line, `var` almost
+# everywhere — so it should never reformat anything that is already here.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json}]
+indent_size = 2
+
+[*.md]
+# Two trailing spaces are a line break in Markdown, so leave them alone.
+trim_trailing_whitespace = false
+
+[*.{unity,prefab,asset,mat,meta,anim,controller,inputactions}]
+# Unity writes these. Nothing else should touch their formatting.
+trim_trailing_whitespace = false
+insert_final_newline = false
+
+[*.cs]
+# Braces on their own line, which is what all 3,519 of them do today.
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_between_query_expression_clauses = true
+
+# `var` unless the type is the point. The codebase uses it about 5,700 times.
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+
+# Expression bodies for one-liners, blocks for anything that thinks.
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_style_expression_bodied_accessors = true:suggestion
+
+# `_camelCase` for private fields, which is what every class here does.
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel
+dotnet_naming_rule.private_fields_underscore.severity = suggestion
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel.required_prefix = _
+dotnet_naming_style.underscore_camel.capitalization = camel_case
+
+# Unused usings and unreachable code are worth seeing, not hiding.
+dotnet_diagnostic.IDE0005.severity = suggestion
+dotnet_sort_system_directives_first = true

@@ -152,5 +152,8 @@ the console):
   small and part of an otherwise coherent set, so removing them is tidying rather than fixing.
   `GroundEffects.Collapse` is in that list too and should **stay**: it is part of the dig-and-tip
   brief and is waiting for something to detect a collapse.
+- **The game is still called `TinyDigger V1` by `DefaultCompany`.** Product and company name are
+  Ronan's to choose, so they are untouched; they show up in the window title, the player prefs path
+  and anything built.
 - **`CrewUnit.cs` is 2,308 lines**, more than twice anything else, and wants splitting along its job
   kinds. That is a real refactor with real risk, not a cleanup.
