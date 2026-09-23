@@ -116,3 +116,41 @@ island in play, not only in tests: four shapes over 2,803 cells planned in **1.1
 **Also noted while building:** `Landform.Spoil` is a `MaterialId`, which Unity's serialisation skips
 (warning UAC1001). It costs nothing today because nothing is serialised, and would need an int field
 the day a save file exists.
+
+## Cleanup pass, 2026-09-23 — what was done and what was left
+
+Done, all with 608 tests green and the game verified running (133 fps, six units working, nothing in
+the console):
+
+- **The build shipped the wrong scene.** `Assets/Scenes/SampleScene.unity` — Unity's URP template —
+  was the only scene in the build settings. It now ships `TerrainSandbox`.
+- **Twenty of twenty-seven Editor files were one-off screenshot scripts** for finished slices, 4,000
+  lines, referenced by nothing, and the source of every deprecation warning in the project. Removed;
+  git has them. `Feel Capture`, the test runner, the texture generators, the noise, the preview menu
+  and the site trials stay.
+- Removed `Assets/_Recovery/0.unity` (a crash-recovery snapshot of an older game scene, committed by
+  accident) and the sample scene. `Assets/Settings` was left alone — `SampleSceneProfile` is
+  referenced by both render pipeline assets and is live despite the name.
+- `Landform.Spoil` now says it is not serialised instead of being dropped silently.
+- The nearest-cell ground lookup was copied in `RoadsHost` and `TerraformHost`; it is
+  `TerrainSpace.GroundAt` now. `BrushCursorView`'s was *not* a third copy — it blends four cells so
+  the cursor ring does not stair-step — and is now called `SmoothGroundAt`.
+- `PlayerTools.UnlockHeight` removed: a second door to `HeightLocked` that nothing opened.
+- `TerrainPreviewMenu.cs` → `TerrainPreview.cs`; every file declares its namesake again.
+- Added `README.md`, with every claim checked against the code.
+
+**Left alone deliberately, for Ronan to call:**
+
+- **Two dead APIs that still have tests.** `Terrain/Runtime/TerrainBrush.cs` (superseded by
+  `Units/Runtime/Excavation.cs`) and `Blueprints.PlanRoad` / `SteepestGrade` / `LegGrade` / `RoadPoint`
+  (superseded by `RoadPlanner` + `RoadSpline`). Both are now documented as superseded so nobody
+  starts from them, but deleting them means deleting their tests, and that is not a call to make
+  while you are away. Say the word and both go.
+- **A handful of members nothing references at all** — `TerrainSpace.OnSurface`/`ToCells`,
+  `IslandMap.StageSummary`, `TerrainView.RiverWorldPoints`, `WaterSettle.Batches`,
+  `SmoothedTerrainRenderer.CornerNormal`, `RoadNetwork.MoveNode`, `RoadsHost.SelectNode`. Each is
+  small and part of an otherwise coherent set, so removing them is tidying rather than fixing.
+  `GroundEffects.Collapse` is in that list too and should **stay**: it is part of the dig-and-tip
+  brief and is waiting for something to detect a collapse.
+- **`CrewUnit.cs` is 2,308 lines**, more than twice anything else, and wants splitting along its job
+  kinds. That is a real refactor with real risk, not a cleanup.

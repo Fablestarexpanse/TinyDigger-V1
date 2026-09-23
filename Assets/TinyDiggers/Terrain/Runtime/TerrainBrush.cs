@@ -6,6 +6,12 @@ namespace TinyDiggers.Terrain
     /// Applies a dig or a fill to every cell in a disc. Radius 0 is the single centre cell;
     /// radius r covers the cells whose centres lie within r of the centre cell's.
     /// Cells off the edge of the grid are skipped, so a brush can overhang the border.
+    ///
+    /// **Nothing in the game calls this.** It moves ground on the spot, and in the game the crew
+    /// move the ground: what a machine actually takes out of a cell and carries away goes through
+    /// <c>TinyDiggers.Units.Excavation</c>, which does the same walk over the disc but also tracks
+    /// what came out, what it bulks to, and whose inventory it lands in. This is kept for the tests
+    /// that pin the digging arithmetic itself, free of a crew.
     /// </summary>
     public static class TerrainBrush
     {

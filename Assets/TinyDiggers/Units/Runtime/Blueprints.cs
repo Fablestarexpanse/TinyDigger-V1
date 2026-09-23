@@ -106,6 +106,13 @@ namespace TinyDiggers.Units
         /// A road of <paramref name="width"/> cells through the control points, its height
         /// interpolated along each leg between the heights of the points at either end, so the
         /// grade is even between them.
+        ///
+        /// **Superseded, and kept only for its tests.** Roads in the game are straight legs no
+        /// longer: they run on a Hermite spline through <see cref="RoadNode"/>s with draggable
+        /// handles, and are stamped by <see cref="RoadPlanner.Footprint"/> from
+        /// <see cref="RoadSpline.Sample"/>. Landform ribbons go the same way. Nothing outside this
+        /// class's own tests calls this, or <see cref="SteepestGrade"/>, <see cref="LegGrade"/> or
+        /// <see cref="RoadPoint"/> — start from <see cref="RoadPlanner"/> instead.
         /// </summary>
         public static void PlanRoad(TerrainGrid grid, IReadOnlyList<RoadPoint> points, int width, List<PlannedCell> into, bool includeSettled = false)
         {
