@@ -22,14 +22,21 @@ Nothing is blocking it. **This is very likely the whole of the "congestion" that
 traffic rule, the heap and the keep-apart radius in turn** — a unit whose job is re-chosen faster
 than it can walk looks exactly like one that is stuck.
 
-The fix is probably not to stop the churn but to stop it mattering: **a rethink should belong to a
-change that touches this unit's own target, stand or path**, not to anything moving anywhere.
-`OnDesignationChanged` is the suspect (the auto ramp step cleared by `UpdateRamp` and re-placed by
-`RequestRamp` in the same tick, now every digger asks on every rethink); `OnCellChanged` should be
-quiet on a site where nothing is being dug — check that first, it is one log line.
+Narrowed by reading the two handlers, which are already careful: unit 0 is **Moving**, so the only
+branch of `OnDesignationChanged` that can fire is `x == JobTarget.x && z == JobTarget.y` — and its
+JobTarget **is** the ramp step. So the thing changing every tick is the auto step itself.
 
-This is a core change to how the crew reacts to the world, so give it its own run and watch the
-whole suite, not just the pit.
+**Suspect, not yet confirmed:** `JobDispatcher.UpdateRamp` runs every tick and calls `EndRamp` as
+soon as any unit reports `CanWorkFromSomewhereReachable(target)`; `RequestRamp` re-plans it on the
+next rethink, and now that every digger asks on every rethink the two can trade the same
+designation back and forth for ever.
+
+**Confirm before fixing** — log `EndRamp` and `PlaceRampStep` for a few ticks. This is the fourth
+explanation for these cells and the first three were wrong.
+
+If it holds, the fix is narrow: **a ramp should not be ended while a unit is on its way to cut its
+step.** Hysteresis on one decision, rather than changing how every unit hears about the world.
+
 
 ### Done since the last note
 
