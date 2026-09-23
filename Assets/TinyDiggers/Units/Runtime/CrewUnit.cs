@@ -303,6 +303,16 @@ namespace TinyDiggers.Units
 
         /// <summary>How many waypoints the path it is walking has altogether.</summary>
         public int PathLength => _path.Count;
+
+        /// <summary>Whether it is about to throw its path away and plan another.</summary>
+        public bool Repathing => _repath;
+
+        /// <summary>
+        /// Whether it is about to choose its job afresh — which throws the path away too, and is
+        /// the difference between a unit that cannot walk and a unit that keeps being told to
+        /// start again.
+        /// </summary>
+        public bool Rethinking => _rethink;
         readonly bool[] _onPath;
         readonly List<int> _onPathCells = new List<int>();
         readonly List<int> _unreachableDigs = new List<int>();

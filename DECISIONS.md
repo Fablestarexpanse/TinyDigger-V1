@@ -4385,3 +4385,30 @@ being re-placed each rethink) and `OnCellChanged`, neither of which should be fi
 where nothing is being dug.
 
 Next session: log `_repath` and `_pathIndex` alongside the path length. One run should name it.
+
+### Confirmed: the unit is told to start again every tick
+
+```
+tick 5: [0 Moving at (15.50, 21.39) cell (15, 21) job (14, 13) from (15, 14)
+         waited 0.0 path 1/8 RETHINK :: Moving to ramp (14, 13) to 5.5 m]
+```
+
+Not `_repath` — **`_rethink`**, set on every single tick. So the unit re-chooses its job every
+tick, `TryPlan` builds the same eight-waypoint path to the ramp, `_pathIndex` goes back to nought,
+it walks one waypoint, and starts again. `path 1/8` for ever, at a hundredth of a cell a time, with
+nothing blocking it.
+
+That is the whole of the ramp fault, and it is very likely the whole of the "congestion" that was
+chased three times and blamed on the traffic rule, the heap and the keep-apart radius in turn: **a
+unit whose job is re-chosen faster than it can walk looks exactly like a unit that is stuck.**
+
+What sets `_rethink` that often is the last question. `OnCellChanged` should be quiet — nothing is
+being dug on that site — which leaves `OnDesignationChanged`, and the likeliest churn is the auto
+ramp step being cleared by `UpdateRamp` and re-placed by `RequestRamp` in the same tick, now that
+every digger asks for a ramp on every rethink.
+
+The fix is probably not to stop the churn but to stop it mattering: **a unit should not throw away
+a path it is walking because a designation changed somewhere else.** A rethink belongs when the
+change touches this unit's own target, its stand or its path — not when anything anywhere moves.
+That is a core change to how the crew reacts, so it wants its own run with the suite watched
+closely, not a tired half hour at the end of a long one.
