@@ -51,6 +51,27 @@ namespace TinyDiggers.Interaction
             }
         }
 
+        MeshRenderer _overlayRenderer;
+        bool _showOverlay = true;
+
+        /// <summary>
+        /// Whether the coloured sheet over designated and zoned ground is drawn.
+        ///
+        /// Turning the component off does not do it — the sheet is a child object with its own
+        /// renderer — and the sheet sits exactly where the spoil is, so any look at what a tip
+        /// actually built is a look at bright green instead (2026-09-22).
+        /// </summary>
+        public bool ShowOverlay
+        {
+            get => _showOverlay;
+            set
+            {
+                _showOverlay = value;
+                if (_overlayRenderer != null)
+                    _overlayRenderer.enabled = value;
+            }
+        }
+
         void Start()
         {
             _mesh = new Mesh { name = "Designation Overlay" };
@@ -58,9 +79,10 @@ namespace TinyDiggers.Interaction
             var overlay = new GameObject("Designation Overlay") { hideFlags = HideFlags.DontSave };
             overlay.transform.SetParent(_terrain.transform, false);
             overlay.AddComponent<MeshFilter>().sharedMesh = _mesh;
-            var meshRenderer = overlay.AddComponent<MeshRenderer>();
-            meshRenderer.sharedMaterial = _overlayMaterial;
-            meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            _overlayRenderer = overlay.AddComponent<MeshRenderer>();
+            _overlayRenderer.sharedMaterial = _overlayMaterial;
+            _overlayRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            _overlayRenderer.enabled = ShowOverlay;
             _ = Map;
         }
 

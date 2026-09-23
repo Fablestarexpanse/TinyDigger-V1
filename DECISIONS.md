@@ -4481,3 +4481,21 @@ climb, which builds a mound with a slumped apron and still stops well short of t
 The first attempt at the trial is worth keeping too: it took the biggest rise it could find, which
 was a **twenty-metre rock mountain**, and marked a road across the top of it. True to the letter and
 no use. The search is banded now — soil only, one and a half to six metres, aiming for three.
+
+### Two ways the trial was lying about the heap
+
+**The overlay was standing on the thing being looked at.** The coloured sheet over designated and
+zoned ground is a child object with its own renderer, so turning the `DesignationsView` component
+off does nothing — and it is drawn exactly where the spoil is. Every picture of a tip so far has
+been a picture of bright green. `DesignationsView.ShowOverlay` turns it off properly, and the two
+spoil shots take it down.
+
+**And the heap measurement was measuring the hillside.** "The heap stands 7 m at its highest" for a
+heap of about a metre: it took the highest and lowest ground in a seventeen-cell window, most of
+which was the natural slope the tip sits on. It now records what the ground was **before** anything
+was tipped and reports how deep the spoil lies and over how many cells — which is what a heap is.
+
+Worth noting what was already right and simply invisible: tipping converts material to its
+disturbed form (`Excavation` uses `GetDisturbed`), so tipped topsoil lands as bare dirt and a heap
+really is a different colour from the grass round it. That was working the whole time, under the
+overlay, on a pile too flat to catch the light.

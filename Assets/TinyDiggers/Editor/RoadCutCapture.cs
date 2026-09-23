@@ -133,6 +133,7 @@ namespace TinyDiggers.EditorTools
                           + $"{_roads.Fill:0.#} m³; {_map.Count} designations, {dump} tip cells, "
                           + $"{quarry} quarry cells down to {quarryFloor:0.##} m.");
 
+                RememberTheTip(tipAt);
                 LookAlong(hill.crest, along, 34f, 0.28f);
                 yield return Frames(6);
                 yield return Shoot("cut_marked");
@@ -141,8 +142,10 @@ namespace TinyDiggers.EditorTools
                 // the dirt looks like it is being dumped or like it is being teleported.
                 yield return Work(Cap * 0.35f, Patience);
                 Look(tipAt, 7f, 0.28f);
+                ShowOverlay(false);
                 yield return Frames(6);
                 yield return Shoot("cut_tipping");
+                ShowOverlay(true);
 
                 LookAlong(hill.crest, along, 14f, 0.22f);
                 yield return Frames(6);
@@ -153,11 +156,15 @@ namespace TinyDiggers.EditorTools
                 yield return Frames(6);
                 yield return Shoot("cut_done");
                 Look(tipAt, 12f, 0.35f);
+                ShowOverlay(false);
                 yield return Frames(6);
                 yield return Shoot("cut_heap");
+                ShowOverlay(true);
 
+                var heap = Heap(tipAt);
                 Debug.Log($"Road cut: {_map.Count} designations left ({_map.AutoCount} auto ramp); "
-                          + $"the heap stands {Heap(tipAt):0.##} m at its highest. " + Roll());
+                          + $"the spoil stands {heap.deep:0.##} m deep at its deepest over "
+                          + $"{heap.cells} cells. " + Roll());
 
                 if (_rts != null) _rts.enabled = true;
                 Debug.Log("Road cut capture: done.");
@@ -218,22 +225,54 @@ namespace TinyDiggers.EditorTools
                 return true;
             }
 
-            /// <summary>How high the spoil stands over the ground it was tipped onto.</summary>
-            float Heap(Vector2Int at)
+            /// <summary>The ground over the tip as it was before anything was tipped on it.</summary>
+            float[] _tipWas;
+
+            void RememberTheTip(Vector2Int at)
             {
-                var highest = float.MinValue;
-                var lowest = float.MaxValue;
+                _tipWas = new float[17 * 17];
+                for (var dz = -8; dz <= 8; dz++)
+                    for (var dx = -8; dx <= 8; dx++)
+                        _tipWas[(dz + 8) * 17 + dx + 8] = _grid.GetSurfaceHeight(at.x + dx, at.y + dz);
+            }
+
+            /// <summary>
+            /// How high the spoil stands over the ground it was tipped onto, and how far it has
+            /// spread. Measured against what was there before, because measuring the highest and
+            /// lowest ground in the window measures the hillside: it read "7 m" for a heap of
+            /// about a metre (2026-09-22).
+            /// </summary>
+            (float deep, int cells) Heap(Vector2Int at)
+            {
+                if (_tipWas == null)
+                    return (0f, 0);
+                var deepest = 0f;
+                var covered = 0;
                 for (var dz = -8; dz <= 8; dz++)
                     for (var dx = -8; dx <= 8; dx++)
                     {
                         if (!_grid.IsGround(at.x + dx, at.y + dz))
                             continue;
-                        var height = _grid.GetSurfaceHeight(at.x + dx, at.y + dz);
-                        highest = Mathf.Max(highest, height);
-                        lowest = Mathf.Min(lowest, height);
+                        var grew = _grid.GetSurfaceHeight(at.x + dx, at.y + dz) - _tipWas[(dz + 8) * 17 + dx + 8];
+                        if (grew <= 0.01f)
+                            continue;
+                        deepest = Mathf.Max(deepest, grew);
+                        covered++;
                     }
 
-                return highest - lowest;
+                return (deepest, covered);
+            }
+
+            /// <summary>
+            /// Hides the coloured sheet over designated ground for a shot. It is drawn exactly
+            /// where the spoil is, so a picture of a heap taken with it on is a picture of the
+            /// overlay.
+            /// </summary>
+            void ShowOverlay(bool show)
+            {
+                var designs = FindAnyObjectByType<DesignationsView>();
+                if (designs != null)
+                    designs.ShowOverlay = show;
             }
 
             string Roll()
