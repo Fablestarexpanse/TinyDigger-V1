@@ -4314,3 +4314,32 @@ the whole chain working for the first time — a bench deep enough to cut to, a 
 somewhere to stand, asked for while the crew was still busy, by units that can actually move. It
 still does not finish (6 m³ of 12.25, and one robot reports "no room it can reach in any Dump
 Zone", which is reachability rather than a full zone), but nothing is standing still any more.
+
+### The tip was never the problem
+
+Tracing the dump zone rather than guessing at it:
+
+> **Tip: 49 open cells of 49, 6–7 m, 0 of them more than a climb (0.5 m) above every neighbour.**
+
+Every cell of the zone is open, the heap terraces properly, and nothing on it is stranded. So
+"no room it can reach in any Dump Zone" is not about room at all — the unit saying it is **down in
+the cut**, under a face a metre high, and from where it stands there is genuinely nowhere it can
+get to. That is the state the ramp being cut in the same run exists to fix; the trial simply ends
+before the ramp is finished.
+
+Two things to do with that, neither urgent:
+
+- **The message is misleading.** A unit that cannot reach a tip because it cannot get out of the
+  hole should say so — "stranded: waiting for a way out" — not blame the dump zone. The same is
+  true of "waiting for a unit" naming an empty cell. Status lines that name the wrong cause have
+  cost this session more time than any of the actual faults.
+- **The trial stops too early.** It gives up 400 game seconds after the last cubic metre moves, and
+  cutting a ramp takes longer than that while nothing else can progress. Waiting on a ramp is not
+  the same as being stuck.
+
+### A trap worth remembering
+
+`TESTS PASS passed=518` was printed **three times** while the test assembly had not compiled —
+a name clash (`Tip` the field against `Tip()` the new method) meant Unity kept running the previous
+assembly, and the new trace simply never appeared in the log. A green line is not proof the code
+under it ran. After editing a test, check for `error CS` in the log before believing the result.

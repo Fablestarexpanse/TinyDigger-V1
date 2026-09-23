@@ -179,6 +179,49 @@ namespace TinyDiggers.Units.Tests
             }
         }
 
+        /// <summary>
+        /// What the dump zone looks like to something trying to drive onto it: how many of its
+        /// cells are open, how high they stand, and how many of them sit more than a climb above
+        /// every neighbour — which is room the crew can see and cannot get to. "No room it can
+        /// reach in any Dump Zone" with a heap a third of a metre deep is a reachability answer,
+        /// not a full one, and this is the difference written down.
+        /// </summary>
+        string TipState()
+        {
+            var climb = _dispatcher.Climb;
+            var cells = _map.DumpZoneCells;
+            var open = 0;
+            var stranded = 0;
+            var lowest = float.MaxValue;
+            var highest = float.MinValue;
+            foreach (var cell in cells)
+            {
+                var x = cell % _grid.Width;
+                var z = cell / _grid.Width;
+                if (_map.GetKind(x, z) != DesignationKind.None)
+                    continue;
+                open++;
+                var height = _grid.GetSurfaceHeight(x, z);
+                lowest = Mathf.Min(lowest, height);
+                highest = Mathf.Max(highest, height);
+
+                var stepUp = float.MaxValue;
+                for (var dz = -1; dz <= 1; dz++)
+                    for (var dx = -1; dx <= 1; dx++)
+                    {
+                        if ((dx == 0 && dz == 0) || !_grid.IsGround(x + dx, z + dz))
+                            continue;
+                        stepUp = Mathf.Min(stepUp, height - _grid.GetSurfaceHeight(x + dx, z + dz));
+                    }
+
+                if (stepUp > climb + 0.001f)
+                    stranded++;
+            }
+
+            return $"Tip: {open} open cells of {cells.Count}, {lowest:0.##}–{highest:0.##} m, "
+                   + $"{stranded} of them more than a climb ({climb:0.##} m) above every neighbour.";
+        }
+
         string Roll()
         {
             var said = "";
@@ -276,7 +319,7 @@ namespace TinyDiggers.Units.Tests
                 }
 
             Debug.Log($"the heap: {heap:0.##} m at its highest, {heapMean / heapCells:0.##} m mean "
-                      + $"over the tip and its edges, from {moved:0.##} m³ tipped.");
+                      + $"over the tip and its edges, from {moved:0.##} m³ tipped. " + TipState());
             Debug.Log($"two-step pit: done={done} after {seconds:0} s, {moved:0.##} m³ "
                                   + $"moved, {Outstanding():0.##} m³ left, {_map.Count} cells; rim "
                                   + $"at {rim:0.##} m, middle at {middle:0.##} m, both wanted "
