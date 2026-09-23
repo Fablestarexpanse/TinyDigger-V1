@@ -416,6 +416,30 @@ namespace TinyDiggers.Units
         /// <summary>Changes whenever state, job or status changes, so displays redraw only then.</summary>
         public int Version { get; private set; }
 
+        /// <summary>
+        /// How many times this unit has waited out a dig interval only to find it could not cut
+        /// the cell after all. A unit that plans a cut, walks to it and is refused thinks again
+        /// and comes straight back, so it sits in Digging looking busy while nothing moves; this
+        /// counter is the only way to tell that apart from work.
+        /// </summary>
+        public int RefusedCuts;
+
+        /// <summary>How many times it waited out an interval while standing off its own job stand.</summary>
+        public int OffStand;
+
+        /// <summary>How many cuts it has actually taken out of the ground.</summary>
+        public int LandedCuts;
+
+        /// <summary>
+        /// Loose m³ of room the last cut that would not fit needed, or nought when the last cut
+        /// landed. A unit is full for as long as it has less room than this, whatever a step
+        /// measures in place: see <see cref="DigStep"/>.
+        /// </summary>
+        public float NeedsRoom;
+
+        /// <summary>How many times <see cref="Work"/> has been called with the unit digging.</summary>
+        public int DigTicks;
+
         /// <summary>How many times the path was re-planned, because a cell on it changed or a unit was in the way.</summary>
         public int RepathCount { get; private set; }
 
@@ -804,9 +828,14 @@ namespace TinyDiggers.Units
             // stood in front of a job for ever. It tops up instead. The latch still holds for a
             // scoop that is full enough to tip, which is what stops a unit taking part cuts for
             // ever without emptying.
-            if (_loadFull && Inventory.Total + Epsilon < step)
+            // Room enough for a cut, measured the way the ground measures it. A step is an
+            // in-place volume; the load holds loose material, and ground that bulks needs more
+            // room than it stood in. Where the last cut was refused for want of room, the ground
+            // said exactly how much it wanted, and that is the figure to believe.
+            var room = Math.Max(step, NeedsRoom);
+            if (_loadFull && Inventory.Total + Epsilon < step && Inventory.Remaining + Epsilon >= room)
                 _loadFull = false;
-            var full = _loadFull || Inventory.Remaining + Epsilon < step;
+            var full = _loadFull || Inventory.Remaining + Epsilon < room;
             if (!full && TryPlan(CrewJobKind.Dig, start))
                 return;
 
@@ -1628,6 +1657,8 @@ namespace TinyDiggers.Units
 
         void Work(float deltaTime)
         {
+            if (State == CrewUnitState.Digging)
+                DigTicks++;
             _workTimer += deltaTime;
             // Rock is slower for anything without a cutter, so how long a step takes depends on
             // what is being cut, not only on the unit.
@@ -1640,6 +1671,7 @@ namespace TinyDiggers.Units
 
             if (Cell != JobStand)
             {
+                OffStand++;
                 _rethink = true;
                 return;
             }
@@ -1658,6 +1690,7 @@ namespace TinyDiggers.Units
             var canCut = quarrying ? CanQuarryStep(standHeight, target.x, target.y) : CanDigStep(standHeight, target.x, target.y);
             if (!WithinDigReach(standHeight, target.x, target.y) || !canCut)
             {
+                RefusedCuts++;
                 if (_designations.GetKind(target.x, target.y) == DesignationKind.Dig && !HasDiggableTop(target.x, target.y))
                 {
                     // Bedrock: the designation can never be met. Drop it rather than loop on it.
@@ -1673,10 +1706,19 @@ namespace TinyDiggers.Units
             _dispatcher.Ledger.Record(report.InPlaceBySource);
             if (report.WasFull)
             {
+                // The load has room, but not enough of it for one cell's worth. Room is measured
+                // loose and a cut is measured in place, so ground that bulks needs more room than
+                // its in-place volume: "is there a step of room?" is the wrong question and a unit
+                // that asks it plans a cut, walks to it, waits out its interval and digs nothing,
+                // over and over. Remember what the ground said the cut would have needed.
+                NeedsRoom = report.SmallestMisfit;
                 _loadFull = true;
                 _rethink = true;
                 return;
             }
+
+            LandedCuts++;
+            NeedsRoom = 0f;
 
             Version++;
             var done = quarrying

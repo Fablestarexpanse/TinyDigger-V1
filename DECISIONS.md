@@ -3861,3 +3861,142 @@ The first run was the more interesting one. With no quarry the crew stopped dead
 said "5 units have nothing to fill with: mark a Quarry" — a road across a dip is mostly *fill*,
 and fill has to come from somewhere. That is the Slice 17 loop doing exactly what it was built to
 do, and the capture marks a quarry now so the road actually goes in.
+
+## 2026-09-22 — Site trials: a harness that ends on progress, not on a stopwatch
+
+`TinyDiggers/Site Trials` (and one menu item per trial) runs the crew against the live island and
+reports numbers rather than impressions.
+
+The first trial A run looked like a failure: "36 designations left, 0 auto ramp". It was not. Every
+robot was still digging, a spoil heap had grown beside the cut, and the 120-second budget had
+simply run out. The harness now ends a trial on **progress**, not on a clock: `Work` measures the
+cubic metres outstanding across every live designation and stops on done, on stalled (25 real
+seconds with no measurable progress), or on a 300-second cap, and says in the log which it was.
+A count of cells is no use as a progress measure — a deep cell is worked step by step and the count
+does not move for minutes.
+
+### The real finding: excavation throughput is far too low
+
+Trial A, rerun with the honest harness: a 7x7 pit three metres deep, **36.75 m³**, six units, a
+dump zone five cells away.
+
+| real s at 20x | m³ outstanding |
+| --- | --- |
+| 31 | 34.38 |
+| 61 | 33.13 |
+| 91 | 32.13 |
+| 121 | 30.88 |
+| 152 | 29.38 |
+
+That is a flat **1.25 m³ per 30 real seconds — 600 game seconds — or about 0.002 m³ per game
+second for the whole crew.** It never stalls; it crawls. The pit would take some fifteen minutes of
+real time at twenty times speed, five game hours, for a hole three and a half metres square.
+
+Back of the envelope for what it should be: a worker moves at 1.5 m/s, its barrow holds 0.1875 m³
+(a step and a half), the haul is about five metres each way, and a step of digging costs the length
+of the dig clip. That is roughly twenty game seconds a barrow, so four robots should shift about
+0.03 m³/s — **fifteen to twenty times what is actually happening.** So the crew is working
+something like five per cent of the time, and the rest is going somewhere else: waiting on each
+other, unreachable, or re-planning.
+
+Next: instrument the harness with a per-unit state histogram in game seconds, so the lost time can
+be named instead of guessed at. Note also that 20x is the practical ceiling for these runs —
+`Time.maximumDeltaTime` is a third of a second, so at sixty frames a second the clock cannot go
+faster without breaking the movement stepping.
+
+### Correction: the crew was not slow, the clock was
+
+The "throughput is fifteen times too low" finding above is wrong, and the way it was wrong is
+worth keeping. The harness budgeted and measured in **real** seconds and assumed `timeScale = 20`
+meant twenty game seconds a second. It does not. An editor that has lost focus ticks at a few
+frames a second, and `timeScale` multiplies each *frame*, not each second — so the game clock was
+running at some small fraction of what the wall clock implied, and every rate computed from it was
+out by that factor.
+
+Two things came of it. The harness now budgets, stalls, traces and reports in `Time.time` — game
+seconds — and quotes real seconds only as an aside; and the runner sets
+`Application.runInBackground = true` so play mode keeps ticking while the editor is behind
+another window. The per-unit state histogram stays: knowing where the crew's time actually goes is
+worth having whatever the clock says.
+
+Numbers worth keeping from the run itself: the trial site is **Topsoil**, a starter robot pays
+**0.4 s a step** (its `WorkInterval` — it has no clip named `dig`, so nothing is timing it to an
+animation yet, which is still open against Ronan's "every dig needs a matching animation"), and
+the digger mech pays **2.97 s a step**, timed to its dig clip.
+
+## 2026-09-22 — The deep pit, and two faults it turned up
+
+Trial A in play mode said the same thing every run: a seven by seven pit three metres deep stalls
+with four fifths of it still standing, every unit reading *Digging*, and **not one auto ramp cut**.
+Instrumenting the crew (`CrewUnit.LandedCuts`, `RefusedCuts`, `OffStand`, `DigTicks`, reported by
+the trial harness) gave the shape of it: 70% of the crew's time in Digging, 6908 unit-seconds of
+it, **11,284 "cuts" against 7 m³ moved** — 57 real cuts' worth. Almost every cut was digging
+nothing at all.
+
+### Play mode is the wrong place for a behaviour trial
+
+Before any of that could be read, the runs had to be believable. An editor behind another window
+does not tick: `EditorApplication.timeSinceStartup` moved 33 seconds across 19 minutes of wall
+clock, and the game clock only advanced while the MCP bridge poked it. A twenty-minute run said
+less than a one-second test would.
+
+So the battery moves to EditMode tests (`Assets/TinyDiggers/Units/Tests/DeepPitTests.cs`): the same
+site built out of plain objects — grid, designations, dispatcher, units — and ticked as fast as the
+processor likes. It answers in a second, answers the same every time, and stays as a regression
+test. `TinyDiggers/Site Trials` keeps its place for pictures of the live island, and now budgets in
+game seconds with `Application.runInBackground` set, but it is no longer where a question gets
+answered.
+
+Two things the fixture taught, both of which had quietly made earlier runs meaningless: a
+`JobDispatcher` built by hand has **`Benching` and `AutoRamp` off**, which the scene turns on every
+frame, and a `CrewUnit` built by hand reaches **half as far** as one in the scene (class defaults
+`DigReachLevels = 2`, `CliffReachLevels = 6`; the scene sets 2 m and 6 m over a half-metre step, so
+4 and 12). A fixture that skips either is testing a different crew.
+
+### Fault one: the cut that does not fit, tried for ever
+
+A load's room is loose m³; a cut is measured in place and comes up bulked — 1.25 for dirt, 1.5 for
+rock. `ChooseDiggerJob` asked "is there a step of room?", which is the wrong question: a barrow can
+have room for a step and still not take one cell's worth. `Excavation.Dig` then skips the cell
+rather than part-digging it, the unit thinks again, plans the same cut, walks back, waits out its
+interval and digs nothing — for ever, looking busy the whole time.
+
+Fixed by believing the ground: when a cut is refused for want of room, `DigReport.SmallestMisfit`
+says exactly how much it wanted, and `CrewUnit.NeedsRoom` holds that figure until a cut lands. The
+fullness test asks for `max(step, NeedsRoom)`.
+
+### Fault two: the barrow was too small to be emptied
+
+With that fixed the crew got further and stopped again — eight cuts between four robots, two each.
+The arithmetic: a tip puts down one whole step of a cell, 0.125 m³ of the load; a cut of dirt is
+0.15625. Dig, tip a step, dig, tip a step, and the robot is left holding 0.0625 — too little to tip
+(nothing less than a step lands) and too little room left for another cut (0.125 of room against
+0.15625 needed). Too full to dig, too light to tip, standing in front of a job it could do.
+
+The old barrow was a step and a half. **A load has to hold at least one step plus one cut**: the
+remnant is under a step and the worst cut is one and a half, so two and a half steps is the floor
+and three is the round number above it. `UnitLoads` now reads Barrow = 3 steps, Scoop = 2 barrows,
+Bed = 6 barrows — Ronan's ratios exactly as before, twice the size. The reasoning is in the file so
+nobody shaves it back.
+
+That doubled the crew's reach into the block: eight cuts became twenty-four, the whole outer ring.
+
+### Still open: a pit is not a hill
+
+Where it stops now is a genuine design gap, and there is a failing test named after it
+(`DeepPitTests.AShallowPitIsDug`, ignored with the reason on it). The outer ring of a designated
+block gets cut; the inner twenty-five cells report **UNREACHABLE**, and the ramp planner answers
+**"nowhere to stand beside"**.
+
+The rule doing it is in `CrewUnit.CanStandHere`: with benching on, a unit may stand on a dig cell
+only if that cell is already at its floor, so that it cannot dig the ground out from under itself.
+Taking a hill down that is exactly right — the staircase stays drivable. In a pit it locks the
+door: to reach the middle of a block you have to stand on cells that are still to be dug, and they
+never qualify until something has already stood there.
+
+What a real crew does is work a face: it stands *in* the cut on the level it has finished and takes
+the next lift off in front of it, and the thing it must not do is dig a hole round itself. That is
+a rule about the cell it is standing on and its neighbours, not about whether the cell it is
+standing on is at its final floor. That is the next piece of work, and it is what the auto ramp has
+been waiting for: no ramp is ever cut because no unit is ever short of a *job*, only short of a way
+to the middle.

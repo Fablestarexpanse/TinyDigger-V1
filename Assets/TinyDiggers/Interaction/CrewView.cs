@@ -345,6 +345,12 @@ namespace TinyDiggers.Interaction
             return mesh;
         }
 
+        /// <summary>Longest slice of time the crew is stepped by at once, in seconds.</summary>
+        const float MaxTickSeconds = 0.1f;
+
+        /// <summary>Most slices one frame may be broken into: twenty seconds of crew work.</summary>
+        const int MaxTickSlices = 200;
+
         void Update()
         {
             Dispatcher.Benching = benching;
@@ -352,14 +358,29 @@ namespace TinyDiggers.Interaction
             _pathfinder.MaxStepHeight = maxStepHeight;
             if (maxSlopeDegrees > 0f)
                 _pathfinder.MaxSlopeDegrees = maxSlopeDegrees;
-            Dispatcher.Tick(Time.deltaTime);
             foreach (var unit in _units)
             {
                 unit.DigReachLevels = Levels(digReach);
                 unit.CliffReachLevels = Levels(cliffReach);
                 unit.Speed = unit.Role == UnitRole.Worker ? _workerSpeed : _speed;
                 unit.WorkInterval = _workInterval;
-                unit.Tick(Time.deltaTime);
+            }
+
+            // The crew is stepped in slices no longer than MaxTickSeconds, however long the frame
+            // was. A worker covers a metre and a half a second and a cell is half a metre, so a
+            // single step of a third of a second already moves it a whole cell, and at speed it
+            // steps clean over several: claims, reach checks and the cell it was meant to stop on
+            // all go past unseen. Slicing lets the clock run fast — a fast-forward, or a trial at
+            // twenty times — without the simulation going blind. The slice count is capped so a
+            // hitch or a long pause cannot turn one frame into minutes of work.
+            var left = Mathf.Min(Time.deltaTime, MaxTickSeconds * MaxTickSlices);
+            while (left > 0f)
+            {
+                var slice = Mathf.Min(left, MaxTickSeconds);
+                left -= slice;
+                Dispatcher.Tick(slice);
+                foreach (var unit in _units)
+                    unit.Tick(slice);
             }
 
             var keyboard = Keyboard.current;
