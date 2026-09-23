@@ -10,15 +10,14 @@ is done, what is running, what comes next.
 
 ## NEXT
 
-**The pit's last cells: a tip nobody can reach.** The two-step pit now cuts itself an auto ramp —
-the whole chain works — and still stops at about half, with a robot saying *"no room it can reach in
-any Dump Zone"* while the zone is only a third of a metre deep on average. So it is reachability
-into the heap, not a full heap: the crew can see room it cannot drive to. Trace the zone the way the
-pair was traced (six ticks, positions and statuses) before changing anything — three of the four
-guesses at the congestion family were wrong, and the one that worked came from a trace.
+**A unit sent to cut a ramp never arrives.**
 
-Worth checking at the same time: whether the zone-floor cap's fallback pass is handing the unit a
-cell it has no stand for, which would produce exactly this message.
+> `[0: Moving to ramp (14, 13) to 5.5 m, toward (11, 14)]` — for 1337 game seconds.
+
+The ramp is planned and its step is designated; the unit that should cut it spends the rest of the
+trial on its way there. One unit, one job, never finished — the cleanest fault left, and the last
+thing between the two-step pit and finishing. Read `CrewUnit.TryPlan`'s path to an Auto step and
+whether `Arrive` is ever reached; trace it before changing anything, as ever.
 
 ### Done since the last note
 
