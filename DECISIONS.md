@@ -4412,3 +4412,32 @@ a path it is walking because a designation changed somewhere else.** A rethink b
 change touches this unit's own target, its stand or its path — not when anything anywhere moves.
 That is a core change to how the crew reacts, so it wants its own run with the suite watched
 closely, not a tired half hour at the end of a long one.
+
+### Narrowing it: the ramp step is the unit's own target
+
+Both change handlers are already careful, which is what makes the answer clear:
+
+```csharp
+void OnDesignationChanged(int x, int z)
+{
+    if (State == Idle || State == Unreachable || State == NeedsSomewhereToTip)
+        _rethink = true;
+    else if (x == JobTarget.x && z == JobTarget.y && Job != CrewJobKind.Serve)
+        _rethink = true;
+}
+```
+
+Unit 0 is **Moving**, so only the second branch can fire — and its `JobTarget` **is** the ramp step
+at (14, 13). So the thing being changed every tick is the auto step itself, and the unit walking to
+cut it is told to start again each time.
+
+Which makes the suspect narrow and testable, though **not yet confirmed**: `JobDispatcher.
+UpdateRamp` runs every tick and calls `EndRamp` the moment any unit reports it
+`CanWorkFromSomewhereReachable(target)`; `RequestRamp` then re-plans the ramp on the next rethink,
+and now that every digger asks on every rethink (the change earlier today that let a busy crew ask
+for a ramp) the two can trade the same designation back and forth indefinitely.
+
+If that is it, the fix is narrower than "rework when a rethink happens": **a ramp should not be
+ended while a unit is on its way to cut its step.** Hysteresis on one decision rather than a change
+to how every unit hears about the world. Confirm first — log `EndRamp` and `PlaceRampStep` for a
+few ticks — because this is the fourth explanation for these cells and the first three were wrong.
