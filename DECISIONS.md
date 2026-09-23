@@ -4276,3 +4276,41 @@ than 0.4, and a clip named `dig` so something times it.
 mech alone* — because the two of them get in each other's way: "Full: waiting for a hauler" beside
 "Waiting for a unit". Same congestion family as the pit's last twelve cells. A short haul should be
 the easy case, and it is the worst one.
+
+## 2026-09-22 — "Moved" means got somewhere, not twitched
+
+The short-haul pair — the case that should be easiest and was worst — traced in four lines:
+
+```
+mech   WaitingForHauler load 0.688/0.75 :: Full: waiting for a hauler
+dumper Waiting          load 2.25/2.25  :: Waiting for a unit at (13, 36)   apart 0.87
+dumper Moving                                                               apart 0.87
+dumper Waiting          :: Waiting for a unit at (13, 36)                   apart 0.87
+```
+
+A **full** dumper, trying to leave for the tip, sat 0.87 cells from its mech while the mech waited
+for it to come and be loaded. Neither is wrong about what it wants; the dumper simply cannot get
+out. Going round a partner starts by closing the gap before it opens, and `CanMoveTo` only ever
+allows opening it. The pair is just outside the nesting gap (0.825), so the "already nested" case
+does not save them either.
+
+The escape hatch — a unit that has stood still long enough stops applying the radius for one step —
+was already in and did not fire, because the dumper was let forward **seven hundredths of a cell**
+and sent back, over and over, and any reset on bare movement handed it a fresh timer every time.
+So "moved" now means **a quarter of a cell**, not any change at all.
+
+| | before | after |
+| --- | --- | --- |
+| pair, 3 m haul | 0.775 m³/min, never finished | **7.998 m³/min, done in 118 s** |
+| the mech's share of time spent digging | 6% | **58%** |
+
+A short haul is now the best case rather than the worst, which is what it always should have been,
+and the mech digs for more than half its life.
+
+### And the pit cut its first ramp
+
+Same run, the two-step pit: **"1 auto ramp … cutting ramp at (14, 13) toward (12, 13)"**. That is
+the whole chain working for the first time — a bench deep enough to cut to, a ramp aimed at
+somewhere to stand, asked for while the crew was still busy, by units that can actually move. It
+still does not finish (6 m³ of 12.25, and one robot reports "no room it can reach in any Dump
+Zone", which is reachability rather than a full zone), but nothing is standing still any more.

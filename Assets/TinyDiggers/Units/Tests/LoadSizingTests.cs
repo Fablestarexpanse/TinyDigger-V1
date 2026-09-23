@@ -179,6 +179,27 @@ namespace TinyDiggers.Units.Tests
                       + $"{perMinute:0.###} m³ a game minute over {ran:0} s; the mech digs "
                       + $"{100f * digging / ran:0}% of the time, the dumper drives "
                       + $"{100f * hauling / ran:0}%. Mech: {_unit.Status}. Dumper: {_mate.Status}.");
+            // A pair that ran the clock out never got going, and two machines jammed is a far
+            // smaller case to read than four robots. Six ticks of both of them says whether they
+            // are waiting on each other, on the ground, or on nothing at all.
+            if (_map.Count > 0)
+                for (var t = 0; t < 6; t++)
+                {
+                    _dispatcher.Tick(TickSeconds);
+                    _unit.Tick(TickSeconds);
+                    _mate.Tick(TickSeconds);
+                    Debug.Log($"pair tick {t}: [mech {_unit.State} at ({_unit.Position.x:0.00}, "
+                              + $"{_unit.Position.y:0.00}) cell ({_unit.Cell.x}, {_unit.Cell.y}) "
+                              + $"load {_unit.Inventory.Total:0.###}/{UnitLoads.Scoop:0.###} "
+                              + $":: {_unit.Status}] [dumper {_mate.State} at "
+                              + $"({_mate.Position.x:0.00}, {_mate.Position.y:0.00}) cell "
+                              + $"({_mate.Cell.x}, {_mate.Cell.y}) load "
+                              + $"{_mate.Inventory.Total:0.###}/{UnitLoads.Bed:0.###} "
+                              + $":: {_mate.Status}] apart "
+                              + $"{(_unit.Position - _mate.Position).magnitude:0.00} cells, radii "
+                              + $"{_unit.Radius:0.##} and {_mate.Radius:0.##}");
+                }
+
             Assert.That(perMinute, Is.GreaterThan(0f),
                 $"the pair should have shifted something. Mech: {_unit.Status}. Dumper: {_mate.Status}.");
         }

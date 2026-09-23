@@ -402,7 +402,17 @@ namespace TinyDiggers.Units
                 var after = (to - other.Position).sqrMagnitude;
                 if (after >= apart * apart)
                     continue;
-                if (after < (from - other.Position).sqrMagnitude)
+                // Already inside the gap — a hauler nested at its digger — so holding it to "never
+                // any closer" is the one thing that cannot help: getting out past a partner means
+                // going round it, and going round it starts by closing the gap before it opens.
+                // A full dumper sat 0.87 cells from its mech for ten game minutes, creeping a
+                // hundredth of a cell and being sent back, while the mech waited for it to come
+                // and be loaded (2026-09-22). Once they are that close the cells are what keep
+                // them out of each other, and cells allow one unit each.
+                var before = (from - other.Position).sqrMagnitude;
+                if (before < apart * apart)
+                    continue;
+                if (after < before)
                     return false;
             }
 

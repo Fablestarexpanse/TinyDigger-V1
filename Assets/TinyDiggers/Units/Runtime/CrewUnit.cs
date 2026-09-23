@@ -1553,7 +1553,12 @@ namespace TinyDiggers.Units
             // waiting: the wait is reset by every re-plan, and on a busy site a unit re-plans
             // constantly, because every cut anyone takes changes the ground and sets it thinking
             // again. A wedged unit's wait never ran out at all.
-            if ((Position - _lastMoved).sqrMagnitude > 1e-6f)
+            // "Moved" means got somewhere, not twitched. A wedged unit is let a little way forward
+            // and sent back again, over and over: a full dumper covered seven hundredths of a
+            // cell and was refused, and any reset on bare movement handed it a fresh timer every
+            // time. A quarter of a cell is the smallest step worth calling progress.
+            var far = _grid.CellSize * 0.25f;
+            if ((Position - _lastMoved).sqrMagnitude > far * far)
             {
                 _lastMoved = Position;
                 _stuckTimer = 0f;
