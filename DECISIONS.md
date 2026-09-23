@@ -4930,3 +4930,42 @@ take down.
 Both are tests now, not notes. `ARoadRampIntoAPitNeedsMoreRunThanAPitHas` holds the geometry, and
 `ASteepRoadRampGetsTheCrewIntoThePit` is a characterization test that asserts the pit is *not*
 mostly dug — it fails, loudly and on purpose, the day the ramp fault is fixed.
+
+---
+
+## 2026-09-23 — Size fixes the geometry, not the crew
+
+Ronan, on the road-ramp finding: *"it would depend how big you make it, and if you selected a hill
+and below you can dig out the hill for fill — that's part of the game."* Quite right about the
+size: the pit in `DeepPitTests` is seven cells across, three and a half metres, and measuring a
+haul road against it was measuring the fixture. So the site got built at the size the game is
+played at — `BigSiteTests`, a hundred and twenty cells square, with a forty-metre cut in the
+middle of it.
+
+**At that size the road tool does fit, exactly as he said.** Three metres down at 12% wants
+twenty-five metres of run, and a forty-metre cut has that inside it. Drawn from fourteen cells
+outside the rim to the far side, the haul road comes out at **11.1%** and `RoadPlanner.Judge` calls
+it Fine. (The first attempt drew it six cells out, got 13% and was refused — which is the tool
+doing its job, and worth keeping as the reason the number in the test is what it is.)
+
+**And the crew still do not get down it.** Same site, haul road drawn at 11.1% and marked as dig
+work the way `RoadBuilder` marks it: **16.5 m³ of 1200 moved in 900 game seconds, the deepest any
+unit stood being 1 m of 3 m**, with `ramp blocked: nowhere to stand beside (53, 55)`. They cut the
+top of the ramp and stop.
+
+**So the size question is settled and the fault is not about size.** A drawn ramp is ground that
+has to be cut before it can be walked on, and cutting its next step means standing somewhere that
+is itself still to be cut — the same `PlaceRampStep` blind spot as in the seven-cell pit, which
+never examines the last step of its corridor. Making the hole bigger gives the ramp room; it does
+not give the crew a way to cut the step in front of them.
+
+Both are tests. `ABigCutHasRoomForARealHaulRoadDownIntoIt` holds the geometry Ronan was right
+about. `AHaulRoadDrawnIntoABigCutTakesTheCrewToTheFloor` is a characterization test asserting the
+crew *do not* reach the floor, so it fails the day the ramp fault is fixed.
+
+**Still not tried, and the other half of what Ronan said:** *"if you selected a hill and below you
+can dig out the hill for fill"* — cutting a rise down to feed a fill elsewhere, rather than digging
+a hole in a plain. That is Trial B, still unrun, and it is a different shape of problem: the crew
+start on top of the material and work down from above, which is the case the reach rules are
+happiest with. Worth running before any ramp ruling, because it may show the digging is fine and
+only the descent is broken.
