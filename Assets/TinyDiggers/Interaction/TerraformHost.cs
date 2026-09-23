@@ -56,6 +56,7 @@ namespace TinyDiggers.Interaction
         readonly Dictionary<int, float> _surface = new Dictionary<int, float>();
         readonly Dictionary<int, float> _caps = new Dictionary<int, float>();
         readonly Dictionary<int, float> _floors = new Dictionary<int, float>();
+        readonly Dictionary<int, int> _owners = new Dictionary<int, int>();
         readonly List<InsideCell> _inside = new List<InsideCell>();
         readonly Dictionary<int, float> _profile = new Dictionary<int, float>();
 
@@ -261,8 +262,13 @@ namespace TinyDiggers.Interaction
             _tools.History?.Begin("terraform");
             Plan.Rasterise(Grid, _committedCells);
             var made = Builder.Commit(_committedCells);
-            Plan.Zones(Grid, _caps, _floors);
+            // Surface first: it clears the owner map and fills in the areas, then the zones add the
+            // heaps and pits on top. Between them every cell the plan claims knows which shape
+            // claimed it, which is what a posted crew reads.
+            Plan.Surface(Grid, _surface, _owners);
+            Plan.Zones(Grid, _caps, _floors, _owners);
             Builder.CommitZones(_caps, _floors);
+            Builder.CommitSites(_owners);
             _tools.History?.Commit();
 
             Blueprints.Volumes(_committedCells, out var cut, out var fill, Grid.CellArea);
@@ -274,16 +280,25 @@ namespace TinyDiggers.Interaction
             });
         }
 
+        /// <summary>Which shape covers the cell under the cursor, or 0 for bare ground.</summary>
+        public int SiteAt(Vector2 at)
+        {
+            var grid = Grid;
+            if (grid == null)
+                return 0;
+            var x = Mathf.FloorToInt(at.x);
+            var z = Mathf.FloorToInt(at.y);
+            return grid.InBounds(x, z) && _tools.Map != null ? _tools.Map.SiteAt(x, z) : 0;
+        }
+
         /// <summary>Takes the shape under the cursor out of the plan, and its orders with it.</summary>
         public bool RemoveAt(Vector2 at)
         {
             var grid = Grid;
             if (grid == null)
                 return false;
-            var owners = new Dictionary<int, int>();
-            Plan.Surface(grid, _surface, owners);
-            var cell = Mathf.FloorToInt(at.y) * grid.Width + Mathf.FloorToInt(at.x);
-            if (!owners.TryGetValue(cell, out var id))
+            var id = SiteAt(at);
+            if (id == 0)
                 return false;
 
             Plan.Remove(id);

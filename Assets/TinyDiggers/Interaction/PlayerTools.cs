@@ -476,10 +476,17 @@ namespace TinyDiggers.Interaction
 
             if (rightDown && HasHover && _crew.SelectedCount > 0)
             {
+                // Right-clicking a shape posts the selection to it; right-clicking bare ground sends
+                // them there and takes them off whatever site they were on, so "go over there" is
+                // still exactly what it looks like.
+                var site = Terraform != null ? Terraform.SiteAt(HoverCells) : 0;
+                var posted = _crew.Post(site);
                 var sent = _crew.OrderSelectedTo(HoverX, HoverZ);
-                LastAction = sent > 0
-                    ? $"Sent {sent} unit{(sent == 1 ? "" : "s")} to ({HoverX}, {HoverZ})"
-                    : $"No way to ({HoverX}, {HoverZ})";
+                LastAction = site != 0
+                    ? $"Posted {posted} unit{(posted == 1 ? "" : "s")} to the shape here — they will work it and nothing else"
+                    : sent > 0
+                        ? $"Sent {sent} unit{(sent == 1 ? "" : "s")} to ({HoverX}, {HoverZ})"
+                        : $"No way to ({HoverX}, {HoverZ})";
             }
         }
 

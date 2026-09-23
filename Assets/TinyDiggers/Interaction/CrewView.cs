@@ -159,6 +159,36 @@ namespace TinyDiggers.Interaction
         /// <summary>The first unit, for readouts that want something to show with nothing selected.</summary>
         public CrewUnit Unit => _units.Count > 0 ? _units[0] : null;
 
+        /// <summary>The units selected now, in the order they were picked.</summary>
+        public IEnumerable<CrewUnit> Selection
+        {
+            get
+            {
+                foreach (var index in _selection)
+                    if (index >= 0 && index < _units.Count)
+                        yield return _units[index];
+            }
+        }
+
+        /// <summary>
+        /// Sends the selected units to work one shape and nothing else, or, with site 0, lets them
+        /// take work anywhere again. Returns how many were told (Ronan, 2026-09-23: *"when I tell
+        /// them to dig it, select units, assign, type deal"*).
+        /// </summary>
+        public int Post(int site)
+        {
+            var told = 0;
+            foreach (var unit in Selection)
+            {
+                if (unit.Site == site)
+                    continue;
+                unit.Site = site;
+                told++;
+            }
+
+            return told;
+        }
+
         void Start()
         {
             var grid = _terrain.Grid;

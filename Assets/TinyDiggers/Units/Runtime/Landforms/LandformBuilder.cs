@@ -34,6 +34,7 @@ namespace TinyDiggers.Units
         readonly Dictionary<int, float> _committed = new Dictionary<int, float>();
         readonly Dictionary<int, float> _caps = new Dictionary<int, float>();
         readonly Dictionary<int, float> _floors = new Dictionary<int, float>();
+        readonly Dictionary<int, int> _sites = new Dictionary<int, int>();
 
         public LandformBuilder(TerrainGrid grid, DesignationMap map)
         {
@@ -119,12 +120,34 @@ namespace TinyDiggers.Units
                 }
         }
 
+        /// <summary>
+        /// Marks which shape owns each cell, so a unit posted to one can tell its own work from
+        /// everyone else's. Cells that have left the plan go back to belonging to nobody.
+        /// </summary>
+        public void CommitSites(IReadOnlyDictionary<int, int> owners)
+        {
+            var width = _grid.Width;
+            foreach (var pair in _sites)
+                if (owners == null || !owners.ContainsKey(pair.Key))
+                    _map.SetSite(pair.Key % width, pair.Key / width, 0);
+
+            _sites.Clear();
+            if (owners == null)
+                return;
+            foreach (var pair in owners)
+            {
+                _map.SetSite(pair.Key % width, pair.Key / width, pair.Value);
+                _sites[pair.Key] = pair.Value;
+            }
+        }
+
         /// <summary>Takes the whole plan back off the crew.</summary>
         public void Clear()
         {
             Release(null);
             _committed.Clear();
             CommitZones(null, null);
+            CommitSites(null);
         }
 
         /// <summary>

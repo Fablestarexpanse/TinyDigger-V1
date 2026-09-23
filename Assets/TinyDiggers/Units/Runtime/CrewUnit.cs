@@ -547,6 +547,15 @@ namespace TinyDiggers.Units
         public bool Digs => Role != UnitRole.Hauler;
 
         /// <summary>
+        /// The shape this unit has been posted to, or 0 for anywhere — which is every unit until it
+        /// is sent somewhere, so an unposted crew behaves exactly as it always has.
+        ///
+        /// A posted unit takes work only inside its site. Tipping is the exception: the spoil has to
+        /// go somewhere and the heap is almost never inside the hole.
+        /// </summary>
+        public int Site { get; set; }
+
+        /// <summary>
         /// Whether this unit is still at work and so still has spoil coming: digging it, carrying
         /// it, handing it over, or on its way to the next cut. A hauler parked beside it waits on
         /// this rather than on a clock.
@@ -1338,6 +1347,15 @@ namespace TinyDiggers.Units
 
         bool IsJobCell(CrewJobKind kind, int standX, int standZ, float standHeight, int x, int z)
         {
+            // A unit posted to a site works that site and nothing else — one filter, at the one
+            // place every job kind asks whether a cell is worth having.
+            //
+            // Tipping is deliberately exempt. A crew sent to dig a pit still has to put the spoil
+            // somewhere, and the heap is almost never inside the hole; filtering DumpZone too would
+            // post a crew and then stall it the moment the first machine filled up.
+            if (Site != 0 && kind != CrewJobKind.DumpZone && _designations.SiteAt(x, z) != Site)
+                return false;
+
             switch (kind)
             {
                 case CrewJobKind.Dig:

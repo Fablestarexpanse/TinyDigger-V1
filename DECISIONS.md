@@ -5726,3 +5726,29 @@ slope of the ground without allowing for the height-step snap, and the other wro
 step it meant to make rather than measuring the step it actually made — a column's surface is not the
 sum of the layers put into it. Both now derive their expectations from the same grid they are
 testing against.
+
+### Slice F — posting a crew to a site (2026-09-23)
+
+The piece Ronan asked for by describing it rather than naming it: *"when I tell them to dig it,
+select units, assign, type deal."* A landform is now a **work site**, and a unit can be sent to one.
+
+It is one filter in one place. `CrewUnit.IsJobCell` is where every job kind asks whether a cell is
+worth having, so a unit's `Site` is checked there and nowhere else. `Site` 0 means anywhere, which is
+every unit until it is posted, so an unposted crew behaves exactly as it always has.
+
+**Tipping is exempt on purpose.** A crew sent to dig a pit still has to put the spoil somewhere, and
+the heap is almost never inside the hole; filtering DumpZone by site as well would post a crew and
+then stall it the moment the first machine filled up. A test holds that: a posted unit digs its site
+and gets the spoil to a tip outside it.
+
+Sites live on `DesignationMap` as a plain int layer with no undo of its own, because the plan that
+sets them is the record — written when a shape is committed, cleared when it is moved or removed.
+Right-clicking a shape with units selected posts them; right-clicking bare ground sends them there
+and takes them off whatever site they were on, so "go over there" still means what it looks like.
+
+**Two tests were wrong before the code was**, both in the same way — they measured emergent crew
+behaviour and assumed the crew's reasons. One gave the unit nowhere to tip, so it filled its barrow
+and stalled whatever site it was on; the other claimed a freed unit would "take the near work", when
+the unit had already walked to its posted site and *that* was then the nearest work. Freeing a unit
+proves nothing while there is still work in front of it, so the test now takes the first site's work
+away as well.
