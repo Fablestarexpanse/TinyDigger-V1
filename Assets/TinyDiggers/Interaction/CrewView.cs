@@ -977,7 +977,9 @@ namespace TinyDiggers.Interaction
                     _bodies[i].SetPositionAndRotation(
                         terrainTransform.TransformPoint(new Vector3(position.x, height, position.y)), rotation);
                     _bodies[i].localScale = Vector3.one * bodyScale;
-                    var state = CrewAnimation.StateFor(unit.State, !unit.Inventory.IsEmpty);
+                    // Only a machine body has a Reverse state to back in on.
+                    var state = CrewAnimation.StateFor(unit.State, !unit.Inventory.IsEmpty,
+                        unit.Reversing && _machines[i] != null);
                     PlayClip(i, state);
                     DriveAtGroundSpeed(i, state);
                     Tint(i, _selection.Contains(i));
@@ -1020,7 +1022,8 @@ namespace TinyDiggers.Interaction
             var animator = _animators[i];
             if (machine == null || animator == null)
                 return;
-            if (state != CrewAnimation.Move && state != CrewAnimation.Carry || Time.deltaTime <= 0f)
+            if (state != CrewAnimation.Move && state != CrewAnimation.Carry && state != CrewAnimation.Reverse
+                || Time.deltaTime <= 0f)
             {
                 animator.speed = 1f;
                 return;

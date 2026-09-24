@@ -234,6 +234,25 @@ namespace TinyDiggers.Units
         public int WorkReachCells = 1;
 
         /// <summary>
+        /// The nearest ring of cells this unit works from. A rear-tipping truck tips from two cells
+        /// out, so the load lands past its tailgate rather than under its own bed (Ronan,
+        /// 2026-09-24: "they back up to edge, tilt, dump behind").
+        /// </summary>
+        public int MinStandRing = 1;
+
+        /// <summary>Cells before a tip that a rear-tipping truck starts backing in.</summary>
+        public const int ReverseCells = 3;
+
+        /// <summary>
+        /// Backing up to where it tips: heading the other way to the way it is driving. Only a
+        /// machine that tips its whole load out of the back does this.
+        /// </summary>
+        public bool Reversing { get; private set; }
+
+        /// <summary>Whether the job in hand is tipping a load out.</summary>
+        bool TipsHere => Job == CrewJobKind.Fill || Job == CrewJobKind.DumpZone;
+
+        /// <summary>
         /// The digger's arm, in cells: a metre on half-metre cells. Three looked too far for the
         /// machine's own arm (Ronan, 2026-09-22: "its reach might be too far").
         /// </summary>
@@ -764,8 +783,9 @@ namespace TinyDiggers.Units
         List<Vector2Int> StandsAround(int x, int z)
         {
             _stands.Clear();
-            var reach = Math.Max(1, WorkReachCells);
-            for (var ring = 1; ring <= reach; ring++)
+            var nearest = Math.Max(1, MinStandRing);
+            var reach = Math.Max(nearest, WorkReachCells);
+            for (var ring = nearest; ring <= reach; ring++)
                 for (var dz = -ring; dz <= ring; dz++)
                     for (var dx = -ring; dx <= ring; dx++)
                     {
@@ -787,7 +807,8 @@ namespace TinyDiggers.Units
                 return false;
             var out_x = Math.Abs(standX - targetX);
             var out_z = Math.Abs(standZ - targetZ);
-            var inReach = Math.Max(out_x, out_z) <= Math.Max(1, WorkReachCells) && (out_x != 0 || out_z != 0);
+            var ring = Math.Max(out_x, out_z);
+            var inReach = ring <= Math.Max(Math.Max(1, MinStandRing), WorkReachCells) && ring >= Math.Max(1, MinStandRing);
             return inReach && WithinReach(_grid.GetSurfaceHeight(standX, standZ), _grid.GetSurfaceHeight(targetX, targetZ));
         }
 
@@ -815,6 +836,13 @@ namespace TinyDiggers.Units
             Radius = Role == UnitRole.Digger ? DiggerRadius
                 : Role == UnitRole.Worker ? CrewRadius
                 : Role == UnitRole.Bulldozer ? DozerRadius : HaulerRadius;
+            if (Role == UnitRole.Hauler)
+            {
+                // Tips from two cells out: the dump truck is 1.43 m long, so its tailgate is 0.72 m
+                // behind its middle and the next cell over is under its own bed.
+                MinStandRing = 2;
+                WorkReachCells = 2;
+            }
             HalfWidth = Role == UnitRole.Digger ? DiggerHalfWidth
                 : Role == UnitRole.Worker ? CrewRadius
                 : Role == UnitRole.Bulldozer ? DozerHalfWidth : HaulerHalfWidth;
@@ -1983,8 +2011,13 @@ namespace TinyDiggers.Units
                 var target = new Vector2(waypoint.x + 0.5f, waypoint.y + 0.5f);
                 var delta = target - Position;
                 var distance = delta.magnitude;
+                // The last few cells to a tip are driven backwards, tail first, when the tip is
+                // ahead; a truck already coming at it from the far side drives in forwards and
+                // turns on arrival.
+                var toTip = new Vector2(JobTarget.x + 0.5f, JobTarget.y + 0.5f) - Position;
+                Reversing = TipsWholeLoad && TipsHere && PathLeft <= ReverseCells && Vector2.Dot(delta, toTip) > 0f;
                 if (distance > 1e-5f)
-                    TurnToward(delta, deltaTime);
+                    TurnToward(Reversing ? -delta : delta, deltaTime);
                 if (distance <= travel)
                 {
                     Position = target;
@@ -2129,7 +2162,11 @@ namespace TinyDiggers.Units
             ClearPath();
             _workTimer = 0f;
             _bitten = false;
+            Reversing = false;
             var toTarget = new Vector2(JobTarget.x + 0.5f, JobTarget.y + 0.5f) - Position;
+            // A rear-tipping truck puts its tail to the tip, so the load comes out over it.
+            if (TipsWholeLoad && TipsHere)
+                toTarget = -toTarget;
             if (toTarget.sqrMagnitude > 1e-6f)
                 Heading = (float)(Math.Atan2(toTarget.x, toTarget.y) * 180.0 / Math.PI);
             switch (Job)

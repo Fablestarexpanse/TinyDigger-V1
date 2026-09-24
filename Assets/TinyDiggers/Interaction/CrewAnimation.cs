@@ -14,6 +14,12 @@ namespace TinyDiggers.Interaction
         public const string Carry = "Carry";
 
         /// <summary>
+        /// Backing in to tip, tail first. Only machine bodies have it: the crew robot's controller
+        /// has no such state, so a body without one keeps playing Move or Carry.
+        /// </summary>
+        public const string Reverse = "Reverse";
+
+        /// <summary>
         /// Digging, tipping or handing a load over is Work. A unit on the move plays Carry with a
         /// load and Move without one. Anything standing still plays Idle.
         ///
@@ -24,7 +30,7 @@ namespace TinyDiggers.Interaction
         /// are still walking"). Carry is carrying *along*, not holding, and only a unit that is
         /// actually going somewhere should play it.
         /// </summary>
-        public static string StateFor(CrewUnitState state, bool loaded)
+        public static string StateFor(CrewUnitState state, bool loaded, bool reversing = false)
         {
             switch (state)
             {
@@ -37,6 +43,8 @@ namespace TinyDiggers.Interaction
 
             if (state != CrewUnitState.Moving)
                 return Idle;
+            if (reversing)
+                return Reverse;
             return loaded ? Carry : Move;
         }
     }

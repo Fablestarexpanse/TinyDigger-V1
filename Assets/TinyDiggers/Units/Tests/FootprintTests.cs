@@ -223,5 +223,36 @@ namespace TinyDiggers.Units.Tests
             Assert.That(_dispatcher.CanMoveTo(hauler.Position, away, hauler.Id, hauler.Radius), Is.True,
                 "a hauler parked at its digger has to be able to leave");
         }
+
+        [Test]
+        public void ADumpTruckBacksUpAndTipsOutOfItsTail()
+        {
+            // Ronan, 2026-09-24: "when it dumps it comes out behind it ... they back up to edge,
+            // tilt, dump behind". It used to drive in nose first and face the heap, so the load
+            // poured out of its tail onto ground it was not filling.
+            for (var z = 8; z <= 12; z++)
+                for (var x = 2; x <= 4; x++)
+                    _map.SetDumpZone(x, z, true, 8f);
+            var truck = Spawn(18, 10, UnitRole.Hauler);
+            truck.Inventory.Add(MaterialTable.DirtLoose, truck.Inventory.Remaining);
+
+            var backedIn = false;
+            for (var t = 0f; t < 60f && truck.State != CrewUnitState.Tipping; t += 0.05f)
+            {
+                _dispatcher.Tick(0.05f);
+                truck.Tick(0.05f);
+                backedIn |= truck.Reversing;
+            }
+
+            Assert.That(truck.State, Is.EqualTo(CrewUnitState.Tipping), truck.Status);
+            Assert.That(backedIn, Is.True, "it backed in to the tip");
+            var cell = truck.Cell;
+            var target = truck.JobTarget;
+            Assert.That(Mathf.Max(Mathf.Abs(target.x - cell.x), Mathf.Abs(target.y - cell.y)), Is.EqualTo(2),
+                "it tips past its tailgate, not under its own bed");
+            var facing = new Vector2(Mathf.Sin(truck.Heading * Mathf.Deg2Rad), Mathf.Cos(truck.Heading * Mathf.Deg2Rad));
+            var toTip = new Vector2(target.x + 0.5f, target.y + 0.5f) - truck.Position;
+            Assert.That(Vector2.Dot(facing, toTip.normalized), Is.LessThan(-0.7f), "its tail is to the tip");
+        }
     }
 }

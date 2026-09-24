@@ -36,6 +36,7 @@ namespace TinyDiggers.EditorTools
             public string Work;             // clip the Work state plays, or null
             public float WorkSeconds;       // what the work took before the swap; 0 = as authored
             public string Drive;            // clip Move and Carry play, or null
+            public string Reverse;          // clip for backing up, or null to play Drive backwards
             public float MetresPerLoop;     // at forge size, from <machine>.machine.json
         }
 
@@ -43,9 +44,9 @@ namespace TinyDiggers.EditorTools
         {
             // Dig and tip times are the walker clips' (2.97 s, 1.77 s), which the crew balance was
             // tuned on; the forge clips are twice and three times as long.
-            new Machine { Name = "digger", Work = "Dig", WorkSeconds = 2.97f, Drive = "Drive", MetresPerLoop = 0.5655f },
+            new Machine { Name = "digger", Work = "Dig", WorkSeconds = 2.97f, Drive = "Drive", Reverse = "Reverse", MetresPerLoop = 0.5655f },
             new Machine { Name = "dumper", Work = "Tip", WorkSeconds = 1.77f, Drive = "Drive", MetresPerLoop = 0.8168f },
-            new Machine { Name = "dozer", Work = "BladeCycle", WorkSeconds = 0f, Drive = "Drive", MetresPerLoop = 0.4509f },
+            new Machine { Name = "dozer", Work = "BladeCycle", WorkSeconds = 0f, Drive = "Drive", Reverse = "Reverse", MetresPerLoop = 0.4509f },
         };
 
         [MenuItem("TinyDiggers/Build Forge Machines")]
@@ -86,6 +87,16 @@ namespace TinyDiggers.EditorTools
             var drive = machine.Drive != null ? Clip(machine.Name, machine.Drive) : null;
             states.AddState(CrewAnimation.Move).motion = drive;
             states.AddState(CrewAnimation.Carry).motion = drive;
+            // Backing in to tip (CrewAnimation.Reverse): the forge's own Reverse clip where there is
+            // one, else the drive clip played backwards, wheels turning the other way.
+            var reverse = states.AddState(CrewAnimation.Reverse);
+            if (machine.Reverse != null)
+                reverse.motion = Clip(machine.Name, machine.Reverse);
+            else
+            {
+                reverse.motion = drive;
+                reverse.speed = -1f;
+            }
             var work = states.AddState(CrewAnimation.Work);
             var workSpeed = 1f;
             if (machine.Work != null)
