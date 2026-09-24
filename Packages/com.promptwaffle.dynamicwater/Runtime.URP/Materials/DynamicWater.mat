@@ -26,16 +26,21 @@ Material:
     m_Ints: []
     m_Floats:
     - _Absorption: 0.7
+    - _CascadeDrop: 0.25
     - _DryDepth: 0.002
     - _EdgeFade: 0.06
     - _FlowPeriod: 1.6
     - _FoamFromSpeed: 0.35
     - _FoamScale: 2.5
+    - _FoamSpeedCap: 0.5
     - _NormalStrength: 1.4
     - _Refraction: 0.04
     - _RippleStrength: 0.25
     - _ShoreFoam: 0.45
     - _Smoothness: 0.92
+    - _SunGlint: 2.5
+    - _WindRippleSize: 2.2
+    - _WindRipples: 0.35
     m_Colors:
     - _AbsorptionColour: {r: 0.45, g: 0.09, b: 0.06, a: 0}
     - _Deep: {r: 0.04, g: 0.19999993, b: 0.3199999, a: 1}

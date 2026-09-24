@@ -6535,3 +6535,40 @@ revisiting against this.
 
 The three new settings are written into `IslandSettings.asset` explicitly: the loaded asset had
 picked up a first trial's defaults on reload and would have kept them over the code defaults.
+
+## Forge machines replace the walkers (2026-09-24)
+
+Ronan: *"changing the digger the dozer and the dump truck out as well as adding a landing craft to
+carry them in water, all found here F:\machine-forge"*. Rulings: **keep the game's size rulings**, and
+the landing craft is **a model now, ferrying gameplay next** (after an API proposal).
+
+- `Art/Tools/td_forge_import.py` turns each forge .blend into `Art/Units/Forge/<m>/<m>.fbx` and one
+  `<m>@<Clip>.fbx` per clip, faces split into one URP Lit material per palette colour (`forge_<hex>`,
+  shared by all four). Menu **TinyDiggers/Build Forge Machines** (`Editor/ForgeMachines.cs`) builds the
+  controllers and prefabs; `CrewView` has a `_dozerPrefab` now, and the paver is still a stand-in.
+- One factor for all four, **x1.41**, so the dumper is its ruled 0.79 m and the digger's bucket still
+  clears the bed as the forge clip-checked it. Digger 0.86 x 0.99 x 1.76 m, dumper 0.93 x 0.79 x 1.43,
+  dozer 1.08 x 0.91 x 1.85, landing craft 2.87 x 1.92 x 4.89.
+- Timing kept: the forge clips are longer (dig 6.1 s vs 2.97, tip 5.2 vs 1.77) and the crew takes its
+  work times from the clip, so the Work state plays 2.05x / 2.92x and `MachineBody.WorkSpeed` tells the
+  crew the same number. Throughput unchanged; whether the clips should set the pace is Ronan's call.
+- Tracks and wheels play at ground speed: `MachineBody.MetresPerDriveLoop` from the forge's
+  metres-per-cycle times the size factor.
+
+Three traps, each of which looked like success until the machines were watched in play:
+1. **Blender 5.2's FBX exporter ignores the NLA** and bakes each object's active action: every clip
+   came out constant. The clip is now baked to actions first. And **the first animated export of a
+   session comes out constant** regardless of which clip, so the first goes through twice. Parts a clip
+   does not key are put back to rest before each clip, or they kept the last clip's pose.
+2. **The builder deleted and re-made each Animator controller**, and the prefabs came into play with
+   none: nothing played at all (Ronan: "they are missing all there animations"). It now empties the
+   controller in place.
+3. **Every clip keys the model's root**, so the size factor moved to its own `Size` object above it.
+
+**Parking (Ronan: "fix the truck parking inside the digger").** Loading meant the next cell over,
+half a metre between centres, for machines 0.86 and 0.93 m wide. Each unit now has a half-width as
+well as its radius (half its length); a digger and its own hauler may close to their half-widths added,
+and load at `JobDispatcher.LoadingDistance` — that sum rounded up to whole cells: 1 for the crew robot,
+unchanged, and 2 for the machines, the forge's own placement (truck 1.07 m off the swing axis). Radii
+follow the new lengths: digger 1.2, dumper 1.43, dozer 1.85 cells. In play the truck's centre never came
+nearer than 2.83 cells (1.41 m) and it was loaded (1.97 m³ in the take).

@@ -115,12 +115,14 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
-        public void TheRoadMachinesAreTheDumpersSizeAndNeverDig()
+        public void TheRoadMachinesTakeTheirOwnRoomAndNeverDig()
         {
             var dozer = Hire(UnitRole.Bulldozer, 18, 32);
             var paver = Hire(UnitRole.Paver, 22, 32);
 
-            Assert.That(dozer.Radius, Is.EqualTo(CrewUnit.HaulerRadius));
+            // The bulldozer is the forge model now, 1.85 m blade to ripper; the paver is still a
+            // stand-in the dumper's size (2026-09-24).
+            Assert.That(dozer.Radius, Is.EqualTo(CrewUnit.DozerRadius));
             Assert.That(paver.Radius, Is.EqualTo(CrewUnit.HaulerRadius));
             Assert.That(dozer.Digs, Is.False);
             Assert.That(paver.Digs, Is.False);

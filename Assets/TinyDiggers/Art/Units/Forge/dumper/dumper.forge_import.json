@@ -1,0 +1,20 @@
+{
+ "asset": "dumper",
+ "materials": [
+  "forge_0d3b5c",
+  "forge_33a9a1",
+  "forge_a3a6a4",
+  "forge_e8b33a",
+  "forge_f3eee3"
+ ],
+ "clips": {
+  "Drive": [
+   1,
+   25
+  ],
+  "Tip": [
+   1,
+   125
+  ]
+ }
+}

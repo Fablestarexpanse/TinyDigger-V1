@@ -337,14 +337,36 @@ namespace TinyDiggers.Units
         /// </summary>
         public float Radius = CrewRadius;
 
+        /// <summary>
+        /// Half the unit's width in cells: how close a partner may come alongside it to load or be
+        /// loaded (<see cref="JobDispatcher.LoadingDistance"/>). <see cref="Radius"/> is half its
+        /// length, which is what keeps everybody else away.
+        /// </summary>
+        public float HalfWidth = CrewRadius;
+
         /// <summary>The starter robot, 0.41 m across on half-metre cells.</summary>
         public const float CrewRadius = 0.35f;
 
-        /// <summary>The digger machine: about 1.1 m long, so 2.2 cells, so 1.1 either side.</summary>
-        public const float DiggerRadius = 1.1f;
+        // The machines from machine-forge at the game's size rulings (x1.41, 2026-09-24), on
+        // half-metre cells. Lengths leave out the digger's arm, which reaches over its work.
 
-        /// <summary>The dumper: a little shorter than the digger, a little wider.</summary>
-        public const float HaulerRadius = 0.95f;
+        /// <summary>The digger: tracks and turret 1.2 m long, so 1.2 cells either side.</summary>
+        public const float DiggerRadius = 1.2f;
+
+        /// <summary>The dump truck: 1.43 m long.</summary>
+        public const float HaulerRadius = 1.43f;
+
+        /// <summary>The bulldozer: 1.85 m from blade to ripper.</summary>
+        public const float DozerRadius = 1.85f;
+
+        /// <summary>The digger's tracks, 0.86 m across.</summary>
+        public const float DiggerHalfWidth = 0.86f;
+
+        /// <summary>The dump truck, 0.93 m across.</summary>
+        public const float HaulerHalfWidth = 0.93f;
+
+        /// <summary>The bulldozer's blade, 1.08 m across.</summary>
+        public const float DozerHalfWidth = 1.08f;
 
         readonly TerrainGrid _grid;
         readonly DesignationMap _designations;
@@ -789,9 +811,13 @@ namespace TinyDiggers.Units
                 WorkReachCells = MachineWorkReach;
                 WorksFromInside = true;
             }
-            // The road machines are built on the dumper's chassis, so they take its room.
+            // The paver is still a stand-in the dumper's size, so it takes the dumper's room.
             Radius = Role == UnitRole.Digger ? DiggerRadius
-                : Role == UnitRole.Worker ? CrewRadius : HaulerRadius;
+                : Role == UnitRole.Worker ? CrewRadius
+                : Role == UnitRole.Bulldozer ? DozerRadius : HaulerRadius;
+            HalfWidth = Role == UnitRole.Digger ? DiggerHalfWidth
+                : Role == UnitRole.Worker ? CrewRadius
+                : Role == UnitRole.Bulldozer ? DozerHalfWidth : HaulerHalfWidth;
             return this;
         }
 
@@ -1439,16 +1465,20 @@ namespace TinyDiggers.Units
             // the site from 4.95 m³ a game minute to 0.39, every one of them reporting that it was
             // squeezing past another (2026-09-24).
             var mine = _dispatcher.HaulerFor(diggerId) == Id;
+            // At the loading distance exactly: nearer and the two machines overlap, further and
+            // the bucket cannot reach the bed.
+            var reach = JobDispatcher.LoadingDistance(this, digger);
             var found = mine && _pathfinder.TryFindNearest(start.x, start.y,
-                (x, z) => Math.Abs(x - at.x) <= 1 && Math.Abs(z - at.y) <= 1 && IsParkCell(x, z), _path);
+                (x, z) => Math.Max(Math.Abs(x - at.x), Math.Abs(z - at.y)) == reach && IsParkCell(x, z), _path);
             if (!found)
             {
                 // Nothing clear right beside it — it is probably standing on the ground it is
                 // digging — so wait as near as there is room for, and let it walk out. A dumper
                 // waiting its turn holds back a cell further, out of the loading ring.
-                var near = mine ? 1 : 2;
+                var near = mine ? reach : reach + 1;
+                var wait = Math.Max(ParkRadius, reach + 2);
                 found = _pathfinder.TryFindNearest(start.x, start.y,
-                    (x, z) => Math.Abs(x - at.x) <= ParkRadius && Math.Abs(z - at.y) <= ParkRadius
+                    (x, z) => Math.Abs(x - at.x) <= wait && Math.Abs(z - at.y) <= wait
                               && (Math.Abs(x - at.x) > near || Math.Abs(z - at.y) > near || mine)
                               && IsParkCell(x, z), _path);
                 if (!found)
@@ -1471,8 +1501,9 @@ namespace TinyDiggers.Units
             var at = hauler.Cell;
             if (!_dispatcher.Regions.CanReach(start.x, start.y, at.x, at.y))
                 return false;
+            var reach = JobDispatcher.LoadingDistance(this, hauler);
             var found = _pathfinder.TryFindNearest(start.x, start.y,
-                (x, z) => Math.Abs(x - at.x) <= 1 && Math.Abs(z - at.y) <= 1 && CanStandHere(x, z), _path);
+                (x, z) => Math.Max(Math.Abs(x - at.x), Math.Abs(z - at.y)) == reach && CanStandHere(x, z), _path);
             if (!found)
                 return false;
 
@@ -1494,18 +1525,28 @@ namespace TinyDiggers.Units
             && !_dispatcher.IsOccupiedByOther(x, z, Id)
             && !_dispatcher.IsOnAnotherPath(x, z, Id);
 
-        /// <summary>Empties the scoop into a hauler already standing beside this digger, if one is.</summary>
+        /// <summary>
+        /// Empties the scoop into a hauler already standing within loading distance of this digger
+        /// (<see cref="JobDispatcher.LoadingDistance"/>), if one is: the next cell for the crew
+        /// robots, two cells out for the machines.
+        /// </summary>
         bool TryTransferToAdjacentHauler()
         {
             var me = Cell;
-            for (var n = 0; n < 8; n++)
+            const int Farthest = 3;
+            for (var dz = -Farthest; dz <= Farthest; dz++)
+            for (var dx = -Farthest; dx <= Farthest; dx++)
             {
-                var x = me.x + NeighbourX[n];
-                var z = me.y + NeighbourZ[n];
+                if (dx == 0 && dz == 0)
+                    continue;
+                var x = me.x + dx;
+                var z = me.y + dz;
                 if (!_grid.InBounds(x, z))
                     continue;
                 var other = _dispatcher.UnitOn(x, z);
                 if (other == null || other.Role != UnitRole.Hauler || other.Inventory.Remaining <= Epsilon)
+                    continue;
+                if (Math.Max(Math.Abs(dx), Math.Abs(dz)) > JobDispatcher.LoadingDistance(this, other))
                     continue;
 
                 Job = CrewJobKind.Transfer;

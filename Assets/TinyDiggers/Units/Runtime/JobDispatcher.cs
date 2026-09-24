@@ -266,7 +266,7 @@ namespace TinyDiggers.Units
                 // unit" ten minutes later — while two more sat parked beside it with room in the
                 // bed (2026-09-24). Then beside it beats near it, and near beats far.
                 var score = (hauler.State == CrewUnitState.Parked ? 10000f : 0f)
-                            + (away <= 1 ? 1000f : 0f) - away;
+                            + (away <= LoadingDistance(hauler, digger) ? 1000f : 0f) - away;
                 if (score <= bestScore)
                     continue;
                 bestScore = score;
@@ -472,12 +472,15 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
-        /// How close a digger and the hauler serving it may get, as a share of the larger of the
-        /// two. They have to nest to load — the bed goes under the scoop — and at the sum of two
-        /// machines' radii a hauler could never reach a cell beside its digger, so nothing was
-        /// ever loaded.
+        /// Cells between a digger and a hauler when one loads the other: the two stand side by side,
+        /// so their half-widths added and rounded up to whole cells. One cell for the crew robot,
+        /// two for the forge machines (0.86 and 0.93 m wide on half-metre cells), which is the
+        /// forge's own loading placement: the dumper 1.07 m off the digger's swing axis, the bed
+        /// under the bucket. Loading used to mean the next cell over, and a truck a metre wide
+        /// parked inside the digger it served (Ronan, 2026-09-24).
         /// </summary>
-        public const float LoadingGap = 0.75f;
+        public static int LoadingDistance(CrewUnit a, CrewUnit b) =>
+            Math.Max(1, (int)Math.Ceiling(a.HalfWidth + b.HalfWidth - 0.05f));
 
         /// <summary>Whether these two are a digger and the hauler serving it.</summary>
         public bool Partnered(int unitId, int otherId) =>
@@ -502,12 +505,15 @@ namespace TinyDiggers.Units
         /// </summary>
         public bool CanMoveTo(Vector2 from, Vector2 to, int unitId, float radius)
         {
+            var me = UnitOf(unitId);
             foreach (var other in _units)
             {
                 if (other == null || other.Id == unitId)
                     continue;
+                // A digger and its own hauler come in side by side, so only their widths keep them
+                // apart; anyone else keeps the full radius, which is the long way round.
                 var apart = Partnered(unitId, other.Id)
-                    ? LoadingGap * Math.Max(radius, other.Radius)
+                    ? (me != null ? me.HalfWidth : radius) + other.HalfWidth
                     : radius + other.Radius;
                 var after = (to - other.Position).sqrMagnitude;
                 if (after >= apart * apart)

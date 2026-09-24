@@ -110,14 +110,39 @@ namespace TinyDiggers.Units.Tests
         public void AMachineHaulerCanStillGetBesideItsDiggerToBeLoaded()
         {
             var digger = Spawn(8, 8, UnitRole.Digger);
-            var hauler = Spawn(12, 8, UnitRole.Hauler);
+            var hauler = Spawn(14, 8, UnitRole.Hauler);
+            Assert.That(_dispatcher.AssignDigger(hauler), Is.EqualTo(digger.Id));
+            Assert.That(_dispatcher.Partnered(hauler.Id, digger.Id), Is.True);
+
+            // Side by side at the loading distance: two cells for the machines, as the forge
+            // placed the truck under the bucket. Two machines kept the sum of their radii apart
+            // could never get there, and nothing would ever be loaded.
+            var reach = JobDispatcher.LoadingDistance(hauler, digger);
+            Assert.That(reach, Is.EqualTo(2));
+            var loading = new Vector2(digger.Position.x + reach, digger.Position.y);
+            Assert.That(_dispatcher.CanMoveTo(hauler.Position, loading, hauler.Id, hauler.Radius), Is.True);
+        }
+
+        [Test]
+        public void AMachineHaulerDoesNotParkInsideItsDigger()
+        {
+            var digger = Spawn(8, 8, UnitRole.Digger);
+            var hauler = Spawn(14, 8, UnitRole.Hauler);
             Assert.That(_dispatcher.AssignDigger(hauler), Is.EqualTo(digger.Id));
 
-            // The cell right beside the digger: one cell between the centres. Two machines kept
-            // the sum of their radii apart could never reach it, and nothing would ever be loaded.
-            var beside = new Vector2(digger.Position.x + 1f, digger.Position.y);
-            Assert.That(_dispatcher.Partnered(hauler.Id, digger.Id), Is.True);
-            Assert.That(_dispatcher.CanMoveTo(hauler.Position, beside, hauler.Id, hauler.Radius), Is.True);
+            // The next cell over is half a metre from the digger's centre, and the two machines are
+            // 0.86 and 0.93 m wide: parked there, the truck stood inside the digger (Ronan,
+            // 2026-09-24: "fix the truck parking inside the digger").
+            var inside = new Vector2(digger.Position.x + 1f, digger.Position.y);
+            Assert.That(_dispatcher.CanMoveTo(hauler.Position, inside, hauler.Id, hauler.Radius), Is.False);
+        }
+
+        [Test]
+        public void TheCrewRobotsStillLoadFromTheNextCell()
+        {
+            var robot = new CrewUnit(_dispatcher, 4, 4, UnitRole.Worker, UnitLoads.Barrow);
+            var other = new CrewUnit(_dispatcher, 6, 4, UnitRole.Hauler, UnitLoads.Barrow);
+            Assert.That(JobDispatcher.LoadingDistance(robot, other), Is.EqualTo(1));
         }
 
         [Test]

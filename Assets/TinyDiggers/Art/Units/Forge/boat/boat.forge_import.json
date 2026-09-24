@@ -1,0 +1,30 @@
+{
+ "asset": "boat",
+ "materials": [
+  "forge_33a9a1",
+  "forge_9c5a3c",
+  "forge_a3a6a4",
+  "forge_e8b33a",
+  "forge_ee6a35",
+  "forge_f2c12e",
+  "forge_f3eee3"
+ ],
+ "clips": {
+  "Bob": [
+   1,
+   121
+  ],
+  "Props": [
+   1,
+   13
+  ],
+  "RampDown": [
+   1,
+   49
+  ],
+  "RampUp": [
+   1,
+   49
+  ]
+ }
+}

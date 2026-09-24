@@ -1,0 +1,72 @@
+{
+ "asset": "digger",
+ "materials": [
+  "forge_0d3b5c",
+  "forge_33a9a1",
+  "forge_a3a6a4",
+  "forge_e8b33a",
+  "forge_f3eee3"
+ ],
+ "clips": {
+  "Dig": [
+   1,
+   147
+  ],
+  "DigOnce": [
+   1,
+   191
+  ],
+  "Drive": [
+   1,
+   25
+  ],
+  "LoadLeft": [
+   1,
+   177
+  ],
+  "PivotLeft": [
+   1,
+   25
+  ],
+  "PivotRight": [
+   1,
+   25
+  ],
+  "Reverse": [
+   1,
+   25
+  ],
+  "SpinLeft": [
+   1,
+   25
+  ],
+  "SpinRight": [
+   1,
+   25
+  ],
+  "Stow": [
+   1,
+   37
+  ],
+  "Swing": [
+   1,
+   97
+  ],
+  "TrackL_Drive": [
+   1,
+   25
+  ],
+  "TrackL_Reverse": [
+   1,
+   25
+  ],
+  "TrackR_Drive": [
+   1,
+   25
+  ],
+  "TrackR_Reverse": [
+   1,
+   25
+  ]
+ }
+}

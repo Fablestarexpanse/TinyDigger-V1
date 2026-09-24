@@ -1,0 +1,64 @@
+{
+ "asset": "dozer",
+ "materials": [
+  "forge_0d3b5c",
+  "forge_33a9a1",
+  "forge_a3a6a4",
+  "forge_e8b33a",
+  "forge_f3eee3"
+ ],
+ "clips": {
+  "BladeCycle": [
+   1,
+   121
+  ],
+  "Demo": [
+   1,
+   199
+  ],
+  "Drive": [
+   1,
+   25
+  ],
+  "PivotLeft": [
+   1,
+   25
+  ],
+  "PivotRight": [
+   1,
+   25
+  ],
+  "Reverse": [
+   1,
+   25
+  ],
+  "Rip": [
+   1,
+   101
+  ],
+  "SpinLeft": [
+   1,
+   25
+  ],
+  "SpinRight": [
+   1,
+   25
+  ],
+  "TrackL_Drive": [
+   1,
+   25
+  ],
+  "TrackL_Reverse": [
+   1,
+   25
+  ],
+  "TrackR_Drive": [
+   1,
+   25
+  ],
+  "TrackR_Reverse": [
+   1,
+   25
+  ]
+ }
+}

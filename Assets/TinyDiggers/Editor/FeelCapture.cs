@@ -10,7 +10,7 @@ using UnityEngine;
 namespace TinyDiggers.EditorTools
 {
     /// <summary>
-    /// Ten seconds of a digger cutting into a hillside and a dumper tipping onto a heap, for one
+    /// Twenty seconds of a digger cutting into a hillside and a dumper tipping onto a heap, for one
     /// question (Ronan, 2026-09-23): *does material look like it moves because the machine moved
     /// it?* Frames go to Screenshots/Feel/frames as PNGs; ffmpeg turns them into the mp4.
     ///
@@ -30,7 +30,7 @@ namespace TinyDiggers.EditorTools
         const string Folder = "Screenshots/Feel";
         const string Frames = "Screenshots/Feel/frames";
         const int Fps = 30;
-        const int Seconds = 10;
+        const int Seconds = 20;
         const int Width = 1280;
         const int Height = 720;
 

@@ -108,6 +108,9 @@ namespace TinyDiggers.Interaction
         [Tooltip("The dumper machine (dumper.prefab), for haulers. Empty: the crew robot's body, or a box.")]
         [SerializeField] GameObject _haulerPrefab;
 
+        [Tooltip("The bulldozer machine (dozer.prefab), for road grading. Empty: a stand-in box the size of the dumper.")]
+        [SerializeField] GameObject _dozerPrefab;
+
         [Tooltip("Tint on the selected robot.")]
         [SerializeField] Color _selectedTint = new Color(1f, 0.95f, 0.55f);
 
@@ -156,6 +159,10 @@ namespace TinyDiggers.Interaction
         readonly List<MeshRenderer> _renderers = new List<MeshRenderer>();
         readonly List<Renderer[]> _robotRenderers = new List<Renderer[]>();
         readonly List<Animator> _animators = new List<Animator>();
+        /// <summary>Each body's drive and work speeds, or null for a body without one.</summary>
+        readonly List<MachineBody> _machines = new List<MachineBody>();
+        /// <summary>Where each body was drawn last frame, for how fast its tracks should turn.</summary>
+        readonly List<Vector3> _lastDrawn = new List<Vector3>();
         readonly List<string> _clips = new List<string>();
         readonly List<bool> _tinted = new List<bool>();
         MaterialPropertyBlock _tint;
@@ -311,7 +318,7 @@ namespace TinyDiggers.Interaction
 
             // A machine takes as long over a cut as the scoop takes to swing: the clip it plays is
             // what says how long the work looks, so the clip sets the time.
-            TimeWorkToTheClips(unit, _animators[_animators.Count - 1]);
+            TimeWorkToTheClips(unit, _animators[_animators.Count - 1], _machines[_machines.Count - 1]);
 
             var line = new GameObject($"{role} {i} Path") { hideFlags = HideFlags.DontSave };
             line.transform.SetParent(transform, false);
@@ -387,6 +394,8 @@ namespace TinyDiggers.Interaction
             _renderers.RemoveAt(index);
             _robotRenderers.RemoveAt(index);
             _animators.RemoveAt(index);
+            _machines.RemoveAt(index);
+            _lastDrawn.RemoveAt(index);
             _clips.RemoveAt(index);
             _tinted.RemoveAt(index);
             _rings.RemoveAt(index);
@@ -429,6 +438,8 @@ namespace TinyDiggers.Interaction
             // after its parts go on, and its wheels are where the box is.
             AddPrint(new Vector2(body.transform.localScale.z, body.transform.localScale.x) * 0.5f);
             _animators.Add(null);
+            _machines.Add(null);
+            _lastDrawn.Add(body.transform.position);
             _clips.Add(null);
             _tinted.Add(false);
         }
@@ -488,6 +499,7 @@ namespace TinyDiggers.Interaction
                 case UnitRole.Hauler:
                     return _haulerPrefab != null ? _haulerPrefab : _bodyPrefab;
                 case UnitRole.Bulldozer:
+                    return _dozerPrefab;
                 case UnitRole.Paver:
                     // Not modelled yet: a stand-in box the size of the dumper (AddBox).
                     return null;
@@ -514,7 +526,11 @@ namespace TinyDiggers.Interaction
             _bodies.Add(body.transform);
             _renderers.Add(null);
             _robotRenderers.Add(renderers);
-            _animators.Add(body.GetComponent<Animator>());
+            // On the model rather than the root: the root is turned to face the unit's heading every
+            // frame, and a forge model keeps its own turn and size on the child the clips animate.
+            _animators.Add(body.GetComponentInChildren<Animator>());
+            _machines.Add(body.GetComponentInChildren<MachineBody>());
+            _lastDrawn.Add(body.transform.position);
             _clips.Add(null);
             _tinted.Add(false);
             AddPrint(new Vector2(bounds.size.z, bounds.size.x) * (0.5f * bodyScale));
@@ -529,7 +545,7 @@ namespace TinyDiggers.Interaction
         /// Unity's animator — so whatever draws a unit tells it how long the work looks. A body
         /// with no clips leaves the times alone and the unit keeps its own interval.
         /// </summary>
-        void TimeWorkToTheClips(CrewUnit unit, Animator animator)
+        void TimeWorkToTheClips(CrewUnit unit, Animator animator, MachineBody machine)
         {
             if (animator == null || animator.runtimeAnimatorController == null)
                 return;
@@ -546,16 +562,18 @@ namespace TinyDiggers.Interaction
                     continue;
                 // The states are named for what the unit is doing: Work is the cut for a digging
                 // unit and the tip for a hauler, which is exactly how CrewAnimation picks them.
-                if (clip.name.EndsWith("dig"))
+                // Case-blind: the walker clips are "dig" and "tip", the forge's "Dig" and "Tip".
+                var workSpeed = machine != null ? machine.WorkSpeed : 1f;
+                if (clip.name.EndsWith("dig", System.StringComparison.OrdinalIgnoreCase))
                 {
-                    unit.DigSeconds = clip.length;
+                    unit.DigSeconds = clip.length / workSpeed;
                     var at = EventAt(clip, "OnBite");
                     if (at >= 0f)
                         unit.BiteAt = at;
                 }
-                else if (clip.name.EndsWith("tip"))
+                else if (clip.name.EndsWith("tip", System.StringComparison.OrdinalIgnoreCase))
                 {
-                    unit.TipSeconds = clip.length;
+                    unit.TipSeconds = clip.length / workSpeed;
                     var at = EventAt(clip, "OnTip");
                     if (at >= 0f)
                         unit.TipAt = at;
@@ -959,7 +977,9 @@ namespace TinyDiggers.Interaction
                     _bodies[i].SetPositionAndRotation(
                         terrainTransform.TransformPoint(new Vector3(position.x, height, position.y)), rotation);
                     _bodies[i].localScale = Vector3.one * bodyScale;
-                    PlayClip(i, CrewAnimation.StateFor(unit.State, !unit.Inventory.IsEmpty));
+                    var state = CrewAnimation.StateFor(unit.State, !unit.Inventory.IsEmpty);
+                    PlayClip(i, state);
+                    DriveAtGroundSpeed(i, state);
                     Tint(i, _selection.Contains(i));
                     if (_rings[i] != null)
                         _rings[i].SetActive(_selection.Contains(i));
@@ -984,6 +1004,30 @@ namespace TinyDiggers.Interaction
                 _lines[i].positionCount = count;
                 _lines[i].SetPositions(_pathPoints);
             }
+        }
+
+        /// <summary>
+        /// Turns a machine's tracks or wheels at the speed it is actually covering ground, so they
+        /// neither skid nor spin: one loop of the drive clip is <see cref="MachineBody.MetresPerDriveLoop"/>
+        /// of travel. Anything but driving plays at its authored speed.
+        /// </summary>
+        void DriveAtGroundSpeed(int i, string state)
+        {
+            var drawn = _bodies[i].position;
+            var moved = Vector3.Distance(drawn, _lastDrawn[i]);
+            _lastDrawn[i] = drawn;
+            var machine = _machines[i];
+            var animator = _animators[i];
+            if (machine == null || animator == null)
+                return;
+            if (state != CrewAnimation.Move && state != CrewAnimation.Carry || Time.deltaTime <= 0f)
+            {
+                animator.speed = 1f;
+                return;
+            }
+
+            var loopsPerSecond = moved / Time.deltaTime / machine.MetresPerDriveLoop;
+            animator.speed = loopsPerSecond * machine.DriveLoopSeconds;
         }
 
         void PlayClip(int i, string clip)
