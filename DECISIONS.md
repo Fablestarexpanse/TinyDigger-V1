@@ -6384,3 +6384,47 @@ either side); the fill had not. It now uses the same 0.75.
 
 With that, **652 pass, 0 fail**, committed with the talus and cliff-band work. The mountain numbers
 in that run are the ones in the table above (walls 5.1 / 6.0 / 4.0%, apron 5.8 / 6.2 / 5.6 m).
+
+### Rivers and creeks that vary along their length (2026-09-24)
+
+Ronan: *"do all of them"* — the five slices proposed for channel variety. Measured first in
+`ChannelProfileTests` (23 channels over three seeds), which found every channel one width from spring
+to sea, nearly straight, and with the same bank on both sides:
+
+| | before | after |
+|---|---|---|
+| width, mouth over head | 1.07 | **1.38** (rivers 2.3 → 3.0 cells) |
+| sinuosity | 1.05 | **1.10** |
+| depth variation along a channel | 1.01 | **1.74** |
+| bank asymmetry at bends, outside over inside | 1.00 (3 bends) | **1.17** (43 bends) |
+
+What changed, all in `RiverChannels.Cut` and `Meander`, all ratios on `TerrainGenSettings`:
+
+1. **Grows downstream.** Width runs as the square root of the water gathered above each point, from
+   half its drawn width at the spring to at most 1.8×; depth grows more slowly. In the game the three
+   rivers of the default island run 1.7–4.7 m, 1.0–6.6 m and 1.0–1.9 m wide.
+2. **Shape follows slope.** Narrow and deep on steep reaches, wide and shallow on flat ones. The
+   meander's wide swing used to switch off at a slope of one in ten — nearly every channel — so it
+   now gives out at 0.3, and on steeper ground a smaller, faster wander takes over, with its own
+   short fade at the ends (a thirty-cell creek had been faded along nearly all of its length). Two
+   swings at unrelated phases, so no two bends are the same size.
+3. **Pools and wandering width.** Pools on the outside of bends and in a slower rhythm (about six bed
+   widths apart) down the straights. A pool is a local hollow cut below the floor; the floor the
+   water runs on still never rises towards the mouth. Width wanders ±20% on Perlin noise.
+4. **Flares.** A creek widens 1.8× over its last few metres where it meets a river; a river 1.6×
+   where it meets the sea or a lake.
+5. **Banks differ at bends.** A cut bank twice as steep on the outside, a point bar at 0.45 on the
+   inside, and the deepest water leans toward the outside. The first version had the side sign
+   backwards and put every cut bank on the inside — measured at 0.98 before it was caught.
+
+The water fill (`ChannelSprings.Prefill`) now follows each point's width through `Channel.Widths`.
+The width noise is keyed to the spring's place in the island's own frame, not the grid's: keyed to
+grid cells, the same seed on a bigger disc came out 55 land cells different (`LandRadiusTests`).
+
+The profile test's banks are sampled just past the bank's foot from the bed's own width; three bed
+widths out, the hillside a channel crosses swamped its banks and asymmetry read 1.10 of what is
+really there.
+
+**Seen in the game, and not yet dealt with:** white foam drawn as a sawtooth along stepped banks,
+and spiky teeth along a dark rock ridge (`Screenshots/Rivers/river-1.png`). Neither is from this work;
+both are worth a look.

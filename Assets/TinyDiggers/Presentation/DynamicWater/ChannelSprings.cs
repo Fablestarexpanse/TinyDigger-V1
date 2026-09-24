@@ -127,9 +127,12 @@ namespace TinyDiggers.Presentation
                 // as bed (RiverChannels.Cut). At half a cell a one-cell creek running along a cell
                 // edge missed the cells it was cut into, and left a bed with no water in it beside
                 // a wet one (seed 3, 2026-09-24).
-                var half = Mathf.Max(0.75f, channel.Width * 0.5f / cellSize);
-                var box = Mathf.CeilToInt(half);
+                var drawnHalf = Mathf.Max(0.75f, channel.Width * 0.5f / cellSize);
                 var path = channel.Path;
+                // A channel's bed changes width along it (it grows downstream, narrows on steep
+                // reaches, flares at its end), so the fill follows the width at each point where
+                // the channel says what that is.
+                var widths = channel.Widths.Count == path.Count ? channel.Widths : null;
                 for (var p = 1; p < path.Count; p++)
                 {
                     var a = path[p - 1];
@@ -137,7 +140,12 @@ namespace TinyDiggers.Presentation
                     var steps = Mathf.Max(1, Mathf.CeilToInt(Vector2.Distance(new Vector2(a.x, a.z), new Vector2(b.x, b.z)) * 2f));
                     for (var s = 0; s <= steps; s++)
                     {
-                        var at = Vector3.Lerp(a, b, s / (float)steps);
+                        var t = s / (float)steps;
+                        var at = Vector3.Lerp(a, b, t);
+                        var half = widths == null
+                            ? drawnHalf
+                            : Mathf.Max(0.75f, Mathf.Lerp(widths[p - 1], widths[p], t) * 0.5f / cellSize);
+                        var box = Mathf.CeilToInt(half);
                         var cx = Mathf.FloorToInt(at.x);
                         var cz = Mathf.FloorToInt(at.z);
                         for (var dz = -box; dz <= box; dz++)

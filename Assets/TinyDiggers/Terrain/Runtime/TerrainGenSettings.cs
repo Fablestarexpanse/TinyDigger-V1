@@ -355,6 +355,53 @@ namespace TinyDiggers.Terrain
         [Tooltip("Metres a channel's bank rises per metre out from the bed.")]
         [Min(0.05f)] public float ChannelBankSlope = 0.5f;
 
+        // --- Channel variety (Ronan, 2026-09-24: "realistic looking and varied streams and river
+        // channels"). Everything below is a ratio, so none of it scales with the cell size.
+
+        [Tooltip("Slope (rise over run) at which a channel stops meandering on its wide swing. It " +
+            "was 0.1, which switched the swing off on almost every channel the island has: they " +
+            "measured 1.05 sinuosity, near enough straight.")]
+        [Range(0.02f, 1f)] public float MeanderSlopeLimit = 0.3f;
+
+        [Tooltip("Bed widths either way a channel wanders on steep ground, where the wide meander " +
+            "is off: a mountain stream still picks its way between rocks.")]
+        [Range(0f, 3f)] public float SteepWiggle = 0.8f;
+
+        [Tooltip("A channel's width at its spring, as a share of the width it was drawn at. It " +
+            "grows with the water gathered upstream, as the square root of it.")]
+        [Range(0.1f, 1f)] public float ChannelHeadShare = 0.5f;
+
+        [Tooltip("The most a channel may widen to downstream, as a share of the width it was drawn at.")]
+        [Range(1f, 4f)] public float ChannelMouthShare = 1.8f;
+
+        [Tooltip("Width on the steepest ground, as a share: a steep reach is a narrow, deep cut.")]
+        [Range(0.2f, 1f)] public float ChannelSteepNarrowing = 0.6f;
+
+        [Tooltip("Width on flat ground, as a share: a flat reach spreads out wide and shallow.")]
+        [Range(1f, 2f)] public float ChannelFlatWidening = 1.3f;
+
+        [Tooltip("How much deeper a pool is than the reach around it, as a share of the reach's depth. " +
+            "Pools sit on the outside of bends, and in a slower rhythm along straight reaches.")]
+        [Range(0f, 1.5f)] public float ChannelPoolDepth = 0.5f;
+
+        [Tooltip("Bed widths from one pool to the next along a straight reach (about six in real rivers).")]
+        [Range(2f, 20f)] public float ChannelPoolSpacing = 6f;
+
+        [Tooltip("How much a channel's width wanders along its length, either way, as a share.")]
+        [Range(0f, 0.6f)] public float ChannelWidthNoise = 0.2f;
+
+        [Tooltip("How much steeper the bank on the outside of a bend is than a straight reach's: the cut bank.")]
+        [Range(1f, 4f)] public float CutBankSteepen = 2f;
+
+        [Tooltip("How much gentler the bank on the inside of a bend is: the point bar.")]
+        [Range(0.2f, 1f)] public float PointBarSoften = 0.45f;
+
+        [Tooltip("How much wider a creek's last few metres are where it runs into a river.")]
+        [Range(1f, 3f)] public float ConfluenceFlare = 1.8f;
+
+        [Tooltip("How much wider a river's last stretch is where it meets the sea or a lake.")]
+        [Range(1f, 3f)] public float MouthFlare = 1.6f;
+
         [Header("Surface materials")]
         [Tooltip("Cells either side of a cell that its slope is measured over. Slope is read from a " +
             "smoothed heightfield: on quantised land a uniform hillside is a staircase, and a " +

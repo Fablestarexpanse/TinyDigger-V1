@@ -27,9 +27,18 @@ namespace TinyDiggers.Terrain
         /// <summary>Square metres of land draining to the head, which scales the spring.</summary>
         public float Catchment;
 
-        /// <summary>Metres across the bed, and metres the bed sits below the ground beside it.</summary>
+        /// <summary>
+        /// Metres across the bed and metres the bed sits below the ground beside it, as drawn for
+        /// the channel. The bed is not this width all the way along: see <see cref="Widths"/>.
+        /// </summary>
         public float Width;
         public float Depth;
+
+        /// <summary>
+        /// Metres across the bed at each point of <see cref="Path"/>. A channel narrows at its
+        /// spring, widens downstream, narrows on steep reaches and flares at its end.
+        /// </summary>
+        public readonly List<float> Widths = new List<float>();
 
         /// <summary>Metres along the channel, head to mouth.</summary>
         public float Length;
@@ -111,7 +120,7 @@ namespace TinyDiggers.Terrain
             var riverCandidates = Candidates(heights, inDisc, water, accumulation, toWater, width, depth, frame, peak,
                 0.15f, 1f, s.MinRiverLength, 12f);
             Place(map, ChannelKind.River, map.RiversWanted, riverCandidates, s.RiverHeadSpacing, heads, random,
-                heights, inDisc, water, toWater, accumulation, channelMask, downstream, stats, width, depth, s, step, cellSize);
+                heights, inDisc, water, toWater, accumulation, channelMask, downstream, stats, width, depth, s, step, cellSize, frame);
 
             // Creeks from the middle ground, clear of the rivers already cut.
             var onRiver = new bool[cells];
@@ -122,7 +131,7 @@ namespace TinyDiggers.Terrain
                 0.1f, 0.65f, s.MinCreekLength, 6f);
             creekCandidates.RemoveAll(cell => toRiver[cell] < s.CreekHeadSpacing * 0.5f);
             Place(map, ChannelKind.Creek, map.CreeksWanted, creekCandidates, s.CreekHeadSpacing, heads, random,
-                heights, inDisc, water, toWater, accumulation, channelMask, downstream, stats, width, depth, s, step, cellSize);
+                heights, inDisc, water, toWater, accumulation, channelMask, downstream, stats, width, depth, s, step, cellSize, frame);
 
             for (var cell = 0; cell < cells; cell++)
                 if (channelMask[cell] == 1)
@@ -207,7 +216,7 @@ namespace TinyDiggers.Terrain
         static void Place(IslandMap map, ChannelKind kind, int wanted, List<int> candidates, float spacing,
             List<Vector2Int> heads, System.Random random, float[] heights, bool[] inDisc, bool[] water, float[] toWater,
             float[] accumulation, byte[] channelMask, int[] downstream, Stats stats, int width, int depth, TerrainGenSettings s,
-            float step, float cellSize)
+            float step, float cellSize, Vector2Int frame)
         {
             var made = 0;
             var tried = new HashSet<int>();
@@ -258,7 +267,7 @@ namespace TinyDiggers.Terrain
 
                     var line = Meander(Smooth(route, width), heights, width, depth, inDisc, channel.Width, s,
                         (float)random.NextDouble() * Mathf.PI * 2f, cellSize);
-                    if (!Cut(channel, line, heights, inDisc, water, channelMask, width, depth, s, step, cellSize))
+                    if (!Cut(channel, line, heights, inDisc, water, channelMask, accumulation, width, depth, s, step, cellSize, frame))
                     {
                         stats.Dropped++;
                         continue;
@@ -420,12 +429,28 @@ namespace TinyDiggers.Terrain
 
                 var run = along.magnitude * cellSize;
                 var fall = Mathf.Abs(HeightAt(heights, width, depth, behind) - HeightAt(heights, width, depth, ahead));
-                var flatness = Mathf.Clamp01(1f - fall / run / 0.1f);
+                // The wide swing gives out by MeanderSlopeLimit. It used to give out at a slope of
+                // one in ten, which is nearly every channel on the island: they measured 1.05
+                // sinuosity, as good as straight (2026-09-24).
+                var flatness = Mathf.Clamp01(1f - fall / run / Mathf.Max(0.02f, s.MeanderSlopeLimit));
                 var ends = Mathf.Clamp01(Mathf.Min(i, total - i) / (wavelength * 0.5f));
                 var taper = ends * ends * (3f - 2f * ends);
                 var normal = new Vector2(-along.y, along.x).normalized;
                 var swing = Mathf.Max(s.MeanderStrength * bedCells, s.MeanderMinSwing);
-                var offset = Mathf.Sin(phase + i / wavelength * Mathf.PI * 2f) * swing * flatness * taper;
+                var u = i / wavelength * Mathf.PI * 2f;
+                // Two swings, not one: a second, faster one at an unrelated phase breaks the sine's
+                // regularity, so no two bends are the same size.
+                var wide = (Mathf.Sin(phase + u) + 0.35f * Mathf.Sin(phase * 1.7f + 1f + u * 2.3f)) / 1.35f;
+                // Where the wide swing is off, a steep stream still wanders, tighter and shorter.
+                // At least four tenths of the least meander, or a one-cell creek wandered by one
+                // cell and still measured 1.06 sinuosity.
+                var steepSwing = Mathf.Max(s.MeanderMinSwing * 0.4f, s.SteepWiggle * bedCells);
+                var steep = Mathf.Sin(phase * 2.9f + 2f + u * 2f) * steepSwing;
+                // The wander has its own, shorter fade at the ends: faded over the wide swing's
+                // half-wavelength, a creek of thirty cells was faded along nearly all of it.
+                var steepEnds = Mathf.Clamp01(Mathf.Min(i, total - i) / (wavelength * 0.15f));
+                var steepTaper = steepEnds * steepEnds * (3f - 2f * steepEnds);
+                var offset = wide * swing * flatness * taper + steep * (1f - flatness) * steepTaper;
                 var point = even[i] + normal * offset;
                 var x = Mathf.FloorToInt(point.x);
                 var z = Mathf.FloorToInt(point.y);
@@ -502,20 +527,34 @@ namespace TinyDiggers.Terrain
         }
 
         /// <summary>
-        /// Cuts the bed along the line: a rounded floor across the bed, then banks rising at
-        /// <see cref="TerrainGenSettings.ChannelBankSlope"/> until they meet the ground. The floor
-        /// is read from the ground first, all the way down, and only then cut, so the cut never
-        /// reads its own hole. It ends at the first point in water, or on a river bed for a creek.
-        /// False if there was too little of it to keep.
+        /// Cuts the bed along the line, and says whether it was kept. The shape of the bed changes
+        /// along its length (Ronan, 2026-09-24: *"realistic looking and varied streams and river
+        /// channels"*); until then every channel was one width and one depth from spring to sea,
+        /// with the same bank on both sides. Now, point by point:
+        ///
+        /// - **it grows downstream** with the water gathered above it, as the square root, from
+        ///   <see cref="TerrainGenSettings.ChannelHeadShare"/> of its drawn width at the spring;
+        /// - **its shape follows the slope**: narrow and deep on a steep reach, wide and shallow
+        ///   on a flat one;
+        /// - **its width wanders** a little, so no two reaches are alike;
+        /// - **it flares** where a creek meets a river and where a river meets the water;
+        /// - **it has pools**, on the outside of bends and in a slower rhythm along straight
+        ///   reaches. A pool is a local hollow; the floor it sits in still never rises towards
+        ///   the mouth;
+        /// - **its banks differ at bends**: the outside is a steep cut bank, the inside a gentle
+        ///   point bar, and the deepest water leans towards the outside.
         /// </summary>
         static bool Cut(Channel channel, List<Vector2> line, float[] heights, bool[] inDisc, bool[] water,
-            byte[] channelMask, int width, int depth, TerrainGenSettings s, float step, float cellSize)
+            byte[] channelMask, float[] accumulation, int width, int depth, TerrainGenSettings s, float step, float cellSize,
+            Vector2Int frame)
         {
             var creek = channel.Kind == ChannelKind.Creek;
-            var half = Mathf.Max(0.5f, channel.Width * 0.5f);
-            var bank = half + Mathf.Max(2f, 1f / cellSize);
-            var floors = new List<float>(line.Count);
-            var floor = float.MaxValue;
+            var baseHalf = Mathf.Max(0.5f, channel.Width * 0.5f);
+            var bank = baseHalf + Mathf.Max(2f, 1f / cellSize);
+
+            // --- where it ends, and the ground it is cut into --------------------------------
+            var grounds = new List<float>(line.Count);
+            var gathered = new List<float>(line.Count);
             var end = line.Count - 1;
             for (var i = 0; i < line.Count; i++)
             {
@@ -526,11 +565,8 @@ namespace TinyDiggers.Terrain
                 // the downhill bank is lower, and a bed cut from the middle would leave the water
                 // nothing to hold it on that side. Cut from the lowest, the uphill bank is cut
                 // deeper instead, which is what a river does to a hillside.
-                var ground = LowestBeside(heights, inDisc, water, width, depth, line[i], bank);
-                floor = Mathf.Min(floor, ground - channel.Depth);
-                if (!water[cell])
-                    floor = Mathf.Max(floor, World.SeaLevel - UnderSea);
-                floors.Add(floor);
+                grounds.Add(LowestBeside(heights, inDisc, water, width, depth, line[i], bank));
+                gathered.Add(accumulation != null ? accumulation[cell] : 1f);
                 if (water[cell] || creek && channelMask[cell] == 1)
                 {
                     end = i;
@@ -541,16 +577,118 @@ namespace TinyDiggers.Terrain
 
             if (end < 4)
                 return false;
+            var count = end + 1;
 
+            // --- the shape, point by point -------------------------------------------------
+            var head = Mathf.Max(1f, gathered[0]);
+            // From the spring's place in the island's own frame, not the grid's: the same seed makes
+            // the same island on a bigger disc, and a spring keyed to grid cells moved every
+            // channel's pools and width as the island moved (LandRadiusTests, 2026-09-24).
+            var fromFrame = channel.Spring - frame;
+            var noiseAt = new Vector2((fromFrame.x * 0.6180339f) % 97f, (fromFrame.y * 0.4142135f) % 89f);
+            var widthShare = new float[count];
+            var depthShare = new float[count];
+            var bendOf = new float[count];
+            for (var i = 0; i < count; i++)
+            {
+                // Hydraulic geometry: width runs as the square root of the water carried, depth
+                // rather more slowly.
+                var grown = Mathf.Sqrt(Mathf.Max(head, gathered[i]) / head);
+                var w = Mathf.Clamp(s.ChannelHeadShare * grown, s.ChannelHeadShare, s.ChannelMouthShare);
+                var d = Mathf.Clamp(0.75f * Mathf.Pow(grown, 0.35f), 0.75f, 1.25f);
+
+                // Slope over three cells either way.
+                var behind = line[Mathf.Max(0, i - 6)];
+                var ahead = line[Mathf.Min(count - 1, i + 6)];
+                var run = Mathf.Max(0.5f, Vector2.Distance(behind, ahead)) * cellSize;
+                var fall = Mathf.Abs(HeightAt(heights, width, depth, behind) - HeightAt(heights, width, depth, ahead));
+                var steep = Mathf.Clamp01(fall / run / 0.3f);
+                w *= Mathf.Lerp(s.ChannelFlatWidening, s.ChannelSteepNarrowing, steep);
+                d *= Mathf.Lerp(0.85f, 1.35f, steep);
+
+                // Wandering width, on a scale of a few bed widths.
+                var wander = Mathf.PerlinNoise(noiseAt.x + i * 0.5f / Mathf.Max(2f, baseHalf * 8f), noiseAt.y) * 2f - 1f;
+                w *= 1f + s.ChannelWidthNoise * wander;
+
+                widthShare[i] = w;
+                depthShare[i] = d;
+
+                // How hard it bends here, signed: positive turns left.
+                var a = line[Mathf.Max(0, i - 4)];
+                var b = line[i];
+                var c = line[Mathf.Min(count - 1, i + 4)];
+                var inward = b - a;
+                var onward = c - b;
+                if (inward.sqrMagnitude > 1e-6f && onward.sqrMagnitude > 1e-6f)
+                    bendOf[i] = Mathf.Asin(Mathf.Clamp((inward.x * onward.y - inward.y * onward.x)
+                        / (inward.magnitude * onward.magnitude), -1f, 1f));
+            }
+
+            // Flares at the end: a creek into a river, a river into the water.
+            var flareLength = Mathf.Min(count, creek ? 8 : 16);
+            var flare = creek ? (channel.EndsInRiver ? s.ConfluenceFlare : 1f) : s.MouthFlare;
+            for (var i = count - flareLength; i < count; i++)
+            {
+                var t = (i - (count - flareLength)) / (float)flareLength;
+                widthShare[i] *= Mathf.Lerp(1f, flare, t * t);
+                depthShare[i] *= Mathf.Lerp(1f, 0.8f, t);
+            }
+
+            // Smoothed, so the bed changes over a few cells rather than from one point to the next.
+            widthShare = Smoothed(widthShare, 6);
+            depthShare = Smoothed(depthShare, 6);
+            bendOf = Smoothed(bendOf, 6);
+
+            var halfAt = new float[count];
+            var depthAt = new float[count];
+            var poolAt = new float[count];
+            var floors = new float[count];
+            var floor = float.MaxValue;
+            var travelled = 0f;
+            for (var i = 0; i < count; i++)
+            {
+                if (i > 0)
+                    travelled += Vector2.Distance(line[i - 1], line[i]);
+                halfAt[i] = Mathf.Max(0.5f, baseHalf * widthShare[i]);
+                depthAt[i] = Mathf.Max(step, channel.Depth * depthShare[i]);
+
+                // The floor the water runs on never rises towards the mouth.
+                floor = Mathf.Min(floor, grounds[i] - depthAt[i]);
+                var x = Mathf.Clamp(Mathf.FloorToInt(line[i].x), 0, width - 1);
+                var z = Mathf.Clamp(Mathf.FloorToInt(line[i].y), 0, depth - 1);
+                if (!water[z * width + x])
+                    floor = Mathf.Max(floor, World.SeaLevel - UnderSea);
+                floors[i] = floor;
+
+                // Pools: hard on the outside of bends, and a gentler rhythm down the straights.
+                var bend = Mathf.Clamp01(Mathf.Abs(bendOf[i]) / 0.35f);
+                var spacing = Mathf.Max(4f, s.ChannelPoolSpacing * halfAt[i] * 2f);
+                var rhythm = 0.5f + 0.5f * Mathf.Sin(travelled / spacing * Mathf.PI * 2f + noiseAt.x);
+                poolAt[i] = depthAt[i] * s.ChannelPoolDepth * Mathf.Max(bend, 0.4f * rhythm * rhythm);
+            }
+
+            // --- the cut -------------------------------------------------------------------
             var bankPerCell = s.ChannelBankSlope * cellSize;
-            var reach = half + MaxBank / bankPerCell;
-            var box = Mathf.CeilToInt(reach);
             var mark = (byte)(creek ? 2 : 1);
             // Every second point: they are half a cell apart, and a cell apart is close enough for
             // a bed at least a cell across.
             for (var i = 0; i <= end; i = i < end && i + 2 > end ? end : i + 2)
             {
                 var at = line[i];
+                var half = halfAt[i];
+                var top = floors[i] + depthAt[i];
+                var bed = floors[i] - poolAt[i];
+                var bend = Mathf.Clamp01(Mathf.Abs(bendOf[i]) / 0.35f);
+                // Turning left puts the outside of the bend on the right.
+                var outsideSign = bendOf[i] > 0f ? -1f : 1f;
+                var forward = line[Mathf.Min(end, i + 1)] - line[Mathf.Max(0, i - 1)];
+                forward = forward.sqrMagnitude > 1e-6f ? forward.normalized : Vector2.right;
+                // The deepest water leans towards the outside of a bend.
+                var lean = 0.35f * half * bend * outsideSign;
+
+                var softest = Mathf.Min(1f, Mathf.Lerp(1f, s.PointBarSoften, bend));
+                var reach = half + MaxBank / (bankPerCell * softest);
+                var box = Mathf.CeilToInt(reach + Mathf.Abs(lean));
                 var cx = Mathf.FloorToInt(at.x);
                 var cz = Mathf.FloorToInt(at.y);
                 for (var dz = -box; dz <= box; dz++)
@@ -566,25 +704,41 @@ namespace TinyDiggers.Terrain
                         var cell = z * width + x;
                         if (!inDisc[cell])
                             continue;
-                        var distance = Vector2.Distance(new Vector2(x + 0.5f, z + 0.5f), at);
-                        if (distance > reach)
+                        var offset = new Vector2(x + 0.5f, z + 0.5f) - at;
+                        var distance = offset.magnitude;
+                        if (distance > reach + Mathf.Abs(lean))
                             continue;
-                        var across = distance / half;
-                        var inBed = distance < half;
-                        var cut = inBed
-                            ? floors[i] + channel.Depth * across * across
-                            : floors[i] + channel.Depth + (distance - half) * bankPerCell;
+                        // Which side of the line: left is +1. (It was the other way round the
+                        // first time, which put every cut bank on the inside of its bend and
+                        // measured 0.98 outside over inside.)
+                        var side = forward.x * offset.y - forward.y * offset.x > 0f ? 1f : -1f;
+                        var sideways = distance * side;
+                        var fromDeepest = Mathf.Abs(sideways - lean);
+                        float cut;
+                        if (fromDeepest < half)
+                        {
+                            var across = fromDeepest / half;
+                            cut = bed + (top - bed) * across * across;
+                        }
+                        else
+                        {
+                            var steepen = side == outsideSign
+                                ? Mathf.Lerp(1f, s.CutBankSteepen, bend)
+                                : Mathf.Lerp(1f, s.PointBarSoften, bend);
+                            cut = top + (fromDeepest - half) * bankPerCell * steepen;
+                        }
+
                         // The bed goes down to the step below, the banks to the nearest. Rounding
                         // the bed to the nearest step let a shallow channel round back up level
                         // with its own banks, which is a channel with no water in it.
-                        cut = inBed
+                        cut = fromDeepest < half
                             ? Mathf.Floor(cut / step) * step
                             : Mathf.Round(cut / step) * step;
                         if (cut < heights[cell])
                             heights[cell] = cut;
                         // At least three quarters of a cell either side: a bed a cell or two wide
                         // would otherwise miss cells the line runs between points over.
-                        if (distance < Mathf.Max(half, 0.75f) && channelMask[cell] == 0)
+                        if (fromDeepest < Mathf.Max(half, 0.75f) && channelMask[cell] == 0)
                             channelMask[cell] = mark;
                     }
                 }
@@ -596,11 +750,30 @@ namespace TinyDiggers.Terrain
                 if (i > 0)
                     length += Vector2.Distance(line[i - 1], line[i]);
                 if (i % 4 == 0 || i == end)
+                {
                     channel.Path.Add(new Vector3(line[i].x, floors[i], line[i].y));
+                    channel.Widths.Add(halfAt[i] * 2f * cellSize);
+                }
             }
 
             channel.Length = length * cellSize;
             return true;
+        }
+
+        /// <summary>Each value averaged with <paramref name="reach"/> either side, narrowing at the ends.</summary>
+        static float[] Smoothed(float[] values, int reach)
+        {
+            var smoothed = new float[values.Length];
+            for (var i = 0; i < values.Length; i++)
+            {
+                var span = Mathf.Min(reach, Mathf.Min(i, values.Length - 1 - i));
+                var sum = 0f;
+                for (var j = i - span; j <= i + span; j++)
+                    sum += values[j];
+                smoothed[i] = sum / (2 * span + 1);
+            }
+
+            return smoothed;
         }
     }
 }
