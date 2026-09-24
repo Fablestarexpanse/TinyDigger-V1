@@ -132,6 +132,15 @@ namespace TinyDiggers.Interaction
         /// </summary>
         [Min(0.05f)] public float bodyScale = 1f;
 
+        [Tooltip("Tip bodies to the ground under their wheels (pitch and roll from the land, yaw from the simulation).")]
+        [SerializeField] bool _groundPose = true;
+
+        [Tooltip("Seconds for a body's pitch and roll to catch up with the ground.")]
+        [SerializeField, Min(0f)] float _tiltSmoothing = 0.15f;
+
+        [Tooltip("Degrees of pitch or roll past which the fit is wrong rather than the vehicle.")]
+        [SerializeField, Min(0f)] float _maxTiltDegrees = GroundPose.DefaultMaxTiltDegrees;
+
         /// <summary>
         /// Cells between machines where they start, from the room a machine actually takes
         /// (<see cref="CrewUnit.DiggerRadius"/>). The crew logic gives every unit one cell, but a
@@ -152,6 +161,11 @@ namespace TinyDiggers.Interaction
         MaterialPropertyBlock _tint;
         readonly List<int> _selection = new List<int>();
         readonly List<GameObject> _rings = new List<GameObject>();
+        /// <summary>Half the length and half the width of each body, in metres, for its ground pose.</summary>
+        readonly List<Vector2> _prints = new List<Vector2>();
+        /// <summary>The pitch and roll each body is drawn at, and how fast they are moving.</summary>
+        readonly List<Vector2> _tilt = new List<Vector2>();
+        readonly List<Vector2> _tiltRate = new List<Vector2>();
         Transform _orderMarker;
         Renderer _orderMarkerRenderer;
         float _orderMarkerAt = float.NegativeInfinity;
@@ -376,6 +390,9 @@ namespace TinyDiggers.Interaction
             _clips.RemoveAt(index);
             _tinted.RemoveAt(index);
             _rings.RemoveAt(index);
+            _prints.RemoveAt(index);
+            _tilt.RemoveAt(index);
+            _tiltRate.RemoveAt(index);
             _lines.RemoveAt(index);
 
             for (var i = _selection.Count - 1; i >= 0; i--)
@@ -408,6 +425,9 @@ namespace TinyDiggers.Interaction
             _renderers.Add(bodyRenderer);
             _robotRenderers.Add(null);
             _rings.Add(null);
+            // The box as it ends up, not as it was asked for: a road machine is shrunk by FitTo
+            // after its parts go on, and its wheels are where the box is.
+            AddPrint(new Vector2(body.transform.localScale.z, body.transform.localScale.x) * 0.5f);
             _animators.Add(null);
             _clips.Add(null);
             _tinted.Add(false);
@@ -445,6 +465,14 @@ namespace TinyDiggers.Interaction
             var over = Mathf.Max(is_.x / wanted.x, Mathf.Max(is_.y / wanted.y, is_.z / wanted.z));
             if (over > 1f)
                 body.localScale /= over;
+        }
+
+        /// <summary>Records a new body's ground footprint, level to start with.</summary>
+        void AddPrint(Vector2 halfSize)
+        {
+            _prints.Add(new Vector2(Mathf.Max(0.05f, halfSize.x), Mathf.Max(0.05f, halfSize.y)));
+            _tilt.Add(Vector2.zero);
+            _tiltRate.Add(Vector2.zero);
         }
 
         /// <summary>
@@ -489,6 +517,7 @@ namespace TinyDiggers.Interaction
             _animators.Add(body.GetComponent<Animator>());
             _clips.Add(null);
             _tinted.Add(false);
+            AddPrint(new Vector2(bounds.size.z, bounds.size.x) * (0.5f * bodyScale));
             _rings.Add(MakeRing($"{role} {i} Ring", body.transform, 0.22f, 0.26f));
         }
 
@@ -891,22 +920,44 @@ namespace TinyDiggers.Interaction
                 var unit = _units[i];
                 // Unit positions are in cells; the terrain's local space is metres.
                 var position = unit.Position * cellSize;
+                var height = unit.Height;
                 var rotation = terrainTransform.rotation * Quaternion.Euler(0f, unit.Heading, 0f);
+                var up = rotation * Vector3.up;
+                if (_groundPose)
+                {
+                    var print = new Footprint(_prints[i].x / cellSize, _prints[i].y / cellSize);
+                    var fit = GroundPose.Fit(grid, unit.Position, unit.Heading, print, _maxTiltDegrees);
+                    var tilt = _tilt[i];
+                    var rate = _tiltRate[i];
+                    // Smoothed, so a one-metre step reads as a lurch rather than a snap.
+                    tilt.x = Mathf.SmoothDamp(tilt.x, fit.Pitch, ref rate.x, _tiltSmoothing);
+                    tilt.y = Mathf.SmoothDamp(tilt.y, fit.Roll, ref rate.y, _tiltSmoothing);
+                    _tilt[i] = tilt;
+                    _tiltRate[i] = rate;
+                    rotation = terrainTransform.rotation * GroundPose.Rotation(unit.Heading, tilt.x, tilt.y);
+                    up = rotation * Vector3.up;
+                    // The plane's height at the centre rather than the ground's, so a machine
+                    // bridging a crest sits on it instead of sinking its tracks in. Taken as an
+                    // offset from the centre sample so the unit's own height lag still applies.
+                    height += fit.Height - TerrainSurface.SampleHeight(grid, unit.Position.x, unit.Position.y);
+                }
+
                 if (_renderers[i] != null)
                 {
                     // Half the box the body actually is, not the size that was asked for: a road
                     // machine is shrunk after its parts go on (FitTo), and lifting it by the size
-                    // before that would leave it hovering.
-                    var lift = _bodies[i].localScale.y * 0.5f;
+                    // before that would leave it hovering. Along the body's own up, so a tipped
+                    // machine still rests on its ground rather than rising out of it.
+                    var lift = up * (_bodies[i].localScale.y * 0.5f);
                     _bodies[i].SetPositionAndRotation(
-                        terrainTransform.TransformPoint(new Vector3(position.x, unit.Height + lift, position.y)), rotation);
+                        terrainTransform.TransformPoint(new Vector3(position.x, height, position.y)) + lift, rotation);
                     _renderers[i].material.color = _selection.Contains(i) ? _selectedColor : BoxColor(unit.Role);
                 }
                 else
                 {
                     // The robot's origin is the ground under it; it hovers by itself.
                     _bodies[i].SetPositionAndRotation(
-                        terrainTransform.TransformPoint(new Vector3(position.x, unit.Height, position.y)), rotation);
+                        terrainTransform.TransformPoint(new Vector3(position.x, height, position.y)), rotation);
                     _bodies[i].localScale = Vector3.one * bodyScale;
                     PlayClip(i, CrewAnimation.StateFor(unit.State, !unit.Inventory.IsEmpty));
                     Tint(i, _selection.Contains(i));

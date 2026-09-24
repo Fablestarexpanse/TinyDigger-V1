@@ -6140,3 +6140,28 @@ that place the cab, so moving a blade or raising a cab cannot quietly make them 
 
 The lift that sits a box on the ground now uses the body's own scale rather than the size that was
 asked for, or the shrunk machines would have hovered by the difference.
+
+### Machines stand on the ground they are driving over (2026-09-24)
+
+Ronan's brief, after Captain of Industry: units stay two-dimensional in the simulation, and only what
+is drawn tips. `Presentation/GroundPose.cs` samples the ground under a body's four wheels, fits a
+plane, and gives back a height, a pitch and a roll; `CrewView` smooths the pitch and roll (0.15 s)
+and builds the rotation as yaw about the world's up, then pitch and roll about the body's own axes,
+so a machine tipped onto a slope still points where the simulation says it does.
+
+Two things shrank the brief. `TerrainSurface.SampleHeight` was already the right sampler — bilinear
+over the smoothed corner field — and it already covers the brief's road case for nothing, because
+corner heights read `GetDrawnHeight` and a built road feeds that hook at its true grade rather than
+its built steps. And the plane fit is not a solver: the four contact points are symmetric about the
+centre, which collapses the least-squares plane to the mean of the four heights plus two differences,
+front minus rear over the wheelbase and right minus left over the track.
+
+The footprint is taken from the **body as it is drawn**, measured after `FitTo` has shrunk it, rather
+than from `CrewUnit.Radius`. The radius is the simulation's spacing rule; this is presentation, and a
+machine should sit on its own visible tracks.
+
+The body follows the **plane's** height at the centre, not the ground's, so a machine bridging a
+crest sits on it rather than sinking its tracks into it. Taken as an offset from the centre sample so
+the unit's existing height lag still applies. Pitch and roll are clamped to ±35°: past that the fit
+is wrong rather than the vehicle, and a cliff edge under one wheel should not stand a dumper on its
+nose.
