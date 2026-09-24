@@ -6242,3 +6242,36 @@ throughput ladder doing what it was built for.
 the island, ninety seconds of play: the digger spent **96% of it digging** (4% walking to a dumper,
 1% loading), and both dumpers reported *"Parked by digger 4"* — the queue the tests describe, in the
 scene Ronan plays. Before the change only one of them could have been assigned at all.
+
+### Mountains are walls, and it is on purpose (2026-09-24)
+
+Ronan: *"take a look at how our mountains are, there is no hills or buildup to them just sheer
+vertical cliffs."* Measured in `MountainProfileTests` over three seeds, on the high ground (the land
+above 60% of the island's highest point):
+
+| seed | highest | mean slope up there | walk to get 10 m lower | land over 60° |
+|---|---|---|---|---|
+| 7 | 39 m | 58.6° | **3.2 m** | 9.6% |
+| 21 | 44 m | 49.4° | **4.4 m** | 15.1% |
+| 99 | 46 m | 60.3° | **3.4 m** | 9.6% |
+
+Ten metres of drop in three and a half metres of walk is an average of about 70° down the *whole*
+flank, not a cliff band on an otherwise walkable hill. There is no apron because nothing ever builds
+one.
+
+**The cause is three settings agreeing with each other, and the tooltip says so out loud.**
+`TerrainGenSettings.TalusRock` is **75°** — "*Steep, so the cliffs the generator lets rock stand in
+survive the settling*". Real scree stands at 33–37°. `MaxCliffStep` is 3 m, which the cell size
+scales to 1.5 m across a 0.5 m cell: 71.6°. And `SettleSlopes` sets each cell's talus to
+`0.9 × lerp(step, cliffStep, clamp01(highGround × 3))`, where `highGround` is the crest noise — so
+**any cell where the crest reaches a third of its height gets the cliff angle**, which is the entire
+massif rather than a few buttresses.
+
+So the settling pass, the one thing that would carve an upper face and pile the waste into a
+footslope, is switched off exactly where mountains are. The mountains are the crest noise, undressed.
+
+**A measuring note worth keeping.** The first version of the test measured slope over one cell and
+reported an empty 10–20° band on every seed, which looked like a finding about the land. It was the
+ruler: on a 1 m height step and a 1 m cell the only slopes that exist are 0° and 26.6°. Over three
+cells either side the band fills in at 13–18%. The apron number never depended on the baseline, which
+is why it is the one to trust.
