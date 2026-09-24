@@ -220,8 +220,14 @@ namespace TinyDiggers.Units.Tests
                         $"({x}, {z}) changed while it waited");
         }
 
+        /// <summary>
+        /// Two haulers and one digger: they queue on it (Ronan, 2026-09-24), where until then the
+        /// second could never be assigned at all — and, having nothing to do, stood where it
+        /// stopped and jammed the one that had. Measured on the same site, the pair went from
+        /// 0.88 m³ a game minute back up to 8.24. See <c>DiggerDutyTests</c>.
+        /// </summary>
         [Test]
-        public void TwoHaulersNeverServeOneDigger()
+        public void TwoHaulersQueueOnOneDigger()
         {
             var digger = Spawn(10, 10);
             var a = Spawn(6, 6, UnitRole.Hauler, 20f);
@@ -237,7 +243,34 @@ namespace TinyDiggers.Units.Tests
                     doubled++;
             });
 
-            Assert.That(doubled, Is.EqualTo(0), "both haulers were sent to the same digger");
+            Assert.That(doubled, Is.GreaterThan(0), "both haulers should have been able to serve the one digger");
+        }
+
+        /// <summary>
+        /// The other half of the same rule: a spare hauler goes to a digger of its own before it
+        /// queues on one that is already served, so a second digger is always worth more than a
+        /// second dumper on the same face.
+        /// </summary>
+        [Test]
+        public void AHaulerTakesAnUnservedDiggerOverAQueue()
+        {
+            var first = Spawn(10, 10);
+            var second = Spawn(10, 16);
+            for (var z = 9; z <= 11; z++)
+                for (var x = 12; x <= 14; x++)
+                    _map.Designate(x, z, DesignationKind.Dig, 6f);
+            for (var z = 15; z <= 17; z++)
+                for (var x = 12; x <= 14; x++)
+                    _map.Designate(x, z, DesignationKind.Dig, 6f);
+
+            var a = Spawn(6, 6, UnitRole.Hauler, 20f);
+            var b = Spawn(7, 7, UnitRole.Hauler, 20f);
+            Run(120f, () => _dispatcher.DiggerFor(a.Id) >= 0 && _dispatcher.DiggerFor(b.Id) >= 0);
+
+            Assert.That(_dispatcher.DiggerFor(a.Id), Is.Not.EqualTo(_dispatcher.DiggerFor(b.Id)),
+                $"one each: {a.Id} serves {_dispatcher.DiggerFor(a.Id)}, {b.Id} serves {_dispatcher.DiggerFor(b.Id)}");
+            Assert.That(_dispatcher.HaulerCountFor(first.Id), Is.EqualTo(1));
+            Assert.That(_dispatcher.HaulerCountFor(second.Id), Is.EqualTo(1));
         }
 
         // --- tipping from the rim -------------------------------------------------------------------
@@ -412,3 +445,4 @@ namespace TinyDiggers.Units.Tests
         }
     }
 }
+

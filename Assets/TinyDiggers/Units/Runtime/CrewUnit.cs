@@ -1434,14 +1434,23 @@ namespace TinyDiggers.Units
                 return false;
             }
 
-            var found = _pathfinder.TryFindNearest(start.x, start.y,
+            // Only the dumper whose turn it is pulls in beside the digger. The rest of its queue
+            // waits back from the face: three of them all trying for the same ring of cells took
+            // the site from 4.95 m³ a game minute to 0.39, every one of them reporting that it was
+            // squeezing past another (2026-09-24).
+            var mine = _dispatcher.HaulerFor(diggerId) == Id;
+            var found = mine && _pathfinder.TryFindNearest(start.x, start.y,
                 (x, z) => Math.Abs(x - at.x) <= 1 && Math.Abs(z - at.y) <= 1 && IsParkCell(x, z), _path);
             if (!found)
             {
                 // Nothing clear right beside it — it is probably standing on the ground it is
-                // digging — so wait as near as there is room for, and let it walk out.
+                // digging — so wait as near as there is room for, and let it walk out. A dumper
+                // waiting its turn holds back a cell further, out of the loading ring.
+                var near = mine ? 1 : 2;
                 found = _pathfinder.TryFindNearest(start.x, start.y,
-                    (x, z) => Math.Abs(x - at.x) <= ParkRadius && Math.Abs(z - at.y) <= ParkRadius && IsParkCell(x, z), _path);
+                    (x, z) => Math.Abs(x - at.x) <= ParkRadius && Math.Abs(z - at.y) <= ParkRadius
+                              && (Math.Abs(x - at.x) > near || Math.Abs(z - at.y) > near || mine)
+                              && IsParkCell(x, z), _path);
                 if (!found)
                     return false;
             }

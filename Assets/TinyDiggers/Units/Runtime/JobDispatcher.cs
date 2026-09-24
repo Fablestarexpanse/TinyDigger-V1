@@ -79,7 +79,7 @@ namespace TinyDiggers.Units
         readonly int[] _occupant;
         readonly int[] _pathUsers;
         readonly List<int> _claimOf = new List<int>();
-        readonly List<int> _haulerOfDigger = new List<int>();
+        readonly List<List<int>> _haulersOfDigger = new List<List<int>>();
         readonly List<int> _diggerOfHauler = new List<int>();
         readonly List<bool> _wantsHauler = new List<bool>();
         readonly List<int> _cellOf = new List<int>();
@@ -203,7 +203,7 @@ namespace TinyDiggers.Units
             var id = _units.Count;
             _units.Add(unit);
             _claimOf.Add(-1);
-            _haulerOfDigger.Add(-1);
+            _haulersOfDigger.Add(new List<int>());
             _diggerOfHauler.Add(-1);
             _wantsHauler.Add(false);
             _cellOf.Add(-1);
@@ -233,8 +233,58 @@ namespace TinyDiggers.Units
 
         // --- haulers ------------------------------------------------------------------------------
 
-        /// <summary>The hauler serving this digger, or -1.</summary>
-        public int HaulerFor(int diggerId) => Lookup(_haulerOfDigger, diggerId);
+        /// <summary>
+        /// The hauler this digger should load next: one of its own that can still take a load, the
+        /// one already standing beside it first, then the nearest. -1 when it has none, or none of
+        /// them has room.
+        ///
+        /// A digger used to have exactly one hauler, so a second dumper could never be given work
+        /// (Ronan, 2026-09-24: dumpers *"queue on the digger"*). Standing idle, the spare parked
+        /// where it stopped and the working one spent its life squeezing past it: one digger and
+        /// two dumpers shifted 0.88 m3 a minute where the same site with one dumper shifted 5.79.
+        /// </summary>
+        public int HaulerFor(int diggerId)
+        {
+            var queue = QueueOf(diggerId);
+            if (queue == null || queue.Count == 0)
+                return -1;
+
+            var digger = UnitOf(diggerId);
+            var at = digger != null ? digger.Cell : new Vector2Int(-1, -1);
+            var best = -1;
+            var bestScore = float.MinValue;
+            foreach (var id in queue)
+            {
+                var hauler = UnitOf(id);
+                if (hauler == null || !hauler.CanTakeALoad)
+                    continue;
+                var here = hauler.Cell;
+                var away = Mathf.Max(Mathf.Abs(here.x - at.x), Mathf.Abs(here.y - at.y));
+                // One that has arrived and is standing waiting beats one that is still on its way,
+                // however near that one has got. A digger that waited on whichever dumper was
+                // closest waited on one wedged in traffic — 570 repaths, still "squeezing past a
+                // unit" ten minutes later — while two more sat parked beside it with room in the
+                // bed (2026-09-24). Then beside it beats near it, and near beats far.
+                var score = (hauler.State == CrewUnitState.Parked ? 10000f : 0f)
+                            + (away <= 1 ? 1000f : 0f) - away;
+                if (score <= bestScore)
+                    continue;
+                bestScore = score;
+                best = id;
+            }
+
+            return best;
+        }
+
+        /// <summary>How many haulers are queued on this digger.</summary>
+        public int HaulerCountFor(int diggerId)
+        {
+            var queue = QueueOf(diggerId);
+            return queue == null ? 0 : queue.Count;
+        }
+
+        List<int> QueueOf(int diggerId) =>
+            diggerId >= 0 && diggerId < _haulersOfDigger.Count ? _haulersOfDigger[diggerId] : null;
 
         /// <summary>The digger this hauler is serving, or -1.</summary>
         public int DiggerFor(int haulerId) => Lookup(_diggerOfHauler, haulerId);
@@ -294,9 +344,13 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
-        /// Gives this hauler a digger to serve: the one it can reach with the fullest load that
-        /// has no hauler yet, diggers asking for one first. -1 when there is nobody to serve.
-        /// One hauler per digger, one digger per hauler.
+        /// Gives this hauler a digger to serve: one of its own worksite's that it can reach, the
+        /// ones with no dumpers yet first, then the ones asking, then the fullest. -1 when there is
+        /// nobody to serve.
+        ///
+        /// A hauler still serves one digger, but a digger takes as many haulers as are given to it
+        /// and loads whichever of them is beside it. Dumpers spread across the diggers before they
+        /// queue, so a second digger is always worth more than a second dumper on the same face.
         /// </summary>
         public int AssignDigger(CrewUnit hauler)
         {
@@ -310,12 +364,13 @@ namespace TinyDiggers.Units
             foreach (var unit in _units)
             {
                 // A dumper serves the diggers of its own worksite and nobody else's.
-                if (unit == null || unit.Role != UnitRole.Digger || HaulerFor(unit.Id) >= 0 || unit.Site != hauler.Site)
+                if (unit == null || unit.Role != UnitRole.Digger || unit.Site != hauler.Site)
                     continue;
                 var there = unit.Cell;
                 if (!Regions.CanReach(here.x, here.y, there.x, there.y))
                     continue;
-                var score = unit.Inventory.Total + (_wantsHauler[unit.Id] ? 1000f : 0f);
+                var score = unit.Inventory.Total + (_wantsHauler[unit.Id] ? 1000f : 0f)
+                            - HaulerCountFor(unit.Id) * 10000f;
                 if (score <= bestScore)
                     continue;
                 bestScore = score;
@@ -324,7 +379,7 @@ namespace TinyDiggers.Units
 
             if (best < 0)
                 return -1;
-            _haulerOfDigger[best] = hauler.Id;
+            QueueOf(best).Add(hauler.Id);
             _diggerOfHauler[hauler.Id] = best;
             _wantsHauler[best] = false;
             return best;
@@ -337,16 +392,17 @@ namespace TinyDiggers.Units
             if (digger >= 0)
             {
                 _diggerOfHauler[unitId] = -1;
-                if (Lookup(_haulerOfDigger, digger) == unitId)
-                    _haulerOfDigger[digger] = -1;
+                QueueOf(digger)?.Remove(unitId);
             }
 
-            var hauler = Lookup(_haulerOfDigger, unitId);
-            if (hauler >= 0)
+            // Called with a digger's id as well, which lets its whole queue go.
+            var queue = QueueOf(unitId);
+            if (queue != null && queue.Count > 0)
             {
-                _haulerOfDigger[unitId] = -1;
-                if (Lookup(_diggerOfHauler, hauler) == unitId)
-                    _diggerOfHauler[hauler] = -1;
+                foreach (var id in queue)
+                    if (Lookup(_diggerOfHauler, id) == unitId)
+                        _diggerOfHauler[id] = -1;
+                queue.Clear();
             }
         }
 

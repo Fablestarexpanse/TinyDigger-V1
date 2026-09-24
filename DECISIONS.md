@@ -6165,3 +6165,75 @@ crest sits on it rather than sinking its tracks into it. Taken as an offset from
 the unit's existing height lag still applies. Pitch and roll are clamped to ±35°: past that the fit
 is wrong rather than the vehicle, and a cliff edge under one wheel should not stand a dumper on its
 nose.
+
+### Where a digger's time goes, measured (2026-09-24)
+
+Ronan: *"the excavators don't seem to dig consistently, there is a lot of stopping, doing nothing,
+taking a scoop, waiting."* Counted rather than guessed, in `DiggerDutyTests` — every state both
+machines are in over ten game minutes on a face that never runs out, with a tip a measured distance
+away:
+
+| site | m³ a game minute | digger's time |
+|---|---|---|
+| one dumper, 3 m haul | 8.00 | Digging 58%, WaitingForHauler 20%, Moving 17%, Transferring 5% |
+| one dumper, 10 m haul | 5.79 | Digging 42%, WaitingForHauler 37%, Moving 12%, Waiting 6% |
+| **two dumpers, 10 m haul** | **0.88** | **WaitingForHauler 90%**, Digging 6% |
+
+The first two are the shape you would expect of a machine that loads a truck and then has to wait
+for it: the longer the haul, the more of the digger's life is spent standing still. That is a design
+question about pairing, not a fault.
+
+The third is a fault. **A second dumper does not help the pair, it destroys it** — 5.79 m³ a minute
+falls to 0.88, near enough seven times worse than the same site with one dumper. The split says why
+it cannot be the haul: dumper 1 spends 83% of its life in `Waiting`, which is the traffic state, not
+the hauling one, and dumper 2 spends 91% `Idle` saying *"no digger to serve"*.
+
+`JobDispatcher.AssignDigger` is one hauler per digger and one digger per hauler, so with a single
+digger the second dumper can never be given work — and, being assigned nothing, it stands where it
+is and the working dumper spends its life trying to squeeze past it.
+
+The detail says the same thing twice over. In the two-dumper runs the working dumper ends on
+**529 and 568 repaths** saying *"Squeezing past a unit"*, while the spare sits on 3–18 saying
+*"no digger to serve"*. And three dumpers **recover to 4.95 m³ a minute** — not because three is
+better than two, but because the two that could not be assigned happened to wander far enough from
+the face to stop blocking the one that could.
+
+**Ruling (Ronan, 2026-09-24): dumpers queue on the digger.** A hauler still serves one digger, but a
+digger takes as many haulers as it is given and loads whichever of them is beside it. Dumpers are
+handed to the diggers with none first, so a second digger is always worth more than a second dumper
+on the same face.
+
+Very little had to move for it. `JobDispatcher._haulerOfDigger` became a list per digger;
+`HaulerFor` now answers "which of my dumpers should I load next" — the one already beside it, then
+the nearest with room — rather than "my dumper"; `AssignDigger` dropped the "that digger already has
+one" exclusion and scores a queue length of n at −10,000n. Nothing in `CrewUnit` changed at all: it
+already tipped into **any** adjacent hauler with room (`TryTransferToAdjacentHauler`), and haulers
+already park clear of each other and of each other's routes (`IsParkCell`), so the queue forms by
+itself.
+
+**Measured after the queue, and it was two faults, not one.** The queue alone took two dumpers on a
+10 m haul from 0.88 to 8.24 m³ a game minute — better than the 5.79 one dumper manages, which is what
+a second dumper is for. But three dumpers then *fell* to 0.39: all three tried for the same ring of
+cells beside the digger and wedged, each reporting it was squeezing past another. Two more rules,
+both measured:
+
+- **Only the dumper whose turn it is pulls in beside the digger.** The rest of its queue hold a cell
+  further back (`CrewUnit.TryPlanServe`).
+- **A digger waits for a dumper that has arrived, not the nearest one.** It had been waiting on
+  whichever was closest, which was a dumper wedged in traffic — 570 repaths, still "squeezing past a
+  unit" ten minutes later — while two more sat parked beside it with room in the bed
+  (`JobDispatcher.HaulerFor`). This last rule is what fixed the short haul, where the round trip is
+  quick enough that both machines are at the face at once.
+
+| site | before | after |
+|---|---|---|
+| one dumper, 3 m haul | 8.00 | 8.00 |
+| one dumper, 10 m haul | 5.79 | 5.79 |
+| two dumpers, 3 m haul | 0.78 | **8.10** |
+| two dumpers, 10 m haul | 0.88 | **7.09** |
+| three dumpers, 10 m haul | 4.95 | **8.10** |
+
+A single dumper is untouched, which is the control: nothing was traded away to get this. What the
+numbers say about the game is that **around 8 m³ a game minute is what this face and this digger can
+give** — past that, more dumpers buy nothing, and the next step up is a second digger. That is the
+throughput ladder doing what it was built for.
