@@ -65,7 +65,7 @@ MonoBehaviour:
     Radius: 3
   ThermalIterations: 40
   TalusSoil: 38
-  TalusRock: 75
+  TalusRock: 45
   SettleIterations: 16
   FillPits: 1
   Shape: 1

@@ -6428,3 +6428,52 @@ really there.
 **Seen in the game, and not yet dealt with:** white foam drawn as a sawtooth along stepped banks,
 and spiky teeth along a dark rock ridge (`Screenshots/Rivers/river-1.png`). Neither is from this work;
 both are worth a look.
+
+### Ridge teeth and river-bank foam (2026-09-24)
+
+Ronan: *"fix the spiky ridge teeth and the foam sawtooth."*
+
+**The mountain work before this never reached the game.** The game reads
+`Terrain/Settings/IslandSettings.asset`, and a value serialised there beats the code's default:
+`TalusRock` was still **75** in the asset when the code said 45, so the "real talus" commit only ever
+changed the test islands (which use code defaults). Set to 45 in the asset now. `MountainCrest` in the
+asset is 80–130 m, set on purpose by an earlier commit, and left alone. **Anything tuned on
+`TerrainGenSettings` has to be checked against that asset**, not only the defaults.
+
+**The teeth were knife-edge crests built by `Relax`.** Measured in the game: a face rising exactly the
+greatest cliff step, 1.5 m a cell for twelve cells, 18 m up to a crest one cell wide with a similar
+drop behind — and 21 of those peaks within 20 cells along one crest, stepping sideways a row every four
+or five cells. The noise asks for about 80 degrees by a ridge, which neither the grid nor 16 passes of
+settling can hold, so the final shape of a summit is made entirely by `Relax`, building up from the
+foot at whatever `CliffMask` allows. That mask was steepness alone, so every ridge was a cliff and the
+cliff bands chosen by the settling counted for nothing where the shape was actually made. Now the mask
+is **steep, in a cliff band, and not a crest** (a cell more than the ordinary step per cell above the
+ring 1.5 m round it is a summit). On the game island: sharp peaks **390 → 47**, knife-edge cells
+**1310 → 240**, highest peak 87 m → 78 m.
+
+Alongside the mask, a crease-softening pass after the settling (`SoftenCreases`: scree filled at the
+foot of a face, a knife crest taken down to one step over its higher side). On its own, before the
+mask, it did nothing at the crest measured — `Relax` overwrote it. With the mask it matters: the mask
+alone leaves **106** peaks and **554** knife cells, the two together **47** and **240**. It was taken out
+once on the strength of the 1 m test islands, where it barely shows, and put back when the game island
+said otherwise — measure on the island that ships.
+
+Two things tried and taken out, each measured: letting `Relax` honour the settling's per-cell talus
+(knife cells rose, teeth stayed); rounding the ridged noise's fold (land over 60 degrees rose on all
+three seeds and peaks grew).
+
+The terrain shader now blends top and cut material across the whole slope band with a noise-pushed
+edge, instead of switching outright at its middle (`step(0.5, cutAmount)`), which drew a hard edge that
+followed the mesh triangles.
+
+**The river-bank foam.** The white walls were the dynamic-water mesh's edge: a dry vertex was sunk
+under its ground, so every wet-to-dry triangle was a slanted skirt, cut straight across where the wet
+flag crossed a half, and the thin water left above the bank was painted solid white by the shore foam.
+A dry vertex beside water is now held at the lowest neighbouring water level, so the surface runs flat
+past its edge and the ground cuts the shoreline, and the edge fade and shore foam read the real water
+depth from the scene depth texture (`PromptWaffle Dynamic Water`, generic to the package). Compared at
+the same moment (140 s in), the stepped shelf and stepped glint are gone.
+
+**Most of the white in the first screenshot was the first seconds of play**, while water films spread
+and settle over the banks; at 140 s both shaders show little white. **Still open:** a river running down
+a steep gorge shows its rapids as a stepped white strip.

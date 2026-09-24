@@ -230,6 +230,15 @@ Shader "TinyDiggers/Terrain Triplanar"
 
                 float slope = degrees(acos(saturate(geometryNormal.y)));
                 float cutAmount = saturate((slope - _SteepStart) / max(_SteepEnd - _SteepStart, 0.001));
+                // Where the cut shows, blended over the whole slope band and pushed about by noise,
+                // strongest mid-band and nothing at either end. It used to switch from the top
+                // material to the cut one outright at the band's middle; the slope comes from
+                // normals interpolated across triangles, so on a face not square to the grid that
+                // middle runs triangle by triangle, and the hard switch drew it as a row of light
+                // teeth along the foot of every dark face (2026-09-24).
+                float cutNoise = (ValueNoise(positionWS.xz * 0.55) * 0.65 + ValueNoise(positionWS.xz * 2.1 + 7.0) * 0.35) - 0.5;
+                float cutBlend = saturate(cutAmount + cutNoise * 1.2 * 4.0 * cutAmount * (1.0 - cutAmount));
+                cutBlend = cutBlend * cutBlend * (3.0 - 2.0 * cutBlend);
 
                 float3 axisWeights = pow(abs(geometryNormal), _TriplanarSharpness);
                 axisWeights /= max(axisWeights.x + axisWeights.y + axisWeights.z, 0.0001);
@@ -266,12 +275,22 @@ Shader "TinyDiggers/Terrain Triplanar"
                     // On a steep face the cut shows the layer underneath, in its cut variant
                     // where the set has one.
                     float cutSlice = _MaterialParams[(int)exposedSlice].y;
-                    float slice = lerp(topSlice, cutSlice, step(0.5, cutAmount));
 
-                    half4 albedoSample = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), albedoUV, axisWeights, slice);
-                    half4 normalSample = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Normals, sampler_Normals), detailUV, axisWeights, slice);
+                    // The top material, the cut one, or a blend of the two across the band. Only
+                    // the band samples both; the gradients are explicit, so the branch is safe.
+                    float firstSlice = cutBlend >= 0.999 ? cutSlice : topSlice;
+                    half4 albedoSample = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), albedoUV, axisWeights, firstSlice);
+                    half4 normalSample = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Normals, sampler_Normals), detailUV, axisWeights, firstSlice);
+                    half smooth = _MaterialParams[(int)firstSlice].x;
+                    if (cutBlend > 0.001 && cutBlend < 0.999 && cutSlice != topSlice)
+                    {
+                        half4 cutAlbedo = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), albedoUV, axisWeights, cutSlice);
+                        half4 cutNormal = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Normals, sampler_Normals), detailUV, axisWeights, cutSlice);
+                        albedoSample = lerp(albedoSample, cutAlbedo, cutBlend);
+                        normalSample = lerp(normalSample, cutNormal, cutBlend);
+                        smooth = lerp(smooth, _MaterialParams[(int)cutSlice].x, cutBlend);
+                    }
                     half3 n = normalSample.rgb * 2.0 - 1.0;
-                    half smooth = _MaterialParams[(int)slice].x;
 
                     if (ids.a > 0.5)
                     {
@@ -310,7 +329,7 @@ Shader "TinyDiggers/Terrain Triplanar"
                 float mottle = ValueNoise(positionWS.xz / _MottleRepeat) * 2.0 - 1.0;
                 albedo *= 1.0 + mottle * _MottleStrength;
                 albedo *= _Tint.rgb;
-                albedo *= 1.0 - cutAmount * _CutDarken;
+                albedo *= 1.0 - cutBlend * _CutDarken;
 
                 // Slope tint: steep ground cools and darkens a little whatever the light is doing,
                 // so a face reads as steep even on the shadowed side of a hill.

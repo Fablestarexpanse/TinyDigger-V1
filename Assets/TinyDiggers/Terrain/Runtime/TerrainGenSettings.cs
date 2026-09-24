@@ -175,6 +175,15 @@ namespace TinyDiggers.Terrain
             "the settling is the only thing that cuts a face and piles the waste into a footslope.")]
         [Range(10f, 89f)] public float TalusRock = 45f;
 
+        [Tooltip("Passes of crease softening after the slopes settle: scree piled at the foot of a " +
+            "face and a top put on a knife-edge crest. Each pass reaches one cell further. On the " +
+            "game island it takes the sharp peaks left by the cliff mask from 106 to 47 and the " +
+            "knife-edge cells from 554 to 240 (2026-09-24); on a 1 m test island it barely shows.")]
+        [Range(0, 32)] public int CreaseSoftenPasses = 8;
+
+        [Tooltip("How far each pass moves a creased cell toward its neighbours, beyond one height step.")]
+        [Range(0f, 1f)] public float CreaseSoften = 0.5f;
+
         [Tooltip("Share of the high ground allowed to stand as a cliff band. The rest of the " +
             "mountain settles to TalusRock, so a massif reads as a walkable flank with rock bands " +
             "in it rather than as one wall.")]
@@ -236,6 +245,12 @@ namespace TinyDiggers.Terrain
             "rule, because soil slumps. Clamping every steep face to one metre is what planes a " +
             "mountain into flat forty-five degree facets.")]
         [Min(1f)] public float MaxCliffStep = 3f;
+
+        [Tooltip("Metres round a cell that decide whether it is a crest: standing more than the " +
+            "ordinary step per cell above that ring, it is a summit, and a summit is never a " +
+            "cliff. Without it the crests were one-cell knives at the full cliff step, drawn as " +
+            "rows of teeth (2026-09-24).")]
+        [Min(0.25f)] public float CliffCrestReach = 1.5f;
 
         [Tooltip("Degrees of smoothed slope at which ground is allowed to stand in a cliff.")]
         [Range(10f, 80f)] public float CliffSlope = 55f;

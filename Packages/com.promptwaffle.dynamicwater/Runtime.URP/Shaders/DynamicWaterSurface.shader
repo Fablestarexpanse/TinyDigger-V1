@@ -1,8 +1,12 @@
 // PromptWaffle Dynamic Water System: the surface of a simulated zone, for URP.
 //
 // Every vertex of the flat grid (WaterZoneRenderer) reads the zone's state texture: (surface
-// height, depth, velocity x, velocity z) per cell. It is lifted to the surface, and sunk under the
-// ground where the cell is dry so nothing shows there. The fragment:
+// height, depth, velocity x, velocity z) per cell. It is lifted to the surface. A dry vertex beside
+// water is held at the lowest neighbouring water level, so the surface runs on flat past its edge and
+// the ground cuts the shoreline; a dry vertex with no water beside it is sunk under the ground. The
+// shore fade and shore foam read the real water depth from the scene depth texture, so the edge
+// follows the ground's own contour rather than the simulation's cells. Needs URP's depth texture as
+// well as its opaque texture. The fragment:
 // - normal from the surface's slope, read from the state texture at the pixel;
 // - colour absorbed with depth, over the refracted scene (URP opaque texture);
 // - foam carried by the flow: two scrolling noise phases along the velocity, cross-faded, so the
@@ -67,6 +71,7 @@ Shader "PromptWaffle/Dynamic Water Surface"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareOpaqueTexture.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
                 half4 _Shallow;
@@ -168,6 +173,36 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 return displacement;
             }
 
+            // Height for a dry vertex: the lowest wet surface one vertex step away, a hair under it,
+            // so the water runs on flat past its edge and the ground cuts the shoreline. With no
+            // water beside it the vertex is sunk under its own ground so nothing shows there.
+            //
+            // It used to sink every dry vertex. A triangle from a wet vertex down to a sunk one is
+            // a slanted skirt, the fragment cut it where the interpolated wet flag crossed a half,
+            // and what stood above the bank was paper-thin water the shore foam painted solid
+            // white: a stepped white wall down every river bank, one vertex step to a tooth.
+            float DryStandIn(float2 uv, float ground, out float lifted)
+            {
+                float2 step = _WaterTexel.xy * max(1.0, _WaterTexel.w);
+                float lowest = 1e6;
+                [unroll]
+                for (int j = -1; j <= 1; j++)
+                {
+                    [unroll]
+                    for (int i = -1; i <= 1; i++)
+                    {
+                        if (i == 0 && j == 0)
+                            continue;
+                        float4 s = State(uv + float2(i * step.x, j * step.y));
+                        if (s.x > -1e5 && s.y > _DryDepth)
+                            lowest = min(lowest, s.x);
+                    }
+                }
+
+                lifted = lowest < 1e5 ? 1.0 : 0.0;
+                return lifted > 0.5 ? lowest - 0.02 : ground - 0.15;
+            }
+
             // Height for a vertex over a wall: the highest non-wall surface one vertex step away,
             // or the mesh's own height when it is walled in on every side.
             float WallStandIn(float2 uv, float fallback)
@@ -192,13 +227,16 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 float4 state = State(uv);
                 bool wall = state.x < -1e5;
                 float wet = (!wall && state.y > _DryDepth) ? 1.0 : 0.0;
-                // Dry: sink just under the ground so the triangle folds out of sight. A wall vertex
-                // (the void round the world) takes the highest open neighbour instead: sent far
-                // down, the triangles along the rim stretched into curtains hanging under the map.
+                // Dry: held at the water beside it, or sunk under the ground (DryStandIn). A wall
+                // vertex (the void round the world) takes the highest open neighbour instead: sent
+                // far down, the triangles along the rim stretched into curtains under the map.
                 float surface = state.x;
+                float lifted = 0.0;
                 if (wall)
-                    surface = WallStandIn(uv, input.positionOS.y);
-                positionWS.y = surface - (1.0 - wet) * 0.15;
+                    surface = WallStandIn(uv, input.positionOS.y) - 0.15;
+                else if (wet < 0.5)
+                    surface = DryStandIn(uv, state.x, lifted);
+                positionWS.y = surface;
                 output.baseXZ = positionWS.xz;
                 output.swell = 0;
                 if (wet > 0.5 && _PWWaveCount > 0)
@@ -213,7 +251,9 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 output.positionWS = positionWS;
                 output.positionCS = TransformWorldToHClip(positionWS);
                 output.uv = uv;
-                output.wet = wet;
+                // A vertex held at the water beside it draws, as a wet one does; the ground in
+                // front of it decides where the water stops.
+                output.wet = max(wet, lifted);
                 output.fogFactor = ComputeFogFactor(output.positionCS.z);
                 return output;
             }
@@ -257,8 +297,22 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 float4 state = State(input.uv);
                 float depth = state.y;
                 float2 velocity = state.zw;
-                if (input.wet < 0.5 || depth <= _DryDepth)
+                if (input.wet < 0.5)
                     discard;
+
+                // How deep the water really is under this pixel, down to whatever the scene drew
+                // behind it: the ray's length through the water, turned into a vertical depth. It
+                // follows the ground's own contour, where the simulation's depth steps from cell to
+                // cell. It is what fades the edge and foams the shore.
+                float2 screenUV = GetNormalizedScreenSpaceUV(input.positionCS);
+                float sceneEye = LinearEyeDepth(SampleSceneDepth(screenUV), _ZBufferParams);
+                float surfaceEye = -TransformWorldToView(input.positionWS).z;
+                float3 ray = normalize(input.positionWS - _WorldSpaceCameraPos);
+                float3 camForward = -UNITY_MATRIX_V[2].xyz;
+                float throughWater = max(0.0, sceneEye - surfaceEye) / max(0.05, dot(ray, camForward));
+                float realDepth = throughWater * saturate(-ray.y);
+                // Out in the open the simulation's depth is the truer one; at the edge, the ground's.
+                float edgeDepth = lerp(realDepth, depth, smoothstep(0.3, 0.8, depth));
 
                 // Normal from the slope of the surface.
                 float here = state.x;
@@ -298,7 +352,7 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 float2 windSlope = WindRippleSlope(input.positionWS.xz, wind) * _WindRipples * saturate(depth / 0.5) * 0.25;
                 normal = normalize(normal - float3(windSlope.x, 0, windSlope.y));
 
-                float shore = 1.0 - saturate(depth / 0.35);
+                float shore = 1.0 - saturate(edgeDepth / 0.35);
                 float foamAmount = saturate(speed * _FoamFromSpeed + shore * _ShoreFoam);
                 // Whitecaps: crests above the threshold share of the local swell, in deep rough water.
                 float crest = saturate((input.swell.x - _PWWaveParams.w) / max(0.05, 1.0 - _PWWaveParams.w));
@@ -306,8 +360,7 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 float foam = smoothstep(1.0 - foamAmount, 1.0 - foamAmount + 0.25, pattern) * foamAmount;
 
                 // Refraction: the scene under the water, bent by the normal, tinted by depth.
-                float2 screenUV = GetNormalizedScreenSpaceUV(input.positionCS);
-                float2 bent = screenUV + normal.xz * _Refraction * saturate(depth);
+                float2 bent = screenUV + normal.xz * _Refraction * saturate(edgeDepth);
                 half3 under = SampleSceneColor(bent);
                 // Light through water loses red first, then green, then blue: the seabed seen
                 // through it shifts toward teal and fades, and the water's own scattered colour
@@ -335,7 +388,7 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 colour = lerp(colour, _Foam.rgb * lerp(0.6, 1.0, shadow), foam);
                 colour = MixFog(colour, input.fogFactor);
 
-                float alpha = saturate(depth / _EdgeFade);
+                float alpha = saturate(edgeDepth / _EdgeFade);
                 return half4(colour, alpha);
             }
             ENDHLSL

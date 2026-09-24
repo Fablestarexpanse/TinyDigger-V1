@@ -322,6 +322,8 @@ namespace TinyDiggers.Terrain
                     * Mathf.Max(0.05f, settings.GenerationCellSize);
                 SettleSlopes(heights, land, upland, cliffBands, width, depth, step, rockRise,
                     settings.MaxCliffStep, settings.SettleIterations);
+                if (upland != null && settings.CreaseSoftenPasses > 0)
+                    SoftenCreases(heights, land, upland, width, depth, step, settings.CreaseSoftenPasses, settings.CreaseSoften);
             }
 
             var isLand = new bool[cells];
@@ -334,7 +336,7 @@ namespace TinyDiggers.Terrain
             // Where the land wants to stand up, it is allowed to: a cliff mask from the slope of
             // the field before it is relaxed, so the relaxation knows which faces are rock before
             // there are any materials to ask.
-            var cliff = CliffMask(heights, inDisc, width, depth, settings);
+            var cliff = CliffMask(heights, inDisc, width, depth, settings, step, cliffBands);
             if (cliffCoast != null)
                 MarkCliffCoast(cliff, cliffCoast, land, width, depth, Mathf.CeilToInt(4f / Mathf.Max(0.1f, settings.GenerationCellSize)));
             var sweeps = Relax(heights, isLand, cliff, width, depth, step, settings.MaxCliffStep);
@@ -892,6 +894,87 @@ namespace TinyDiggers.Terrain
                         heights[cell] = Mathf.Max(World.SeaLevel + step, window[z * w + x]);
                 }
             });
+        }
+
+        /// <summary>
+        /// Scree at the foot of a face, and a top on a knife-edge crest, on the high ground (Ronan,
+        /// 2026-09-24: "fix the spiky ridge teeth"). A cell sharply below the mean of its eight
+        /// neighbours is at the foot of something steep: it is filled a share of the way up,
+        /// beyond one height step, which over a few passes builds an apron. A cell more than a step
+        /// above both of its neighbours across any line is a knife: it is taken down to one step
+        /// over the higher of them. A plane, however steep, is its own neighbours' mean and is left
+        /// alone, so a cliff face stays a cliff.
+        ///
+        /// It works with the crest rule in <see cref="CliffMask"/>, not instead of it: the mask
+        /// decides what the relaxation may build, this takes the edge off what the settling left.
+        /// </summary>
+        static void SoftenCreases(float[] heights, bool[] land, float[] upland, int width, int depth,
+            float step, int passes, float strength)
+        {
+            var current = heights;
+            var next = new float[heights.Length];
+            for (var pass = 0; pass < passes; pass++)
+            {
+                var from = current;
+                var to = next;
+                Parallel.For(0, depth, z =>
+                {
+                    for (var x = 0; x < width; x++)
+                    {
+                        var cell = z * width + x;
+                        var h = from[cell];
+                        to[cell] = h;
+                        if (!land[cell] || x == 0 || z == 0 || x == width - 1 || z == depth - 1)
+                            continue;
+                        var weight = Mathf.Clamp01(upland[cell] * 2f);
+                        if (weight <= 0f)
+                            continue;
+                        var sum = 0f;
+                        var count = 0;
+                        for (var dz = -1; dz <= 1; dz++)
+                            for (var dx = -1; dx <= 1; dx++)
+                            {
+                                if (dx == 0 && dz == 0)
+                                    continue;
+                                var other = (z + dz) * width + x + dx;
+                                if (!land[other])
+                                    continue;
+                                sum += from[other];
+                                count++;
+                            }
+
+                        if (count < 8)
+                            continue;
+                        var below = sum / count - h;
+                        if (below > step)
+                        {
+                            to[cell] = h + strength * weight * (below - step);
+                            continue;
+                        }
+
+                        // A knife: higher than both of its neighbours across some line by more than
+                        // a step each (diagonals by a step and a half, being further away).
+                        var knife = 0f;
+                        for (var axis = 0; axis < 4; axis++)
+                        {
+                            var ax = axis == 1 ? 0 : 1;
+                            var az = axis == 0 ? 0 : axis == 3 ? -1 : 1;
+                            var reach = axis < 2 ? step : step * 1.41421356f;
+                            var over = h - Mathf.Max(from[(z + az) * width + x + ax], from[(z - az) * width + x - ax]) - reach;
+                            if (over > knife)
+                                knife = over;
+                        }
+
+                        if (knife > 0f)
+                            to[cell] = h - weight * knife;
+                    }
+                });
+                current = to;
+                next = from;
+            }
+
+            if (!ReferenceEquals(current, heights))
+                Array.Copy(current, heights, heights.Length);
         }
 
         /// <summary>
@@ -1497,14 +1580,52 @@ namespace TinyDiggers.Terrain
         /// measured on a smoothed field so the answer is about the hillside rather than about one
         /// cell of a staircase. These are the cells the material pass will call rock.
         /// </summary>
-        static bool[] CliffMask(float[] heights, bool[] inDisc, int width, int depth, TerrainGenSettings settings)
+        static bool[] CliffMask(float[] heights, bool[] inDisc, int width, int depth, TerrainGenSettings settings, float step,
+            float[] cliffBands)
         {
             var smoothed = SurfaceMaterials.Smooth(heights, inDisc, width, depth, Mathf.Max(1, settings.SlopeSmoothing));
             var cliff = new bool[heights.Length];
-            for (var z = 0; z < depth; z++)
+            // A crest is never a cliff: a cell standing well above the ring of cells round it is
+            // on a summit, however steep the ground is there. The relaxation after this builds
+            // every mountain up from its foot at whatever this mask allows, and where the noise
+            // asks for more than that (it asks for 80 degrees by a ridge) the summit it makes is
+            // entirely its own: diamond pyramids at the full cliff step with a crest one cell
+            // wide, and a crest not square to the grid steps sideways every few cells into a row
+            // of teeth — measured in the game at 1.5 m a cell for twelve cells up to a knife
+            // (Ronan, 2026-09-24: "fix the spiky ridge teeth"). At the ordinary step a crest's
+            // stair is half a metre, too small to read; the faces below it keep their cliffs.
+            var ring = Mathf.Max(1, Mathf.RoundToInt(settings.CliffCrestReach / Mathf.Max(0.05f, settings.GenerationCellSize)));
+            var proud = ring * step;
+            Parallel.For(0, depth, z =>
+            {
                 for (var x = 0; x < width; x++)
-                    cliff[z * width + x] = inDisc[z * width + x]
-                        && SurfaceMaterials.SlopeDegrees(smoothed, inDisc, width, depth, x, z, settings.GenerationCellSize) >= settings.CliffSlope;
+                {
+                    var cell = z * width + x;
+                    // Only a cliff band may stand as a cliff (Ronan, 2026-09-24: real talus, cliffs
+                    // as bands). This mask used to be steepness alone, and the noise is steep all
+                    // along every ridge, so every ridge was built as a cliff and the bands the
+                    // settling had picked counted for nothing here, where the final shape is made.
+                    if (!inDisc[cell] || cliffBands != null && cliffBands[cell] < 0.5f
+                        || SurfaceMaterials.SlopeDegrees(smoothed, inDisc, width, depth, x, z, settings.GenerationCellSize) < settings.CliffSlope)
+                        continue;
+                    var sum = 0f;
+                    var count = 0;
+                    for (var dz = -ring; dz <= ring; dz++)
+                        for (var dx = -ring; dx <= ring; dx++)
+                        {
+                            if (Math.Max(Math.Abs(dx), Math.Abs(dz)) != ring)
+                                continue;
+                            var ax = x + dx;
+                            var az = z + dz;
+                            if (ax < 0 || az < 0 || ax >= width || az >= depth || !inDisc[az * width + ax])
+                                continue;
+                            sum += heights[az * width + ax];
+                            count++;
+                        }
+
+                    cliff[cell] = count == 0 || heights[cell] - sum / count <= proud;
+                }
+            });
             return cliff;
         }
 
