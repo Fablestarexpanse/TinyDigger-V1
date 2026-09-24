@@ -5890,3 +5890,54 @@ between the camera and a cutting is painted over where the cutting shows.
 **Not done from the list:** inserting and deleting a node mid-road, T-junctions that split a road,
 joining while dragging an end, and direction arrows. A click on an existing road with no draft still
 picks it up to edit, so a new road cannot start from a built road's node — only end on one.
+
+## 2026-09-24 — Roads graded smooth, and the ground they cross until they are surfaced
+
+Asked: *"is there a way to get our roads to look smoother and more precise, they should be whatever
+material they go across until we have units lay the final layer down"*; and, on the stages, *"I had
+plans for a bulldozer bot that smoothes the road, then another unit that lays the road"*, with the
+speed only once paved.
+
+**Why they looked rough.** The scene's height step is 0.5 m and `RoadPlanner.Footprint` rounds
+every road cell to it, so a 12% road — six centimetres a half-metre cell — was built as flat treads
+four metres long with a half-metre riser between them. The corner-averaging renderer turns each
+riser into a short ramp, but it is a staircase however smooth the spline. Then the moment a cell's
+earthwork was met, `RoadBuilder.Tick` turned its top to gravel, so each tread showed as a grey block
+with a saw-tooth edge along the cell grid.
+
+**What changed.** A road now goes through the stages the crew will work it through:
+earthworks → **graded** → **surfaced**.
+
+- `RoadPlanner.Footprint` also hands back each cell's height *before* rounding (`exact`), and the
+  game now plans every footprint cell, settled ones included, so each has one.
+- `RoadBuilder` grades a cell once its earthwork is met and remembers both heights. `Drawn(cell,
+  height)` gives the true height for a graded cell still standing at its planned step, and the
+  height it is otherwise, so a graded cell dug into later shows the hole.
+- `TerrainGrid.DrawnHeight` carries that to what draws the ground: the smoothed renderer (all
+  levels of detail) and `TerrainSurface`, which is what units' bodies and the camera ride. The
+  simulation never reads it. `RoadsHost` sets it and marks a cell's chunk dirty whenever it is
+  graded or loses its grading.
+- **Grading is the bulldozer's job** (`Grade(x, z)`, `NeedsGrading`); `AutoGrade` does it straight
+  away until that unit exists — turn it off when it does. **Surfacing is the paver's**
+  (`LaySurface(x, z)`, `NeedsSurface`); `AutoSurface` is off, so **nothing paves a road now** and a
+  road is the ground it crosses. The pathfinder's 0.7 still asks for Road material, so there is no
+  speed on a road until it is surfaced, as asked.
+- The as-built ghost follows: road bed at the true grade, in the material the cut lays bare or the
+  fill is built from, not gravel.
+
+**Verified** under .NET with the UnityEngine stand-in: 462 of the Terrain and Units tests pass, 5
+new — a finished road stays Topsoil until `LaySurface`; the bulldozer path grades cell by cell; a
+graded road's drawn height climbs every cell while the ground under it has four treads; a graded
+cell dug a metre is drawn a metre down; moving a road un-grades what it left. The other 11 are
+island-generation tests that fail identically on the commit before this one, because the stand-in
+fakes Perlin noise. Everything type-checks against Unity's reference assemblies. An offline render
+of a road cut across a hillside shows the treads gone. **Not yet seen in play mode.**
+
+**Left:**
+- The edges are still the cell grid. With the road the same material as the land round it that
+  hardly shows; once surfaced it will — a grey saw-tooth. The fix for then is to draw the surface
+  as its own mesh along the spline (crisp edges, a gravel texture) rather than colouring cells.
+- Units' bodies ride the drawn road, but their pathing and reach still work from the real, stepped
+  heights — which is right for the simulation, and invisible unless a rule ever compares the two.
+- The bulldozer and the paver themselves.
+

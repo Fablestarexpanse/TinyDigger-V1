@@ -10,7 +10,7 @@ namespace TinyDiggers.Terrain
     /// </summary>
     public static class TerrainSurface
     {
-        /// <summary>Average surface height of the up to four cells that touch grid corner (cornerX, cornerZ).</summary>
+        /// <summary>Average drawn height (<see cref="TerrainGrid.GetDrawnHeight"/>) of the up to four cells that touch grid corner (cornerX, cornerZ).</summary>
         public static float CornerHeight(TerrainGrid grid, int cornerX, int cornerZ)
         {
             var sum = 0f;
@@ -23,7 +23,7 @@ namespace TinyDiggers.Terrain
                     // beside it, so the disc ends in a cut edge rather than a ramp down to zero.
                     if (!grid.IsGround(x, z))
                         continue;
-                    sum += grid.GetSurfaceHeight(x, z);
+                    sum += grid.GetDrawnHeight(x, z);
                     count++;
                 }
             }

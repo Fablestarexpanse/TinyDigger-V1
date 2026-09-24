@@ -10,6 +10,11 @@ is done, what is running, what comes next.
 
 ## NEXT
 
+**Roads graded smooth, 2026-09-24:** earthworks → graded (drawn at the true grade; `AutoGrade`
+stands in for the bulldozer) → surfaced (gravel and speed; nothing does it until the paver unit
+exists). See `DECISIONS.md`. Next for Ronan's units: `RoadBuilder.NeedsGrading`/`Grade` and
+`NeedsSurface`/`LaySurface` are the hooks.
+
 **Road tool, 2026-09-24:** the segment to the cursor, undo, right-click takes a node back, smooth
 drags, and the ghost showing the land as built (V) — see `DECISIONS.md`. Tested outside Unity only;
 **look at it in play mode first**, then the rest of the list: insert/delete a node mid-road, T-junctions,

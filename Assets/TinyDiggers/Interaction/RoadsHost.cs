@@ -11,7 +11,8 @@ namespace TinyDiggers.Interaction
     /// <summary>
     /// The Road tool's hands and the island's roads (Slice 17 Part B). Holds the
     /// <see cref="RoadNetwork"/>, the <see cref="RoadBuilder"/> that turns roads into designations
-    /// and paves them once built, and the <see cref="RoadDraft"/> being drawn or edited. Draws the
+    /// and grades them once built (drawn at their true grade through the grid's DrawnHeight), and
+    /// the <see cref="RoadDraft"/> being drawn or edited. Draws the
     /// ghost: the ribbon coloured by grade (green, orange over the limit, red over twice it), its
     /// centre line, the cut faces and embankments the ground will settle into, the nodes, their
     /// handles and each segment's grade.
@@ -106,7 +107,7 @@ namespace TinyDiggers.Interaction
         /// </summary>
         readonly Dictionary<int, float> _finished = new Dictionary<int, float>();
         readonly Dictionary<int, Color32> _finishedColor = new Dictionary<int, Color32>();
-        readonly HashSet<int> _bedCells = new HashSet<int>();
+        readonly Dictionary<int, float> _exact = new Dictionary<int, float>();
         readonly List<Vector3> _surfaceVertices = new List<Vector3>();
         readonly List<Color32> _surfaceColors = new List<Color32>();
         readonly List<int> _surfaceTriangles = new List<int>();
@@ -220,6 +221,9 @@ namespace TinyDiggers.Interaction
         {
             if (_terrain != null)
                 _terrain.Regenerated -= Forget;
+            if (Builder != null && _terrain != null && _terrain.Grid != null
+                && _terrain.Grid.DrawnHeight == (System.Func<int, float, float>)Builder.Drawn)
+                _terrain.Grid.DrawnHeight = null;
             if (_ghostMaterial != null)
                 Destroy(_ghostMaterial);
         }
@@ -728,7 +732,22 @@ namespace TinyDiggers.Interaction
             if (map == null || ReferenceEquals(map, _builtFor))
                 return;
             _builtFor = map;
+            if (Builder != null)
+                Builder.DrawnChanged -= Redraw;
             Builder = new RoadBuilder(Grid, map);
+            Builder.DrawnChanged += Redraw;
+            // A graded road is drawn at its true grade, not the height steps it was built in; the
+            // grid hands that to the renderer and to anything that rides the ground.
+            Grid.DrawnHeight = Builder.Drawn;
+        }
+
+        /// <summary>A cell was graded or lost its grading: its height has not changed, but how it is drawn has.</summary>
+        void Redraw(int cell)
+        {
+            var grid = Grid;
+            if (grid == null || _terrain.Renderer == null)
+                return;
+            _terrain.Renderer.MarkDirty(cell % grid.Width, cell / grid.Width);
         }
 
         /// <summary>Turns a road in the network into designations, or takes them away if it is gone.</summary>
@@ -748,8 +767,11 @@ namespace TinyDiggers.Interaction
             RoadSpline.Sample(chain, RoadPlanner.SampleSpacing, samples);
             var footprint = new List<PlannedCell>();
             var bed = new List<Vector2Int>();
-            RoadPlanner.Footprint(Grid, samples, Network.WidthOf(road), footprint, bed);
-            Builder.PlanRoad(road, footprint, bed);
+            var exact = new Dictionary<int, float>();
+            // Every cell, the ones already at height included, so each has a smooth height to be
+            // drawn at once graded — a cell that needed no work is still rounded to the step.
+            RoadPlanner.Footprint(Grid, samples, Network.WidthOf(road), footprint, bed, includeSettled: true, exact: exact);
+            Builder.PlanRoad(road, footprint, bed, exact);
         }
 
         void Update()
@@ -819,7 +841,7 @@ namespace TinyDiggers.Interaction
             Cut = Fill = 0f;
             if (Draft.Nodes.Count >= 2 && _samples.Count >= 2)
             {
-                RoadPlanner.Footprint(Grid, _samples, Draft.Width, _footprint, _bed, includeSettled: true);
+                RoadPlanner.Footprint(Grid, _samples, Draft.Width, _footprint, _bed, includeSettled: true, exact: _exact);
                 RoadPlanner.Settle(Grid, _footprint, MaterialTable.DirtLoose, FaceReach, _faces);
                 Blueprints.Volumes(_footprint, out var cut, out var fill, Grid.CellArea);
                 Blueprints.Volumes(_faces, out var faceCut, out var faceFill, Grid.CellArea);
@@ -831,16 +853,18 @@ namespace TinyDiggers.Interaction
         }
 
         /// <summary>
-        /// What the land will look like once the road is built: every footprint and face cell at
-        /// the height it settles at, coloured as it will be — road bed as Road, a cut as whatever
-        /// the dig lays bare at that depth, an embankment as tipped spoil — and made into a shaded
+        /// What the land will look like once the road is built and graded: every footprint cell at
+        /// the road's true height (the smooth grade it is drawn at once graded, not the steps it is
+        /// dug in) and every face cell at the height it settles at, coloured as it will be — a cut as
+        /// whatever the dig lays bare at that depth, a fill as tipped spoil — and made into a shaded
         /// surface (Ronan, 2026-09-24: "it should show what the land will look like once built").
+        /// The road bed is the ground it crosses, not gravel: "they should be whatever material they
+        /// go across until we have units lay the final layer down" (the same day).
         /// </summary>
         void PlanFinishedSurface()
         {
             _finished.Clear();
             _finishedColor.Clear();
-            _bedCells.Clear();
             _surfaceVertices.Clear();
             _surfaceColors.Clear();
             _surfaceTriangles.Clear();
@@ -850,18 +874,12 @@ namespace TinyDiggers.Interaction
             var grid = Grid;
             var width = grid.Width;
             var materials = grid.Materials;
-            var road = Colour(MaterialTable.Road);
             var spoil = Colour(MaterialTable.DirtLoose);
-            foreach (var cell in _bed)
-                _bedCells.Add(cell.y * width + cell.x);
-
             foreach (var cell in _footprint)
             {
                 var index = cell.Z * width + cell.X;
-                _finished[index] = cell.Height;
-                _finishedColor[index] = _bedCells.Contains(index) ? road
-                    : cell.Fill > 0f ? spoil
-                    : Exposed(cell.X, cell.Z, cell.Height);
+                _finished[index] = _exact.TryGetValue(index, out var exact) ? exact : cell.Height;
+                _finishedColor[index] = cell.Fill > 0f ? spoil : Exposed(cell.X, cell.Z, cell.Height);
             }
 
             foreach (var face in _faces)

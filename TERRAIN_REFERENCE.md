@@ -216,13 +216,25 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
   - Cut faces and embankments beyond them are left to slump, as for any dig or fill. The ghost
     shows what slump will leave, at the ground's and the spoil's angles of repose, and counts it
     in the cut/fill readout.
-- **Road material.** When a road-bed cell's designation is met, the top 0.25 m of its column
-  becomes `Road` (packed gravel, id 18) in place, so the height does not change.
-  - Deleting the road turns it back to Dirt.
-  - Editing a built road re-designates only what moved.
+- **A road is built in three stages** (2026-09-24), the ones the crew will work it through:
+  1. **Earthworks:** the Dig and Fill designations. The ground moves in whole height steps, so a
+     finished stretch is a staircase of treads.
+  2. **Graded:** a cell whose earthwork is met is smoothed to the road's true height — the spline's
+     height before it was rounded to the step — and *drawn* there (`TerrainGrid.DrawnHeight`,
+     read by the smoothed renderer and `TerrainSurface`, so units ride it too; never by the
+     simulation). A graded cell dug into or tipped on afterwards is drawn where it is. Grading is
+     the planned bulldozer's job (`RoadBuilder.Grade`); until it exists `AutoGrade` stands in.
+  3. **Surfaced:** the top 0.25 m of a graded road-bed cell becomes `Road` (packed gravel, id 18)
+     in place, so the height does not change. That is the planned paver's job
+     (`RoadBuilder.LaySurface`); nothing does it on its own (`AutoSurface` is off). **Until then a
+     road is whatever material it crosses** — the rock a cut laid bare, the spoil a fill was
+     built from.
+  - Deleting the road turns its Road back to Dirt.
+  - Editing a built road re-designates only what moved, and re-grades only what moved.
   - A cell shared by two roads stays Road while either does.
-- **Road cells are cheap to drive:** a step from Road to Road costs 0.7 of its distance and
-  nothing for its slope, so units go out of their way to use a road.
+- **Only surfaced cells are cheap to drive:** a step from Road to Road costs 0.7 of its distance
+  and nothing for its slope, so units go out of their way to use a road. A graded road with no
+  surface is ordinary ground to drive.
 - **A road's cut needs a Dump Zone, and its fill needs material from somewhere.** The crew only
   moves what exists. Laying a road that makes spoil with no Dump Zone on the map is reported
   straight away.

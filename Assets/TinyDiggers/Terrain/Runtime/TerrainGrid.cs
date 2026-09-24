@@ -391,6 +391,24 @@ namespace TinyDiggers.Terrain
         public float GetSurfaceHeight(int x, int z) => _surfaceHeights[RequireIndex(x, z)];
 
         /// <summary>
+        /// The height a cell is *drawn* at, given its index (<c>z * Width + x</c>) and the height it
+        /// really is; null draws every cell where it is. For whatever smooths the look of the
+        /// ground without moving it: a graded road is built in whole height steps but drawn at its
+        /// true grade (2026-09-24). Read by <see cref="TerrainSurface"/> and the smoothed renderer —
+        /// what the player sees and what units ride on — and never by the simulation.
+        /// </summary>
+        public Func<int, float, float> DrawnHeight { get; set; }
+
+        /// <summary>The height cell (x, z) is drawn at: <see cref="GetSurfaceHeight"/> through <see cref="DrawnHeight"/>.</summary>
+        public float GetDrawnHeight(int x, int z)
+        {
+            var cell = RequireIndex(x, z);
+            var height = _surfaceHeights[cell];
+            var drawn = DrawnHeight;
+            return drawn == null ? height : drawn(cell, height);
+        }
+
+        /// <summary>
         /// Every cell's surface height, indexed <c>z * Width + x</c>. For hot loops (mesh building)
         /// that read many cells and would otherwise pay a bounds check per read.
         /// </summary>

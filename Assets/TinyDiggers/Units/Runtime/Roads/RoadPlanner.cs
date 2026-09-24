@@ -29,14 +29,17 @@ namespace TinyDiggers.Units
         /// the line's height there) and the shoulder beyond (blended back to the ground). Heights
         /// are rounded to the grid's height step. Road-bed cells also go into
         /// <paramref name="bed"/> if given: those are the cells that become Road once built.
+        /// <paramref name="exact"/>, if given, takes every cell's height *before* that rounding,
+        /// keyed z × width + x: the smooth grade the ground is drawn at once the road is graded.
         /// </summary>
         public static void Footprint(TerrainGrid grid, IReadOnlyList<RoadSample> samples, int width, List<PlannedCell> into,
-            List<Vector2Int> bed = null, bool includeSettled = false)
+            List<Vector2Int> bed = null, bool includeSettled = false, IDictionary<int, float> exact = null)
         {
             if (grid == null)
                 throw new ArgumentNullException(nameof(grid));
             into.Clear();
             bed?.Clear();
+            exact?.Clear();
             if (samples == null || samples.Count < 2)
                 return;
 
@@ -77,6 +80,8 @@ namespace TinyDiggers.Units
                 var target = distance <= half
                     ? height
                     : Mathf.Lerp(height, ground, (distance - half) / Shoulder);
+                if (exact != null)
+                    exact[pair.Key] = target;
                 if (step > 0f)
                     target = Mathf.Round(target / step) * step;
                 if (distance <= half)

@@ -297,7 +297,7 @@ namespace TinyDiggers.Presentation
                     {
                         if (!_grid.IsGround(x, z))
                             continue;
-                        sum += _grid.GetSurfaceHeight(x, z);
+                        sum += _grid.GetDrawnHeight(x, z);
                         count++;
                     }
                 }
@@ -341,6 +341,7 @@ namespace TinyDiggers.Presentation
             void CacheCells(int width, int depth)
             {
                 var heights = _grid.SurfaceHeights;
+                var drawn = _grid.DrawnHeight;
                 var tops = _grid.TopMaterials;
                 var gridWidth = _grid.Width;
                 for (var j = -Halo; j < depth + Halo; j++)
@@ -363,7 +364,7 @@ namespace TinyDiggers.Presentation
                             // means corners, normals and edge lines all follow from one number and
                             // stay consistent with each other.
                             var cell = z * gridWidth + x;
-                            var height = heights[cell];
+                            var height = drawn == null ? heights[cell] : drawn(cell, heights[cell]);
                             var lag = _renderer.Lag;
                             _cellHeights[at] = lag == null ? height : lag.Drawn(cell, height);
                             _cellTops[at] = tops[cell];
