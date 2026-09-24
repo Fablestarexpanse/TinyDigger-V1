@@ -12,9 +12,8 @@ is done, what is running, what comes next.
 
 **Ground pose, 2026-09-24:** machines now pitch and roll to the ground under their wheels
 (`Presentation/GroundPose.cs`, smoothed and clamped in `CrewView.LateUpdate`). Done and green;
-still owed from Ronan's brief is the 8-second capture of a dumper driving up a benched hillside and
-along a contour, `Screenshots/Feel/pose.mp4`. A still on a drivable grade is in
-`Screenshots/Feel/pose-on-slope.png`.
+captures done: `Screenshots/Feel/pose.mp4` (8 s, a dumper up a benched hillside then along a
+contour) and `Screenshots/Feel/pose-on-slope.png` (the crew on a drivable grade).
 
 
 **Worksites, 2026-09-24:** Captain of Industry style — a building and a spline-outlined work area of any shape (tool 0); vehicles
