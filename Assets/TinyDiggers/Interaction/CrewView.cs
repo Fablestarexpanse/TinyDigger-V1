@@ -400,7 +400,10 @@ namespace TinyDiggers.Interaction
             var bodyRenderer = body.GetComponent<MeshRenderer>();
             bodyRenderer.material.color = BoxColor(role);
             if (role == UnitRole.Bulldozer || role == UnitRole.Paver)
+            {
                 AddRoadMachineParts(body.transform, role);
+                FitTo(body.transform, BoxSize(role, cellSize));
+            }
             _bodies.Add(body.transform);
             _renderers.Add(bodyRenderer);
             _robotRenderers.Add(null);
@@ -408,6 +411,40 @@ namespace TinyDiggers.Interaction
             _animators.Add(null);
             _clips.Add(null);
             _tinted.Add(false);
+        }
+
+        /// <summary>
+        /// Shrinks a finished stand-in until the whole machine fits <paramref name="wanted"/> — the
+        /// dumper's size — rather than just the box inside it.
+        ///
+        /// The box was being made the dumper's size and then a cab stacked on top of it, a blade
+        /// hung off the front. The cab sits at 0.7 of a box height with 0.45 of its own, so it
+        /// reaches 0.925 where the box top is 0.5: the machine came out 1.43 box-heights tall, which
+        /// is exactly the 2.46 m measured against the dumper's 1.73 (Ronan, 2026-09-24: "scale the
+        /// new dozer and paver stand-ins to be the same size as the dumper").
+        ///
+        /// It measures rather than working the factor out from those constants, so moving a blade or
+        /// raising a cab cannot quietly make the machines the wrong size again. Uniform, by the worst
+        /// axis, so the parts keep their proportions and nothing pokes past the dumper's envelope.
+        /// </summary>
+        static void FitTo(Transform body, Vector3 wanted)
+        {
+            var renderers = body.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0 || wanted.x <= 0f || wanted.y <= 0f || wanted.z <= 0f)
+                return;
+
+            var bounds = renderers[0].bounds;
+            foreach (var renderer in renderers)
+                bounds.Encapsulate(renderer.bounds);
+
+            // Into the same units `wanted` is in: the view's local space.
+            var parent = body.parent;
+            var scale = parent != null ? parent.lossyScale : Vector3.one;
+            var is_ = new Vector3(bounds.size.x / scale.x, bounds.size.y / scale.y, bounds.size.z / scale.z);
+
+            var over = Mathf.Max(is_.x / wanted.x, Mathf.Max(is_.y / wanted.y, is_.z / wanted.z));
+            if (over > 1f)
+                body.localScale /= over;
         }
 
         /// <summary>
@@ -857,9 +894,12 @@ namespace TinyDiggers.Interaction
                 var rotation = terrainTransform.rotation * Quaternion.Euler(0f, unit.Heading, 0f);
                 if (_renderers[i] != null)
                 {
-                    var size = BoxSize(unit.Role, cellSize);
+                    // Half the box the body actually is, not the size that was asked for: a road
+                    // machine is shrunk after its parts go on (FitTo), and lifting it by the size
+                    // before that would leave it hovering.
+                    var lift = _bodies[i].localScale.y * 0.5f;
                     _bodies[i].SetPositionAndRotation(
-                        terrainTransform.TransformPoint(new Vector3(position.x, unit.Height + size.y * 0.5f, position.y)), rotation);
+                        terrainTransform.TransformPoint(new Vector3(position.x, unit.Height + lift, position.y)), rotation);
                     _renderers[i].material.color = _selection.Contains(i) ? _selectedColor : BoxColor(unit.Role);
                 }
                 else

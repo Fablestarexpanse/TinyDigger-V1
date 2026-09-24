@@ -6121,3 +6121,22 @@ you*, and enforcing the first is exactly how you break the second. Reading the c
 survives — the park check sits in the job-choosing path, not the movement one — but this session has
 twice punished reasoning where measuring was available, so there is now a test that sends an
 unassigned unit across the map and asserts both that it arrives and that it digs nothing on the way.
+
+### The road machines really are the dumper's size now (2026-09-24)
+
+They were meant to be already — `BoxSize` measured the dumper prefab and handed that to the stand-in
+box. Measured in play, the dumper is 1.34 × 1.73 × 1.73 m and the bulldozer was 1.60 × 2.46 × 1.92:
+half again as tall.
+
+The box *was* the dumper's size. The cab then went on top of it. It sits at 0.7 of a box height with
+0.45 of its own, so it reaches 0.925 where the box top is 0.5, and the machine came out 1.425
+box-heights — 1.425 × 1.73 = 2.46, which is exactly what was measured. The blade and the roller push
+the front out the same way.
+
+`FitTo` now shrinks the finished stand-in, parts and all, until nothing pokes past the dumper's
+envelope: uniform by the worst axis, so the parts keep their proportions. All three machines measure
+1.73 m tall. It **measures** the assembled body rather than working the factor out from the constants
+that place the cab, so moving a blade or raising a cab cannot quietly make them the wrong size again.
+
+The lift that sits a box on the ground now uses the body's own scale rather than the size that was
+asked for, or the shrunk machines would have hovered by the difference.
