@@ -123,7 +123,11 @@ namespace TinyDiggers.Presentation
             foreach (var channel in channels)
             {
                 var fill = FillDepth(channel, riverFill, creekFill);
-                var half = Mathf.Max(0.5f, channel.Width * 0.5f / cellSize);
+                // At least three quarters of a cell either side, the same footprint the carve marks
+                // as bed (RiverChannels.Cut). At half a cell a one-cell creek running along a cell
+                // edge missed the cells it was cut into, and left a bed with no water in it beside
+                // a wet one (seed 3, 2026-09-24).
+                var half = Mathf.Max(0.75f, channel.Width * 0.5f / cellSize);
                 var box = Mathf.CeilToInt(half);
                 var path = channel.Path;
                 for (var p = 1; p < path.Count; p++)

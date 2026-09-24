@@ -246,9 +246,14 @@ namespace TinyDiggers.Terrain
                         Width = kind == ChannelKind.River
                             ? Mathf.Lerp(s.RiverWidthMin, s.RiverWidthMax, (float)random.NextDouble())
                             : Mathf.Lerp(s.CreekWidthMin, s.CreekWidthMax, (float)random.NextDouble()),
-                        Depth = kind == ChannelKind.River
+                        // Never shallower than the ground can hold. A creek is asked for at
+                        // 0.5 m, and the bed is put on the height step like everything else, so on
+                        // a 1 m step it rounded away to nothing: 84% of creek bed points came out
+                        // level with their banks, and on the game's 0.5 m step 57% did. It read as
+                        // a river bug and was a quantising one (2026-09-24).
+                        Depth = Mathf.Max(step, kind == ChannelKind.River
                             ? Mathf.Lerp(s.RiverDepthMin, s.RiverDepthMax, (float)random.NextDouble())
-                            : s.CreekDepth,
+                            : s.CreekDepth),
                     };
 
                     var line = Meander(Smooth(route, width), heights, width, depth, inDisc, channel.Width, s,
@@ -565,10 +570,16 @@ namespace TinyDiggers.Terrain
                         if (distance > reach)
                             continue;
                         var across = distance / half;
-                        var cut = distance < half
+                        var inBed = distance < half;
+                        var cut = inBed
                             ? floors[i] + channel.Depth * across * across
                             : floors[i] + channel.Depth + (distance - half) * bankPerCell;
-                        cut = Mathf.Round(cut / step) * step;
+                        // The bed goes down to the step below, the banks to the nearest. Rounding
+                        // the bed to the nearest step let a shallow channel round back up level
+                        // with its own banks, which is a channel with no water in it.
+                        cut = inBed
+                            ? Mathf.Floor(cut / step) * step
+                            : Mathf.Round(cut / step) * step;
                         if (cut < heights[cell])
                             heights[cell] = cut;
                         // At least three quarters of a cell either side: a bed a cell or two wide
@@ -593,3 +604,4 @@ namespace TinyDiggers.Terrain
         }
     }
 }
+

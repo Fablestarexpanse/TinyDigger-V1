@@ -107,31 +107,28 @@ namespace TinyDiggers.Presentation.Tests
         }
 
         [Test]
-        public void TheCrewCannotWalkStraightAcrossARiver([Values(ChannelSprings.DefaultRiverFill, 0.1f)] float riverFill)
+        public void ARiversBedIsDeepWater([Values(ChannelSprings.DefaultRiverFill, 0.1f)] float riverFill)
         {
-            // At 0.1 of its bed's depth a river runs a few centimetres deep, as its steep reaches
-            // do once the water settles; it still blocks (Ronan, 2026-09-22: "rivers always block").
+            // What a river physically is, not whether the crew can get round it. This used to
+            // assert that the crew could not walk across either (Ronan, 2026-09-22: "rivers always
+            // block"); on walkable slopes the crew went round a river's spring, and Ronan ruled
+            // that crossings are the player's to work out (2026-09-24). At 0.1 of its bed's depth
+            // a river still runs deep water.
             var probes = 0;
             for (var seed = 1; seed <= 3; seed++)
             {
                 var (grid, map) = Filled(seed, riverFill);
-                var pathfinder = new GridPathfinder(grid);
-                var path = new List<Vector2Int>();
                 foreach (var river in map.Channels.FindAll(c => c.Kind == ChannelKind.River))
                 {
-                    foreach (var (bed, left, right) in Crossings(grid, map, river))
+                    foreach (var (bed, _, _) in Crossings(grid, map, river))
                     {
                         Assert.That(grid.IsWater(bed.x, bed.y), Is.True, $"seed {seed}: the river's bed at {bed} is deep water");
-                        var direct = Vector2Int.Distance(left, right);
-                        if (pathfinder.TryFindPath(left.x, left.y, right.x, right.y, path))
-                            Assert.That(path.Count, Is.GreaterThan(direct * 2f + 4f),
-                                $"seed {seed}: the crew crossed the river at {bed} in {path.Count} steps");
                         probes++;
                     }
                 }
             }
 
-            Assert.That(probes, Is.GreaterThan(5), "enough crossings were tried to mean something");
+            Assert.That(probes, Is.GreaterThan(5), "enough of the river was looked at to mean something");
         }
 
         [Test]
@@ -159,9 +156,10 @@ namespace TinyDiggers.Presentation.Tests
             }
 
             Assert.That(probes, Is.GreaterThan(10), "enough crossings were tried to mean something");
-            // A creek cut through a steep hillside can leave a bank too high to climb; the water
-            // is never what stops the crew.
-            Assert.That(waded, Is.GreaterThanOrEqualTo(probes * 3 / 4), $"the crew waded straight across {waded} of {probes} creek crossings");
+            // How many the crew waded is reported, not asserted: crossings are the player's to
+            // work out (Ronan, 2026-09-24). What is asserted above is what a creek is — wet,
+            // and shallow enough to wade.
+            Debug.Log($"creek crossings: the crew waded straight across {waded} of {probes}");
         }
     }
 }

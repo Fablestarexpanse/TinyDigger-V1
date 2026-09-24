@@ -106,7 +106,14 @@ namespace TinyDiggers.Terrain
         [Tooltip("Metres inland over which most of that rise happens.")]
         [Min(1f)] public float InlandRiseDistance = 120f;
 
-        [Tooltip("Metres the mountains' crest adds at most: each seed draws between these (Ronan, 2026-09-21: peaks of 40-60 m, random per generation). Used with land types; RidgeHeight is the old single value.")]
+        [Tooltip("Metres the mountains' crest adds at most: each seed draws between these (Ronan, " +
+            "2026-09-21: peaks of 40-60 m, random per generation). Used with land types; " +
+            "RidgeHeight is the old single value. Raising this to make up for the height that " +
+            "settling to a real talus takes off the top was tried on 2026-09-24 and put back: a " +
+            "taller crest at the same talus is just as steep again (the apron went from 5.8 m " +
+            "back to 5.0, and the land over 60 degrees from 5.1% back to 8.0%), and it did not " +
+            "help the rivers either. The flank's shape has to come from how it is built, not " +
+            "from settling a taller wall.")]
         [Min(0f)] public float MountainCrestMin = 35f;
         [Min(0f)] public float MountainCrestMax = 70f;
 
@@ -161,8 +168,24 @@ namespace TinyDiggers.Terrain
         [Tooltip("Degrees soil settles to.")]
         [Range(10f, 80f)] public float TalusSoil = 38f;
 
-        [Tooltip("Degrees rock (the mountains) settles to. Steep, so the cliffs the generator lets rock stand in survive the settling.")]
-        [Range(10f, 89f)] public float TalusRock = 75f;
+        [Tooltip("Degrees rock (the mountains) settles to away from a cliff band. Scree stands at " +
+            "33-37 degrees and a solid rock face rather steeper; what this must NOT be is the " +
+            "cliff angle, which is what it was until 2026-09-24 (75 degrees, \"so the cliffs " +
+            "survive the settling\"). That switched the settling off across the whole massif, and " +
+            "the settling is the only thing that cuts a face and piles the waste into a footslope.")]
+        [Range(10f, 89f)] public float TalusRock = 45f;
+
+        [Tooltip("Share of the high ground allowed to stand as a cliff band. The rest of the " +
+            "mountain settles to TalusRock, so a massif reads as a walkable flank with rock bands " +
+            "in it rather than as one wall.")]
+        [Range(0f, 1f)] public float CliffBandShare = 0.18f;
+
+        [Tooltip("Metres across a cliff band's noise: how long a band runs before it gives out.")]
+        [Min(4f)] public float CliffBandSize = 30f;
+
+        [Tooltip("How wide the edge of a cliff band is blended, in units of the band field, so a " +
+            "band ends in a ramp rather than at a corner.")]
+        [Range(0.01f, 1f)] public float CliffBandBlend = 0.12f;
 
         [Tooltip("Passes of full-resolution slope settling just before heights go onto the height steps, so the step limit has little left to cut (and no grooves to comb in).")]
         [Range(0, 60)] public int SettleIterations = 16;

@@ -6275,3 +6275,112 @@ reported an empty 10–20° band on every seed, which looked like a finding abou
 ruler: on a 1 m height step and a 1 m cell the only slopes that exist are 0° and 26.6°. Over three
 cells either side the band fills in at 13–18%. The apron number never depended on the baseline, which
 is why it is the one to trust.
+
+**Rulings (Ronan, 2026-09-24):** mountains get **real talus with cliffs as bands** — rock settles to
+its own angle and the cliff angle is given only to a minority of the high ground, picked by its own
+noise, so a massif reads as a walkable flank with rock bands in it. And heightmap stamps are **one
+library, two uses**: the same stamp assets serve both the generator and the in-game terraform tool.
+
+**First slice, measured, not finished.** `TalusRock` 75° → 45°; `SettleSlopes` now takes a cliff-band
+field and an upland field instead of the crest height, and gives the cliff angle only where a band
+is:
+
+| seed | land over 60°, before → after | walk for a 10 m drop | high-ground slope |
+|---|---|---|---|
+| 7 | 9.6% → **5.1%** | 3.2 → **5.8 m** | 58.6° → 46.6° |
+| 21 | 15.1% → **6.0%** | 4.4 → **6.2 m** | 49.4° → 45.0° |
+| 99 | 9.6% → **4.0%** | 3.4 → **5.6 m** | 60.3° → 50.6° |
+
+Walls roughly halved and the apron is up by about 70%, but **5.8 m of walk for a 10 m drop is still
+about 60° averaged down the flank**, against the 15–25 m a real footslope wants. Settling alone will
+not get there: it only moves material a cell at a time, and the crest it is cutting back is 35–70 m
+tall. The rest has to come from the shape the mountains are built at — a pedestal under the range and
+a concave flank — not from settling a wall harder.
+
+**And it broke the rivers.** Three tests fail: a river on seed 2 is now crossable in 21 steps where
+it must block, and a creek on seed 3 has no water at all. Gentler land means shallower channels, and
+*rivers block, creeks wade* is a ruling. That is the next thing to fix, and it is why this slice is
+not committed.
+
+**A lever that looked obvious and was not.** Settling to a real talus takes height off the peaks
+(39 m down to 31 m on seed 7), which looked like the reason the rivers went shallow, so the crest was
+raised by half to put it back. It put the height back — 38, 57 and 48 m — and undid most of the
+gain with it: the apron fell from 5.8 m back to 5.0 and the land over 60° went from 5.1% back to
+8.0%. A taller crest at the same talus is just as steep again. Put back, and recorded here so it is
+not tried twice. **It did not fix the rivers either**, so the height was never their cause.
+
+**Chasing the rivers turned up a standing fault of their own.** A creek is asked for at 0.5 m deep
+and its bed is put on the height step like everything else, with `Mathf.Round`. Measured on seed 3:
+
+| height step | mean cut below the banks | bed points not cut at all |
+|---|---|---|
+| 1 m | **-0.04 m** | 84% |
+| 0.5 m (the game's) | 0.10 m | 57% |
+
+So a creek is shallower than the ground can represent, and more than half of every creek bed is level
+with its own banks. That is not caused by the mountain work — it has always been so — but the rougher
+land used to cover for it, because the running minimum the bed is cut to carried a deep floor down
+from upstream. Gentle land took the cover away.
+
+Cutting the bed with `Mathf.Floor` rather than `Mathf.Round`, and never asking for a channel
+shallower than one step, moves the 1 m case from -0.04 m and 84% uncut to +0.34 m and 61%. It does
+**not** make the three failing tests pass, so the bed depth is not the whole of it either. Left
+uncommitted with the rest.
+
+**Correction: the river is cut, and the "bank-line cut" would not have helped.** The entry that
+stood here said the seed 2 river sat on a flat valley floor where `LowestBeside` returned the bed
+itself, so nothing was carved. Measured, that was wrong on both counts. With no channels the ground
+at (142, 102) is a hillside falling 20 m to 13 m across the flow — no valley — and asking for a 5 m
+river carves the same spot to 8 m. The carve works.
+
+**What the river test actually caught.** Mapping the water round the crossing: the river is unbroken
+deep water. The crew's 21-step route goes *round its spring* — the water starts at (138, 108), six
+cells above the crossing the test picks, and the path walks over the top at z = 108–109. On the old
+cliffed land the head of a river sat in a gorge you could not walk round; on walkable land you can.
+The test takes crossings from the fourth path point onward, which is inside the detour budget of the
+spring. That is a question about the ruling ("rivers always block" — does walking round a river's
+source count as crossing it?), not about the river.
+
+**What the creek test caught is still open.** At seed 3's dry probe, (173, 159), a one-cell creek
+runs down a stepped hillside; the wet cell is one to the side of the line, at 6 m, and the cell the
+test checks beside it is a step *lower*, at 5 m, and dry. Water standing a step above dry ground
+next to it is wrong whatever the test says, and it is not yet explained: the bed should have been
+cut below the lowest ground within its bank reach (4 m there).
+
+*(Superseded by the correction above.)*  Seed 2's crossing at (142, 102), the one the
+test says the crew walks straight over, in metres across the flow:
+
+```
+x:  136  137  138  139  140  141  142  143  144  145  146  147  148
+     14   14   13   13   12   11   11   11   11   12   12   12   12
+```
+
+Four cells of flat at 11 m with the ground at 12 m beside it. The river is **one height step below
+its surroundings and four cells wide** — which is a puddle, not a river, and of course the crew
+wades it.
+
+It is not the rounding: with the bed cut by `Mathf.Floor` the creek metric moves (84% of bed points
+uncut down to 61%, deepest cut 1.0 m up to 3.0 m) while this river does not move at all. That is
+because `Cut` takes its floor from `LowestBeside` — the lowest ground within a bank's reach — and on
+a broad flat valley floor the lowest ground beside the bed **is the bed**. So the cut is `floor -
+depth` measured from a point that is already the bottom, `cut` never comes out below `heights[cell]`,
+and nothing is carved.
+
+Gentler mountains make broader valley floors, which is how a change to the talus angle ends up
+drowning a river. **The fix is that a channel must be cut a minimum drop below the ground at its own
+bank line, not below whatever is lowest near it** — not yet written.
+
+**Ruling (Ronan, 2026-09-24): crossings are the player's problem.** *"Don't worry about crossings,
+that's for the player to figure out — the main thing is getting realistic looking and varied streams
+and river channels."* So `TheCrewCannotWalkStraightAcrossARiver` became `ARiversBedIsDeepWater`, and
+the creek test reports how many crossings the crew waded (41 of 42) instead of asserting it. Both
+still assert what the water physically is: a river bed is deep water, a creek bed is wet and shallow.
+
+**The dry creek was the water fill, not the channel.** `ChannelSprings.Prefill` lays water by
+re-drawing each channel's sparse path with a half-width of `max(0.5, width / 2)` cells. A 1.2 m
+creek gets 0.6 cells, and the checked cell's centre stood 0.64 from the line — so it was cut as bed
+but never filled. The carve had already learned this (it marks at least three quarters of a cell
+either side); the fill had not. It now uses the same 0.75.
+
+With that, **652 pass, 0 fail**, committed with the talus and cliff-band work. The mountain numbers
+in that run are the ones in the table above (walls 5.1 / 6.0 / 4.0%, apron 5.8 / 6.2 / 5.6 m).

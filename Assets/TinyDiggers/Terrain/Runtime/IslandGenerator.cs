@@ -224,10 +224,11 @@ namespace TinyDiggers.Terrain
             var highGround = new float[cells];
             float[] upland = null;
             float[] cliffCoast = null;
+            float[] cliffBands = null;
             if (settings.UseLandTypes)
             {
                 upland = BuildTypedHeights(random, map, heights, highGround, land, inDisc, width, depth, shift, ridge, benches,
-                    baseOffset, mediumOffset, warpOffset, ridgeOffset, ridgeWarp, settings, out cliffCoast);
+                    baseOffset, mediumOffset, warpOffset, ridgeOffset, ridgeWarp, settings, out cliffCoast, out cliffBands);
             }
             else Parallel.For(0, depth, z =>
             {
@@ -314,7 +315,14 @@ namespace TinyDiggers.Terrain
             if (cliffCoast != null)
                 ShapeCliffFaces(heights, land, inDisc, cliffCoast, width, depth, settings.MaxCliffStep, settings.ShelfNearDepth * 0.7f);
             if (settings.Erosion && settings.SettleIterations > 0)
-                SettleSlopes(heights, land, highGround, width, depth, step, settings.MaxCliffStep, settings.SettleIterations);
+            {
+                // A rise per cell, from the angle: the settling works in metres across one cell,
+                // and a talus angle means nothing until it knows how wide a cell is.
+                var rockRise = Mathf.Tan(Mathf.Clamp(settings.TalusRock, 10f, 85f) * Mathf.Deg2Rad)
+                    * Mathf.Max(0.05f, settings.GenerationCellSize);
+                SettleSlopes(heights, land, upland, cliffBands, width, depth, step, rockRise,
+                    settings.MaxCliffStep, settings.SettleIterations);
+            }
 
             var isLand = new bool[cells];
             for (var cell = 0; cell < cells; cell++)
@@ -514,7 +522,7 @@ namespace TinyDiggers.Terrain
         static float[] BuildTypedHeights(System.Random random, IslandMap map, float[] heights, float[] highGround,
             bool[] land, bool[] inDisc, int width, int depth, Vector2Int shift, Vector2[] ridge, Vector3[] benches,
             Vector2 baseOffset, Vector2 mediumOffset, Vector2 warpOffset, Vector2 ridgeOffset, Vector2 ridgeWarp,
-            TerrainGenSettings settings, out float[] cliffCoast)
+            TerrainGenSettings settings, out float[] cliffCoast, out float[] cliffBands)
         {
             var cells = width * depth;
             var cliffWeights = new float[cells];
@@ -665,6 +673,47 @@ namespace TinyDiggers.Terrain
                     heights[cell] = height;
                 }
             });
+
+            // Cliff bands: where the mountains are allowed to stand up. A slow field over the high
+            // ground, cut so that the drawn share of it is band and the rest settles to rock's own
+            // talus — a flank with rock bands in it rather than one wall (Ronan, 2026-09-24).
+            // The offset is derived rather than drawn, so adding this does not shift every other
+            // feature's noise along the random stream.
+            var bands = new float[cells];
+            cliffBands = bands;
+            var bandOffset = cliffOffset + new Vector2(517f, 233f);
+            var bandField = new float[cells];
+            Parallel.For(0, depth, z =>
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var cell = z * width + x;
+                    if (!land[cell] || upland[cell] <= 0f)
+                        continue;
+                    bandField[cell] = Fbm(new Vector2(x - shift.x, z - shift.y), bandOffset, settings.CliffBandSize, 2) + 0.5f;
+                }
+            });
+
+            var bandCount = 0;
+            for (var cell = 0; cell < cells && bandCount < sample.Length; cell += Math.Max(1, stride / 4))
+                if (land[cell] && upland[cell] > 0.5f)
+                    sample[bandCount++] = bandField[cell];
+            var share = Mathf.Clamp01(settings.CliffBandShare);
+            var (_, bandAbove) = LandTypes.Thresholds(sample, bandCount, new LandMix(0f, 1f - share, share));
+            var blend = Mathf.Max(0.01f, settings.CliffBandBlend);
+            Parallel.For(0, depth, z =>
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var cell = z * width + x;
+                    if (!land[cell] || upland[cell] <= 0f)
+                        continue;
+                    // Fades out with the mountain, so a band cannot run on into the lowlands.
+                    bands[cell] = Smooth((bandField[cell] - bandAbove) / blend + 0.5f)
+                        * Mathf.Clamp01(upland[cell] * 2f);
+                }
+            });
+
             return upland;
         }
 
@@ -791,8 +840,8 @@ namespace TinyDiggers.Terrain
         /// Settles the land's slopes, at full resolution, to 0.9 of a height step a cell (soil) or
         /// of a cliff step (the mountains), on a window round the land. The sea is fixed.
         /// </summary>
-        static void SettleSlopes(float[] heights, bool[] land, float[] highGround, int width, int depth,
-            float step, float cliffStep, int iterations)
+        static void SettleSlopes(float[] heights, bool[] land, float[] upland, float[] cliffBands, int width, int depth,
+            float step, float rockRise, float cliffStep, int iterations)
         {
             int minX = width, minZ = depth, maxX = -1, maxZ = -1;
             for (var z = 0; z < depth; z++)
@@ -820,7 +869,17 @@ namespace TinyDiggers.Terrain
                     var i = z * w + x;
                     window[i] = heights[cell];
                     fixedCells[i] = !land[cell];
-                    talus[i] = 0.9f * Mathf.Lerp(step, cliffStep, Mathf.Clamp01(highGround[cell] * 3f));
+                    // What a cell is allowed to stand at, in metres of rise per cell. Soil keeps
+                    // the height step; mountain rock stands at its own talus; only a cell inside a
+                    // cliff band gets the cliff angle.
+                    //
+                    // This used to read `Lerp(step, cliffStep, highGround * 3)`, so every cell
+                    // where the crest noise reached a third of its height stood at the cliff
+                    // angle — which is the whole massif, not a band in it, and is why mountains
+                    // had no footslope at all (2026-09-24).
+                    var rock = upland == null ? 0f : Mathf.Clamp01(upland[cell]);
+                    var band = cliffBands == null ? 0f : Mathf.Clamp01(cliffBands[cell]);
+                    talus[i] = 0.9f * Mathf.Max(Mathf.Lerp(step, rockRise, rock), Mathf.Lerp(step, cliffStep, band));
                 }
             });
             TerrainErosion.Thermal(window, w, d, fixedCells, talus, iterations);
