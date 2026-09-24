@@ -253,6 +253,65 @@ namespace TinyDiggers.Units
         bool TipsHere => Job == CrewJobKind.Fill || Job == CrewJobKind.DumpZone;
 
         /// <summary>
+        /// Where in the path a truck starts backing in, or <see cref="int.MaxValue"/> for never.
+        /// With <see cref="_backsInStraight"/> the path ends in a straight run it reverses down
+        /// from an approach point; without, it only backs up the last few cells when the tip is
+        /// ahead, which is what it did first and what it falls back to where there is no room.
+        /// </summary>
+        int _reverseFrom = int.MaxValue;
+        bool _backsInStraight;
+        readonly List<Vector2Int> _backInPath = new List<Vector2Int>();
+        readonly List<Vector2Int> _backInRun = new List<Vector2Int>();
+
+        /// <summary>
+        /// Lines a rear-tipping truck up to back in (Ronan, 2026-09-24: "they back up to edge,
+        /// tilt, dump behind"): it drives to a point <see cref="ReverseCells"/> further out along the
+        /// line from the tip through where it will stand, then reverses straight down that line,
+        /// tail first. Both legs are the pathfinder's, so the reverse run keeps to the same slope
+        /// and step rules as any other, and it must be the straight run and nothing longer. Where
+        /// there is no such line — a wall behind, a unit in the way — it keeps the path it has and
+        /// only backs up the last few cells.
+        /// </summary>
+        void PlanBackIn(Func<int, int, bool> avoid = null)
+        {
+            _reverseFrom = int.MaxValue;
+            _backsInStraight = false;
+            if (!TipsWholeLoad || !TipsHere || _path.Count == 0)
+                return;
+            _reverseFrom = Math.Max(0, _path.Count - ReverseCells);
+
+            var away = new Vector2Int(Math.Sign(JobStand.x - JobTarget.x), Math.Sign(JobStand.y - JobTarget.y));
+            if (away == Vector2Int.zero)
+                return;
+            var approach = JobStand + away * ReverseCells;
+            if (!_grid.InBounds(approach.x, approach.y) || !CanStandHere(approach.x, approach.y)
+                || _dispatcher.IsOccupiedByOther(approach.x, approach.y, Id))
+                return;
+            if (!_pathfinder.TryFindPath(approach.x, approach.y, JobStand.x, JobStand.y, _backInRun, avoid))
+                return;
+            if (_backInRun.Count > 0 && _backInRun[0] == approach)
+                _backInRun.RemoveAt(0);
+            if (_backInRun.Count != ReverseCells)
+                return;
+            for (var k = 0; k < _backInRun.Count; k++)
+                if (_backInRun[k] != JobStand + away * (ReverseCells - 1 - k))
+                    return;
+
+            var cell = Cell;
+            _backInPath.Clear();
+            if (cell != approach && !_pathfinder.TryFindPath(cell.x, cell.y, approach.x, approach.y, _backInPath, avoid))
+                return;
+            if (_backInPath.Count > 0 && _backInPath[0] == cell)
+                _backInPath.RemoveAt(0);
+
+            _path.Clear();
+            _path.AddRange(_backInPath);
+            _reverseFrom = _path.Count;
+            _path.AddRange(_backInRun);
+            _backsInStraight = true;
+        }
+
+        /// <summary>
         /// The digger's arm, in cells: a metre on half-metre cells. Three looked too far for the
         /// machine's own arm (Ronan, 2026-09-22: "its reach might be too far").
         /// </summary>
@@ -1379,6 +1438,7 @@ namespace TinyDiggers.Units
             _jobHeight = kind == CrewJobKind.Quarry
                 ? _designations.QuarryFloor(target.x, target.y)
                 : _designations.GetTarget(target.x, target.y);
+            PlanBackIn();
             _pathIndex = 0;
             _waitTimer = 0f;
             _dispatcher.Claim(target.x, target.y, Id);
@@ -2011,11 +2071,12 @@ namespace TinyDiggers.Units
                 var target = new Vector2(waypoint.x + 0.5f, waypoint.y + 0.5f);
                 var delta = target - Position;
                 var distance = delta.magnitude;
-                // The last few cells to a tip are driven backwards, tail first, when the tip is
-                // ahead; a truck already coming at it from the far side drives in forwards and
-                // turns on arrival.
+                // Down the straight run it lined up for (PlanBackIn) it reverses the whole way;
+                // without one, only the last few cells, and only with the tip ahead — a truck
+                // coming at it from the far side drives in forwards and turns on arrival.
                 var toTip = new Vector2(JobTarget.x + 0.5f, JobTarget.y + 0.5f) - Position;
-                Reversing = TipsWholeLoad && TipsHere && PathLeft <= ReverseCells && Vector2.Dot(delta, toTip) > 0f;
+                Reversing = TipsWholeLoad && TipsHere && _pathIndex >= _reverseFrom
+                            && (_backsInStraight || Vector2.Dot(delta, toTip) > 0f);
                 if (distance > 1e-5f)
                     TurnToward(Reversing ? -delta : delta, deltaTime);
                 if (distance <= travel)
@@ -2142,6 +2203,7 @@ namespace TinyDiggers.Units
                 return false;
             }
 
+            PlanBackIn(avoid);
             _pathIndex = 0;
             MarkPath();
             if (State == CrewUnitState.Waiting)

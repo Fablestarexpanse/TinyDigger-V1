@@ -6572,3 +6572,19 @@ and load at `JobDispatcher.LoadingDistance` — that sum rounded up to whole cel
 unchanged, and 2 for the machines, the forge's own placement (truck 1.07 m off the swing axis). Radii
 follow the new lengths: digger 1.2, dumper 1.43, dozer 1.85 cells. In play the truck's centre never came
 nearer than 2.83 cells (1.41 m) and it was loaded (1.97 m³ in the take).
+
+## The dump truck backs in and tips out of its tail (2026-09-24)
+
+Ronan: *"when it dumps it comes out behind it ... in captains they back up to edge, tilt, dump behind"*.
+The truck drove in nose first and `Arrive()` turned it to face the heap, so the load poured out of the
+tail onto ground it was not filling. Now a rear-tipping truck (`TipsWholeLoad`):
+
+- tips from two cells out (`MinStandRing`), because its tailgate is 0.72 m behind its middle;
+- lines up on a point 3 cells further out along the line from the tip through its stand, and reverses
+  straight in (`PlanBackIn`); both legs are the pathfinder's, and the reverse leg must be exactly that
+  straight run, else it keeps its path and only backs the last few cells with the tip ahead;
+- puts its tail to the tip on arrival.
+
+First version reversed for 0.7 s (only the last cells, tip ahead); with the line-up it reversed 9 cells
+over 2.1 s in the same take, and the heap forms behind the tailgate.
+

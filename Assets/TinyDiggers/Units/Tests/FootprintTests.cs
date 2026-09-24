@@ -236,16 +236,24 @@ namespace TinyDiggers.Units.Tests
             var truck = Spawn(18, 10, UnitRole.Hauler);
             truck.Inventory.Add(MaterialTable.DirtLoose, truck.Inventory.Remaining);
 
-            var backedIn = false;
+            // Cells entered while reversing: a real back-in lines up and reverses the whole run,
+            // not a shuffle at the end (the first version reversed for 0.7 s).
+            var reversedCells = 0;
+            var last = truck.Cell;
+            var wasReversing = false;
             for (var t = 0f; t < 60f && truck.State != CrewUnitState.Tipping; t += 0.05f)
             {
                 _dispatcher.Tick(0.05f);
                 truck.Tick(0.05f);
-                backedIn |= truck.Reversing;
+                // Arriving clears the flag in the same tick it enters the last cell.
+                if (truck.Cell != last && (truck.Reversing || wasReversing))
+                    reversedCells++;
+                last = truck.Cell;
+                wasReversing = truck.Reversing;
             }
 
             Assert.That(truck.State, Is.EqualTo(CrewUnitState.Tipping), truck.Status);
-            Assert.That(backedIn, Is.True, "it backed in to the tip");
+            Assert.That(reversedCells, Is.GreaterThanOrEqualTo(CrewUnit.ReverseCells), "it backed the whole run in to the tip");
             var cell = truck.Cell;
             var target = truck.JobTarget;
             Assert.That(Mathf.Max(Mathf.Abs(target.x - cell.x), Mathf.Abs(target.y - cell.y)), Is.EqualTo(2),
