@@ -38,6 +38,9 @@ MonoBehaviour:
   InlandRiseDistance: 120
   MountainCrestMin: 80
   MountainCrestMax: 130
+  MassifReach: 140
+  MassifConcavity: 1.6
+  CrestShare: 0.25
   PlainsFeatureSize: 180
   PlainsRelief: 1.5
   HillsFeatureSize: 140
@@ -66,6 +69,11 @@ MonoBehaviour:
   ThermalIterations: 40
   TalusSoil: 38
   TalusRock: 45
+  CreaseSoftenPasses: 8
+  CreaseSoften: 0.5
+  CliffBandShare: 0.18
+  CliffBandSize: 30
+  CliffBandBlend: 0.12
   SettleIterations: 16
   FillPits: 1
   Shape: 1
@@ -81,6 +89,7 @@ MonoBehaviour:
   BeachMaxSlope: 0.55
   ShallowCells: 10
   MaxCliffStep: 3
+  CliffCrestReach: 1.5
   CliffSlope: 55
   RidgeHeight: 30
   RidgeWidth: 170
@@ -122,7 +131,21 @@ MonoBehaviour:
   MeanderStrength: 3
   MeanderWavelength: 14
   MeanderMinSwing: 6
+  ChannelGravelThickness: 0.4
   ChannelBankSlope: 0.5
+  MeanderSlopeLimit: 0.3
+  SteepWiggle: 0.8
+  ChannelHeadShare: 0.5
+  ChannelMouthShare: 1.8
+  ChannelSteepNarrowing: 0.6
+  ChannelFlatWidening: 1.3
+  ChannelPoolDepth: 0.5
+  ChannelPoolSpacing: 6
+  ChannelWidthNoise: 0.2
+  CutBankSteepen: 2
+  PointBarSoften: 0.45
+  ConfluenceFlare: 1.8
+  MouthFlare: 1.6
   SlopeSmoothing: 2
   SlopeGrass: 25
   SlopeMixed: 44

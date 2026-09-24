@@ -117,6 +117,21 @@ namespace TinyDiggers.Terrain
         [Min(0f)] public float MountainCrestMin = 35f;
         [Min(0f)] public float MountainCrestMax = 70f;
 
+        [Tooltip("Metres in from the edge of the mountains over which a range climbs to its full " +
+            "height. Most of a mountain's height is carried by this broad massif rather than by " +
+            "the ridged crest, which on its own rose its whole height in a few tens of metres and " +
+            "was settled into a uniform 45-degree cone with no footslope (2026-09-24).")]
+        [Min(1f)] public float MassifReach = 140f;
+
+        [Tooltip("How concave the massif's flank is: 1 climbs evenly from the foot, higher starts " +
+            "gently and steepens toward the top, as a real range does over its footslope.")]
+        [Range(1f, 3f)] public float MassifConcavity = 1.6f;
+
+        [Tooltip("Share of the mountains' height given to the ridged crest on top of the massif; " +
+            "the rest is the massif itself. The crest fades in as the massif climbs, so the foot " +
+            "of a range is the massif alone.")]
+        [Range(0f, 1f)] public float CrestShare = 0.25f;
+
         [Tooltip("Metres across the swells of a plain.")]
         [Min(10f)] public float PlainsFeatureSize = 180f;
 
@@ -571,7 +586,7 @@ namespace TinyDiggers.Terrain
             s.CoastNoiseSize *= k; s.CoastNoiseCells *= k; s.MountainRadius *= k; s.ValleyRadius *= k;
             s.MaterialNoiseSize *= k; s.SandMaxDistance *= k; s.RiverWander *= k;
             s.TypeFeatureSize *= k; s.CoastLowlandDistance *= k; s.InlandRiseDistance *= k;
-            s.PlainsFeatureSize *= k; s.HillsFeatureSize *= k;
+            s.PlainsFeatureSize *= k; s.HillsFeatureSize *= k; s.MassifReach *= k;
             s.ErosionCellSize *= k;
             s.CliffCoastSize *= k; s.CliffCoastInland *= k;
             s.RiverWidthMin *= k; s.RiverWidthMax *= k; s.CreekWidthMin *= k; s.CreekWidthMax *= k;

@@ -6499,3 +6499,39 @@ taking the terrain out of the shot:
   a direction that changes from cell to cell, moved the pattern by metres between neighbouring pixels
   and covered fast water in contour lines. A first attempt that only capped speed and let foam set the alpha made the
   whole reach solid white — the shore term had been the bigger part.
+
+## Mountain footslope: a massif under the crest (2026-09-24)
+
+Measured on the game island (seed 11, crest drawn at 91 m) before the change: **65% of the land over
+20 m was steeper than 45 degrees** and 11% gentler than 15. A top-down height map showed why: the
+ranges were **mesas**, pale flat tops with a wall round the edge. The ridged crest noise rises its whole
+height in 15-20 m of horizontal distance; settling can only cut that back to the 45-degree talus, so
+every flank came out one uniform face with nothing at its foot. No amount of settling makes a
+footslope out of that; the height has to be put down wider in the first place.
+
+**The change.** Most of a mountain's height is now a broad massif that climbs with the distance in from
+the foot of the mountain zone (the 0.5 contour of the mountains weight), on a concave curve,
+`(distance / MassifReach) ^ MassifConcavity`, so it starts gently and steepens toward the top. The
+ridged crest rides on it as `CrestShare` of the height, faded in as the massif climbs, so the foot of a
+range is the massif alone.
+
+Swept on the game island (land over 15 m):
+
+| reach, concavity, crest share | highest | steeper than 50 | gentler than 30 | walk for 10 m down |
+|---|---|---|---|---|
+| before | 77 m | 44% | 18% | 7.4 m |
+| 80, 1.6, 0.35 | 92 m | 24% | 11% | 6.4 m |
+| 120, 1.6, 0.35 | 66 m | 8% | 32% | 8.3 m |
+| **140, 1.6, 0.25** | **56 m** | **3%** | **48%** | **9.9 m** |
+| 160, 1.6, 0.35 | 54.5 m | 5% | 47% | 9.2 m |
+| 220, 1.8, 0.35 | 40 m | 2% | 62% | 12.4 m |
+
+The trade is fixed by the zone's width: the average flank is about height over reach, and this
+island's mountain zones reach only 60-100 m in from their edge. A narrow range comes out lower under
+the massif (the western range on seed 11 is a 30 m knoll at reach 120), which is how real narrow ranges
+are. 140 / 1.6 / 0.25 keeps the peaks at 56 m, inside the original "peaks of 40-60 m" ruling
+(2026-09-21); the crest drawn on the asset (80-130 m) was set to make up for settling and is now worth
+revisiting against this.
+
+The three new settings are written into `IslandSettings.asset` explicitly: the loaded asset had
+picked up a first trial's defaults on reload and would have kept them over the code defaults.

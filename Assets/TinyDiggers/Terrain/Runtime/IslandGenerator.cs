@@ -566,6 +566,23 @@ namespace TinyDiggers.Terrain
                     sample[count++] = type[cell];
             var (plainsBelow, mountainsAbove) = LandTypes.Thresholds(sample, count, map.Mix);
 
+            // How far each cell is in from the foot of the mountains, which the massif climbs by.
+            // The ridged crest alone rose its whole height in a few tens of metres, and settling
+            // could only knock that back to the talus: every flank came out a uniform 45-degree
+            // cone with no footslope (Ronan, 2026-09-24: "no hills or buildup to them").
+            var outsideMountains = new bool[cells];
+            Parallel.For(0, depth, z =>
+            {
+                for (var x = 0; x < width; x++)
+                {
+                    var cell = z * width + x;
+                    outsideMountains[cell] = inDisc[cell]
+                        && (!land[cell] || LandTypes.Weights(type[cell], plainsBelow, mountainsAbove, settings.TypeBlend).mountains < 0.5f);
+                }
+            });
+            var massifReach = Mathf.Max(1f, settings.MassifReach);
+            var toFoot = TerrainErosion.EuclideanDistance(outsideMountains, width, depth, massifReach);
+
             // Cliff coasts (phase 4): a slow field along the coast, pulled up where hills and
             // mountains are, cut so the drawn share of the shore is cliff. Only the open sea's
             // coast: a cliff round a lake stood up as a rampart round it.
@@ -631,7 +648,14 @@ namespace TinyDiggers.Terrain
                         var crest = RidgedFbm(crestAt, ridgeOffset, settings.FeatureSize * 0.55f, 4);
                         crest += (Noise(crestAt, ridgeOffset + new Vector2(211f, 97f), settings.RidgeWarpSize * 1.6f) - 0.5f) * 0.22f;
                         var alongRidge = Mathf.Clamp01(1f - DistanceToCurve(warped, ridge) / Mathf.Max(4f, settings.RidgeWidth));
-                        peak = Mathf.Clamp01(crest) * (0.55f + 0.45f * Smooth(alongRidge));
+                        var ridged = Mathf.Clamp01(crest) * (0.55f + 0.45f * Smooth(alongRidge));
+                        // Most of the height is a broad massif, concave so it starts gently at the
+                        // foot and steepens toward the top; the ridged crest rides on it, fading in
+                        // as it climbs, so the foot of a range is the massif alone.
+                        var climb = Mathf.Clamp01(toFoot[cell] / massifReach);
+                        var massif = Mathf.Pow(climb, settings.MassifConcavity);
+                        var share = Mathf.Clamp01(settings.CrestShare);
+                        peak = (1f - share) * massif + share * ridged * Smooth(climb * 2f);
                         var roughness = (Noise(warped, mediumOffset, settings.MediumSize) - 0.5f) * settings.MediumRelief
                             + Fbm(warped, mediumOffset + new Vector2(313f, 77f), settings.DetailSize, 2) * 2f * settings.DetailRelief;
                         mountain = hill + peak * map.MountainCrest + roughness;
