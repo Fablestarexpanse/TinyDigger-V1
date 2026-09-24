@@ -6477,3 +6477,25 @@ the same moment (140 s in), the stepped shelf and stepped glint are gone.
 **Most of the white in the first screenshot was the first seconds of play**, while water films spread
 and settle over the banks; at 140 s both shaders show little white. **Still open:** a river running down
 a steep gorge shows its rapids as a stepped white strip.
+
+## Rapids on a steep reach (2026-09-24)
+
+At the steepest reach on the game island (8.5 m down over four path points, about 65 degrees, water
+4 to 10 cm deep, measured 140 s into play) the river drew as a white checker. Two causes, found by
+taking the terrain out of the shot:
+
+- **The holes were the terrain in front of the water.** With the terrain hidden the film is whole. The
+  water mesh has a vertex on every second cell corner and each vertex matches the terrain corner under
+  it, but on a slope that steep the ground half way between two vertices bulges over the straight
+  edge joining them, and a film a few centimetres thick goes under it a quad at a time. A vertex with
+  water standing higher beside it (a cascade, `_CascadeDrop` = 0.25 m) is now lifted just enough that
+  every edge to a wet neighbour clears the ground at its middle; a dry vertex inside a cascade is
+  draped at its ground and lifted the same way. Banks, with water only below them, are untouched, so
+  the river-bank fix stands.
+- **The white was foam from speed and shore added together.** A thin fast sheet is shallow
+  everywhere, so the shore term was near full on top of the speed term. They now combine by the larger,
+  speed foam is capped (`_FoamSpeedCap` = 0.5). Drawing the pattern out along the flow, in the flow's
+  own frame, was tried and taken out: a world position hundreds of metres from the origin, dotted with
+  a direction that changes from cell to cell, moved the pattern by metres between neighbouring pixels
+  and covered fast water in contour lines. A first attempt that only capped speed and let foam set the alpha made the
+  whole reach solid white — the shore term had been the bigger part.

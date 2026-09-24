@@ -29,6 +29,8 @@ Shader "PromptWaffle/Dynamic Water Surface"
         _FoamFromSpeed ("Foam per m/s of flow", Range(0, 2)) = 0.35
         _ShoreFoam ("Foam in thin water at the shore", Range(0, 1)) = 0.45
         _FoamScale ("Foam pattern size (m)", Float) = 2.5
+        _FoamSpeedCap ("Most foam from speed alone", Range(0, 1)) = 0.5
+        _CascadeDrop ("Water higher beside a vertex than this is a cascade (m)", Float) = 0.25
         _FlowPeriod ("Flow cycle (s)", Float) = 1.6
         _NormalStrength ("Normal strength", Range(0, 4)) = 1.4
         _RippleStrength ("Small ripples on moving water", Range(0, 1)) = 0.25
@@ -84,6 +86,8 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 half _FoamFromSpeed;
                 half _ShoreFoam;
                 float _FoamScale;
+                half _FoamSpeedCap;
+                float _CascadeDrop;
                 float _FlowPeriod;
                 half _NormalStrength;
                 half _RippleStrength;
@@ -173,6 +177,52 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 return displacement;
             }
 
+            // Height a vertex in a cascade needs so the mesh edge to each wet neighbour clears the
+            // ground half way along it. The mesh has one vertex every few cells; on a steep reach
+            // the ground between two of them bulges over the straight edge joining them, and a
+            // film a few centimetres thick went under it a whole quad at a time (2026-09-24).
+            float CascadeClearance(float2 uv)
+            {
+                float2 step = _WaterTexel.xy * max(1.0, _WaterTexel.w);
+                float need = -1e6;
+                [unroll]
+                for (int j = -1; j <= 1; j++)
+                {
+                    [unroll]
+                    for (int i = -1; i <= 1; i++)
+                    {
+                        if (i == 0 && j == 0)
+                            continue;
+                        float2 d = float2(i * step.x, j * step.y);
+                        float4 far = State(uv + d);
+                        float4 mid = State(uv + d * 0.5);
+                        if (far.x > -1e5 && far.y > _DryDepth && mid.x > -1e5)
+                            need = max(need, 2.0 * (mid.x - mid.y) - far.x + 0.03);
+                    }
+                }
+                return need;
+            }
+
+            // Whether water beside this point stands higher than the given height: water is coming
+            // down over it, as on a riser or a steep tread, rather than lying level in a pool.
+            float HighestWetNeighbour(float2 uv)
+            {
+                float2 step = _WaterTexel.xy * max(1.0, _WaterTexel.w);
+                float highest = -1e6;
+                [unroll]
+                for (int j = -1; j <= 1; j++)
+                {
+                    [unroll]
+                    for (int i = -1; i <= 1; i++)
+                    {
+                        float4 s = State(uv + float2(i * step.x, j * step.y));
+                        if ((i != 0 || j != 0) && s.x > -1e5 && s.y > _DryDepth)
+                            highest = max(highest, s.x);
+                    }
+                }
+                return highest;
+            }
+
             // Height for a dry vertex: the lowest wet surface one vertex step away, a hair under it,
             // so the water runs on flat past its edge and the ground cuts the shoreline. With no
             // water beside it the vertex is sunk under its own ground so nothing shows there.
@@ -181,10 +231,18 @@ Shader "PromptWaffle/Dynamic Water Surface"
             // a slanted skirt, the fragment cut it where the interpolated wet flag crossed a half,
             // and what stood above the bank was paper-thin water the shore foam painted solid
             // white: a stepped white wall down every river bank, one vertex step to a tooth.
+            //
+            // Except where the water beside it stands higher than this vertex's own ground: then the
+            // vertex is a riser inside a cascade, with water coming over it from above, and it is
+            // draped with a film at its ground. Held at the lowest water it went under the ground,
+            // and a steep reach, pooled on every tread and dry on every riser, came apart into a
+            // checker of water and holes (2026-09-24). A bank has water only below it, so a bank
+            // still gets the flat surface and the ground still cuts the shoreline.
             float DryStandIn(float2 uv, float ground, out float lifted)
             {
                 float2 step = _WaterTexel.xy * max(1.0, _WaterTexel.w);
                 float lowest = 1e6;
+                float highest = -1e6;
                 [unroll]
                 for (int j = -1; j <= 1; j++)
                 {
@@ -195,12 +253,17 @@ Shader "PromptWaffle/Dynamic Water Surface"
                             continue;
                         float4 s = State(uv + float2(i * step.x, j * step.y));
                         if (s.x > -1e5 && s.y > _DryDepth)
+                        {
                             lowest = min(lowest, s.x);
+                            highest = max(highest, s.x);
+                        }
                     }
                 }
 
                 lifted = lowest < 1e5 ? 1.0 : 0.0;
-                return lifted > 0.5 ? lowest - 0.02 : ground - 0.15;
+                if (lifted < 0.5)
+                    return ground - 0.15;
+                return highest > ground + 0.02 ? max(ground + 0.02, CascadeClearance(uv)) : lowest - 0.02;
             }
 
             // Height for a vertex over a wall: the highest non-wall surface one vertex step away,
@@ -236,6 +299,8 @@ Shader "PromptWaffle/Dynamic Water Surface"
                     surface = WallStandIn(uv, input.positionOS.y) - 0.15;
                 else if (wet < 0.5)
                     surface = DryStandIn(uv, state.x, lifted);
+                else if (HighestWetNeighbour(uv) > state.x + _CascadeDrop)
+                    surface = max(surface, CascadeClearance(uv));
                 positionWS.y = surface;
                 output.baseXZ = positionWS.xz;
                 output.swell = 0;
@@ -335,6 +400,9 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 float phaseA = frac(cycle);
                 float phaseB = frac(cycle + 0.5);
                 float weightB = abs(1.0 - 2.0 * phaseA);
+                // Not turned into the flow's own frame: a world position hundreds of metres out,
+                // dotted with a direction that changes from cell to cell, moved the pattern by metres
+                // between neighbouring pixels and drew contour lines all over fast water (2026-09-24).
                 float2 p = input.positionWS.xz / _FoamScale;
                 float2 drift = velocity * _FlowPeriod / _FoamScale;
                 float patternA = FoamPattern(p - drift * phaseA);
@@ -353,7 +421,11 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 normal = normalize(normal - float3(windSlope.x, 0, windSlope.y));
 
                 float shore = 1.0 - saturate(edgeDepth / 0.35);
-                float foamAmount = saturate(speed * _FoamFromSpeed + shore * _ShoreFoam);
+                // Speed alone never whites the water out: uncapped, a thin sheet racing down a steep
+                // reach went solid white on every triangle (2026-09-24).
+                // Nor do speed and shore stack: a thin fast sheet is all shore by depth, and the two
+                // together whited it out again.
+                float foamAmount = max(min(speed * _FoamFromSpeed, _FoamSpeedCap), shore * _ShoreFoam);
                 // Whitecaps: crests above the threshold share of the local swell, in deep rough water.
                 float crest = saturate((input.swell.x - _PWWaveParams.w) / max(0.05, 1.0 - _PWWaveParams.w));
                 foamAmount = saturate(foamAmount + crest * input.swell.y * 0.9);
@@ -388,7 +460,9 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 colour = lerp(colour, _Foam.rgb * lerp(0.6, 1.0, shadow), foam);
                 colour = MixFog(colour, input.fogFactor);
 
-                float alpha = saturate(edgeDepth / _EdgeFade);
+                // Foam is opaque however thin the water under it: a film draped over a riser shows
+                // as foam over wet rock rather than vanishing.
+                float alpha = saturate(max(edgeDepth / _EdgeFade, foam));
                 return half4(colour, alpha);
             }
             ENDHLSL
