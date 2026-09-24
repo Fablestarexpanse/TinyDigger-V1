@@ -106,6 +106,39 @@ namespace TinyDiggers.Units
 
             Regions = new RegionMap(grid, pathfinder);
             _designations.AutoCancelled += OnAutoCancelled;
+            Worksites.Removed += OnWorksiteRemoved;
+            Worksites.Changed += OnWorksiteChanged;
+        }
+
+        /// <summary>The worksites vehicles are assigned to (2026-09-24).</summary>
+        public Worksites Worksites { get; } = new Worksites();
+
+        /// <summary>
+        /// Whether a unit needs a worksite to work at all. On in the game — a vehicle with no worksite
+        /// parks and waits to be assigned, as in Captain of Industry, instead of roaming the map for
+        /// anything to do. Off, a unit with no worksite takes work anywhere, as the crew always did;
+        /// the tests of the crew's own rules run that way.
+        /// </summary>
+        public bool RequireWorksite { get; set; }
+
+        /// <summary>A worksite gone: its vehicles are unassigned, and so park.</summary>
+        void OnWorksiteRemoved(int id)
+        {
+            foreach (var unit in _units)
+            {
+                if (unit == null || unit.Site != id)
+                    continue;
+                unit.Site = 0;
+                unit.RequestRethink();
+            }
+        }
+
+        /// <summary>A worksite moved or resized: its vehicles look at their work again.</summary>
+        void OnWorksiteChanged(int id)
+        {
+            foreach (var unit in _units)
+                if (unit != null && unit.Site == id)
+                    unit.RequestRethink();
         }
 
         public DesignationMap Designations => _designations;
@@ -244,7 +277,20 @@ namespace TinyDiggers.Units
         {
             if (digger.Id < _wantsHauler.Count)
                 _wantsHauler[digger.Id] = true;
-            return HasHaulers;
+            return HasHaulersAt(digger.Site);
+        }
+
+        /// <summary>
+        /// Whether a hauler that can take a load is assigned to worksite <paramref name="site"/> (0: to
+        /// none). A digger waits for one of its own worksite's dumpers: waiting because there is a
+        /// dumper at some other site would wait for ever.
+        /// </summary>
+        public bool HasHaulersAt(int site)
+        {
+            foreach (var unit in _units)
+                if (unit != null && unit.Role == UnitRole.Hauler && unit.Site == site && unit.State != CrewUnitState.NeedsSomewhereToTip)
+                    return true;
+            return false;
         }
 
         /// <summary>
@@ -263,7 +309,8 @@ namespace TinyDiggers.Units
             var bestScore = float.MinValue;
             foreach (var unit in _units)
             {
-                if (unit == null || unit.Role != UnitRole.Digger || HaulerFor(unit.Id) >= 0)
+                // A dumper serves the diggers of its own worksite and nobody else's.
+                if (unit == null || unit.Role != UnitRole.Digger || HaulerFor(unit.Id) >= 0 || unit.Site != hauler.Site)
                     continue;
                 var there = unit.Cell;
                 if (!Regions.CanReach(here.x, here.y, there.x, there.y))
@@ -674,6 +721,8 @@ namespace TinyDiggers.Units
                 return;
             _disposed = true;
             _designations.AutoCancelled -= OnAutoCancelled;
+            Worksites.Removed -= OnWorksiteRemoved;
+            Worksites.Changed -= OnWorksiteChanged;
             Regions.Dispose();
         }
 

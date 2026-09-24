@@ -66,6 +66,8 @@ namespace TinyDiggers.EditorTools
                 }
 
                 var grid = view.Grid;
+                // The capture drives the crew itself and has no worksite to assign them to.
+                crew.NeedWorksite = false;
 
                 // Just the machines: a digger and its dumper, and nobody to queue behind.
                 for (var i = crew.Units.Count - 1; i >= 0; i--)

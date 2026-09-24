@@ -10,6 +10,10 @@ is done, what is running, what comes next.
 
 ## NEXT
 
+**Worksites, 2026-09-24:** Captain of Industry style — a building and a work area (tool 0); vehicles
+are assigned by right-clicking it and work only there; unassigned vehicles park. Replaces posting to
+terraform shapes. See `DECISIONS.md`. Look at it in play mode first.
+
 **Road machines, 2026-09-24:** a Bulldozer and a Paver stand-in (dumper-sized boxes) now grade and
 surface roads as crew units; nothing grades or paves on its own any more. Look at them in play.
 

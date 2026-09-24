@@ -45,6 +45,16 @@ namespace TinyDiggers.Interaction
         [Tooltip("How many pavers to spawn: they lay the final layer on graded road.")]
         [SerializeField, Min(0)] int _paverCount = 1;
 
+        [Tooltip("Vehicles with no worksite park and wait to be assigned, as in Captain of Industry. Off: they take work anywhere.")]
+        [SerializeField] bool _needWorksite = true;
+
+        /// <summary>Whether vehicles with no worksite park (the game) or take work anywhere (the editor's trials).</summary>
+        public bool NeedWorksite
+        {
+            get => _needWorksite;
+            set => _needWorksite = value;
+        }
+
         [Tooltip("Metres per second.")]
         [SerializeField, Min(0.1f)] float _speed = 3f;
 
@@ -177,18 +187,18 @@ namespace TinyDiggers.Interaction
         }
 
         /// <summary>
-        /// Sends the selected units to work one shape and nothing else, or, with site 0, lets them
-        /// take work anywhere again. Returns how many were told (Ronan, 2026-09-23: *"when I tell
-        /// them to dig it, select units, assign, type deal"*).
+        /// Assigns the selected units to a worksite (2026-09-24): they drop any hold, go there and
+        /// work its area and nothing else. Returns how many were assigned (Ronan, 2026-09-23:
+        /// *"when I tell them to dig it, select units, assign, type deal"*).
         /// </summary>
-        public int Post(int site)
+        public int Assign(int site)
         {
             var told = 0;
             foreach (var unit in Selection)
             {
-                if (unit.Site == site)
-                    continue;
                 unit.Site = site;
+                unit.ReleaseHold();
+                unit.RequestRethink();
                 told++;
             }
 
@@ -649,6 +659,7 @@ namespace TinyDiggers.Interaction
 
         void Update()
         {
+            Dispatcher.RequireWorksite = _needWorksite;
             Dispatcher.Benching = benching;
             Dispatcher.AutoRamp = autoRamp;
             _pathfinder.MaxStepHeight = maxStepHeight;

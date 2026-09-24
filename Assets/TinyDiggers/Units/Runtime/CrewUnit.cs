@@ -592,11 +592,13 @@ namespace TinyDiggers.Units
         public int RoadCellsDone { get; private set; }
 
         /// <summary>
-        /// The shape this unit has been posted to, or 0 for anywhere — which is every unit until it
-        /// is sent somewhere, so an unposted crew behaves exactly as it always has.
+        /// The <see cref="Worksite"/> this unit is assigned to, or 0 for none (2026-09-24).
         ///
-        /// A posted unit takes work only inside its site. Tipping is the exception: the spoil has to
-        /// go somewhere and the heap is almost never inside the hole.
+        /// An assigned unit takes work only inside its worksite's area, and a dumper serves only
+        /// its own worksite's diggers. Tipping and quarrying are the exceptions: the spoil has to go
+        /// somewhere and the heap is almost never inside the hole, and fill has to come from
+        /// somewhere too. A unit with no worksite parks when the dispatcher
+        /// <see cref="JobDispatcher.RequireWorksite"/>s, and otherwise works anywhere.
         /// </summary>
         public int Site { get; set; }
 
@@ -964,6 +966,15 @@ namespace TinyDiggers.Units
                 return;
             }
 
+            // No worksite, no work: it parks where it is and waits to be assigned.
+            if (Site == 0 && _dispatcher.RequireWorksite)
+            {
+                Job = CrewJobKind.None;
+                _dispatcher.Release(Id);
+                SetState(CrewUnitState.Idle, "Parked: no worksite — assign it to one");
+                return;
+            }
+
             if (WorksRoads)
             {
                 ChooseRoadJob(start);
@@ -1026,7 +1037,7 @@ namespace TinyDiggers.Units
                     var z = cell / width;
                     if (grading ? !roads.NeedsGrading(x, z) : !roads.NeedsSurface(x, z))
                         continue;
-                    if (_dispatcher.IsClaimedByOther(x, z, Id))
+                    if (_dispatcher.IsClaimedByOther(x, z, Id) || !InMyArea(Job, x, z))
                         continue;
                     long dx = x - start.x;
                     long dz = z - start.y;
@@ -1070,6 +1081,11 @@ namespace TinyDiggers.Units
                 : grading ? "Idle: no road with its earthworks done" : "Idle: no graded road to surface");
         }
 
+        /// <summary>Whether a cell is inside this unit's worksite, or needs not be for this kind of job.</summary>
+        bool InMyArea(CrewJobKind kind, int x, int z) =>
+            Site == 0 || kind == CrewJobKind.DumpZone || kind == CrewJobKind.Quarry
+            || _dispatcher.Worksites.Contains(Site, x, z);
+
         void IdleOnRoads(string status)
         {
             Job = CrewJobKind.None;
@@ -1101,7 +1117,7 @@ namespace TinyDiggers.Units
                 {
                     var x = JobStand.x + dx;
                     var z = JobStand.y + dz;
-                    if (!_grid.InBounds(x, z) || _dispatcher.IsClaimedByOther(x, z, Id))
+                    if (!_grid.InBounds(x, z) || _dispatcher.IsClaimedByOther(x, z, Id) || !InMyArea(Job, x, z))
                         continue;
                     if (Role == UnitRole.Bulldozer ? roads.Grade(x, z) : roads.LaySurface(x, z))
                         RoadCellsDone++;
@@ -1525,13 +1541,14 @@ namespace TinyDiggers.Units
 
         bool IsJobCell(CrewJobKind kind, int standX, int standZ, float standHeight, int x, int z)
         {
-            // A unit posted to a site works that site and nothing else — one filter, at the one
-            // place every job kind asks whether a cell is worth having.
+            // A unit assigned to a worksite works its area and nothing else — one filter, at the
+            // one place every job kind asks whether a cell is worth having.
             //
-            // Tipping is deliberately exempt. A crew sent to dig a pit still has to put the spoil
-            // somewhere, and the heap is almost never inside the hole; filtering DumpZone too would
-            // post a crew and then stall it the moment the first machine filled up.
-            if (Site != 0 && kind != CrewJobKind.DumpZone && _designations.SiteAt(x, z) != Site)
+            // Tipping and quarrying are deliberately exempt. A crew sent to dig a pit still has to
+            // put the spoil somewhere, and the heap is almost never inside the hole; filtering
+            // DumpZone too would stall a crew the moment the first machine filled up. A fill in the
+            // area needs material from wherever the quarry is, for the same reason.
+            if (!InMyArea(kind, x, z))
                 return false;
 
             switch (kind)

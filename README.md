@@ -29,6 +29,7 @@ Tools are on the toolbar and on the number keys:
 | 7 | Clear | drag over marks to take them off |
 | 8 | Quarry | drag where the crew may dig for fill material |
 | 9 | Terraform | draw the shape you want the ground to be |
+| 0 | Worksite | put a site building down and drag its work area |
 
 **H** is the target height every tool works to: it follows the cursor until PageUp/PageDown moves it,
 which locks it. `[` and `]` resize a brush. Alt-click samples the ground height into H. **M** hides
@@ -37,8 +38,11 @@ Ctrl+Z and Ctrl+Y undo and redo what you have marked.
 
 Inside the Terraform tool: **A** area, **H** heap, **P** pit, **R** ribbon, **B** brush (press again
 to change what the brush does). Click corners, Enter commits, right-click takes a whole shape away.
-With units selected, right-clicking a committed shape posts them to it — they then work that site
-and nothing else.
+
+**Nothing works until it is assigned to a worksite**, as in Captain of Industry. Put a worksite down
+(0) and drag out its area; then select units and right-click the worksite to assign them. They work
+its area and nothing else — they still tip at any Dump Zone and dig any Quarry — and a dumper serves
+only its own worksite's diggers. A unit with no worksite parks where it is.
 
 ## How the code is laid out
 

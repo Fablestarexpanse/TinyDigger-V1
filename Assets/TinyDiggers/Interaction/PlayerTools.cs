@@ -10,7 +10,7 @@ using UnityEngine.UI;
 
 namespace TinyDiggers.Interaction
 {
-    /// <summary>What the left mouse button does. Hotkeys 1-8, Escape goes back to Select.</summary>
+    /// <summary>What the left mouse button does. Hotkeys 1-9 and 0, Escape goes back to Select.</summary>
     public enum ToolMode
     {
         Select,
@@ -26,6 +26,9 @@ namespace TinyDiggers.Interaction
 
         /// <summary>Shapes drawn over the land for the crew to build: see <see cref="TerraformHost"/>.</summary>
         Terraform,
+
+        /// <summary>Worksites: a building and a work area that vehicles are assigned to. See <see cref="WorksitesHost"/>.</summary>
+        Worksite,
     }
 
     /// <summary>
@@ -135,6 +138,12 @@ namespace TinyDiggers.Interaction
         /// <summary>The island's roads and the Road tool (Slice 17 Part B).</summary>
         public RoadsHost Roads { get; private set; }
 
+        /// <summary>Metres across a cell of the terrain, or 1 before there is one.</summary>
+        public float CellSize => _terrain != null && _terrain.Grid != null ? _terrain.Grid.CellSize : 1f;
+
+        /// <summary>The worksites and the Worksite tool (2026-09-24).</summary>
+        public WorksitesHost Worksites { get; private set; }
+
         /// <summary>The landform plan and the Terraform tool.</summary>
         public TerraformHost Terraform { get; private set; }
 
@@ -149,7 +158,7 @@ namespace TinyDiggers.Interaction
 
         /// <summary>Whether a rectangle, a road or a landform is part-drawn.</summary>
         public bool IsDrawing => _dragging || Roads != null && Roads.IsDrawing
-            || Terraform != null && Terraform.IsDrawing;
+            || Terraform != null && Terraform.IsDrawing || Worksites != null && Worksites.IsDrawing;
 
         public DesignationMap Map => _designations.Map;
 
@@ -254,6 +263,8 @@ namespace TinyDiggers.Interaction
             Roads.Init(this, _terrain, _overlayMaterial);
             Terraform = gameObject.AddComponent<TerraformHost>();
             Terraform.Init(this, _terrain, _overlayMaterial);
+            Worksites = gameObject.AddComponent<WorksitesHost>();
+            Worksites.Init(this, _terrain, _overlayMaterial);
         }
 
         public void SetMode(ToolMode mode)
@@ -272,6 +283,7 @@ namespace TinyDiggers.Interaction
             _painting = false;
             Roads?.Cancel();
             Terraform?.Cancel();
+            Worksites?.Cancel();
             _plan.Clear();
             PlannedCut = 0f;
             PlannedFill = 0f;
@@ -344,6 +356,8 @@ namespace TinyDiggers.Interaction
                 SetMode(ToolMode.Quarry);
             if (keyboard.digit9Key.wasPressedThisFrame)
                 SetMode(ToolMode.Terraform);
+            if (keyboard.digit0Key.wasPressedThisFrame)
+                SetMode(ToolMode.Worksite);
 
             if (keyboard.escapeKey.wasPressedThisFrame)
             {
@@ -474,17 +488,23 @@ namespace TinyDiggers.Interaction
 
             if (rightDown && HasHover && _crew.SelectedCount > 0)
             {
-                // Right-clicking a shape posts the selection to it; right-clicking bare ground sends
-                // them there and takes them off whatever site they were on, so "go over there" is
-                // still exactly what it looks like.
-                var site = Terraform != null ? Terraform.SiteAt(HoverCells) : 0;
-                var posted = _crew.Post(site);
-                var sent = _crew.OrderSelectedTo(HoverX, HoverZ);
-                LastAction = site != 0
-                    ? $"Posted {posted} unit{(posted == 1 ? "" : "s")} to the shape here — they will work it and nothing else"
-                    : sent > 0
+                // Right-clicking a worksite assigns the selection to it, and they go to work there;
+                // right-clicking anywhere else sends them to that spot and they hold there, still
+                // assigned to whatever worksite they had (2026-09-24, after Captain of Industry).
+                var site = Worksites != null ? Worksites.SiteAt(HoverCells) : null;
+                if (site != null)
+                {
+                    var assigned = _crew.Assign(site.Id);
+                    Worksites.Select(site.Id);
+                    LastAction = $"Assigned {assigned} unit{(assigned == 1 ? "" : "s")} to {site.Name} — they will work its area and nothing else";
+                }
+                else
+                {
+                    var sent = _crew.OrderSelectedTo(HoverX, HoverZ);
+                    LastAction = sent > 0
                         ? $"Sent {sent} unit{(sent == 1 ? "" : "s")} to ({HoverX}, {HoverZ})"
                         : $"No way to ({HoverX}, {HoverZ})";
+                }
             }
         }
 
@@ -553,6 +573,11 @@ namespace TinyDiggers.Interaction
                         LastAction = "Cancelled";
                     }
                 }
+                else if (Mode == ToolMode.Worksite)
+                {
+                    if (HasHover && !Worksites.RemoveAt(HoverCells))
+                        LastAction = "No worksite here";
+                }
                 else if (Mode == ToolMode.Terraform && HasHover)
                 {
                     // A shape is a thing, not a smear of marks: the right button takes the whole
@@ -588,6 +613,9 @@ namespace TinyDiggers.Interaction
                     break;
                 case ToolMode.Terraform:
                     Terraform.HandleMouse(mouse, HasHover, HoverCells);
+                    break;
+                case ToolMode.Worksite:
+                    Worksites.HandleMouse(mouse, HasHover, HoverCells);
                     break;
             }
         }

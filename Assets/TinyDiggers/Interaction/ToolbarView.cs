@@ -66,6 +66,9 @@ namespace TinyDiggers.Interaction
             },
             new[] { new ToolButton { Mode = ToolMode.Clear, Icon = ToolIcon.Clear, Name = "Clear", Key = "7",
                 Help = "drag to take designations off" } },
+            // The digger's glyph until the worksite building has an icon of its own.
+            new[] { new ToolButton { Mode = ToolMode.Worksite, Icon = ToolIcon.Digger, Name = "Worksite", Key = "0",
+                Help = "put a worksite down and drag its work area; right-click it with units selected to assign them" } },
         };
 
         readonly List<(ToolMode Mode, Image Image, Image Icon)> _toolImages = new List<(ToolMode, Image, Image)>();

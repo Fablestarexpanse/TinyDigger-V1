@@ -5973,3 +5973,49 @@ bed and touch nothing else; a paver alone does nothing and says why; both have t
 and never dig. 465 Terrain and Units tests pass; the same 11 stand-in-noise failures as before.
 Type-checks against Unity's assemblies. **Not seen in play mode** — the stand-in bodies especially.
 
+## 2026-09-24 — Worksites, after Captain of Industry
+
+Asked: *"copy Captain of Industry and how they do their designations, where you have a building that
+you put at your worksite and then you assign vehicles to it; that building can designate a large area
+to represent the work area, instead of them just trying to find anything on the map to do."* Ruled:
+an unassigned vehicle **parks and waits**; trucks **tip at any Dump Zone**; worksites **replace**
+posting a crew to a terraform shape.
+
+- **Model** (`Units/Runtime/Worksites.cs`, plain C#, on `JobDispatcher.Worksites`): a worksite is a
+  building cell and a rectangular work area, clamped to 4–160 cells a side (2–80 m). Moving the
+  building takes the area with it; where areas overlap the smaller one is "the one here".
+- **The rule** is the old posting filter, re-pointed: `CrewUnit.Site` is now a worksite id and
+  `IsJobCell` asks whether the cell is in that worksite's area (`InMyArea`). **Tipping and quarrying
+  are exempt**, as tipping already was: the heap is almost never inside the hole, and a fill in the
+  area needs material from wherever the quarry is. The road machines filter the same way.
+- **Unassigned vehicles park** when `JobDispatcher.RequireWorksite` is set — the game sets it
+  (`CrewView._needWorksite`, on); the crew's own tests leave it off and keep their old meaning. A
+  parked unit says "Parked: no worksite — assign it to one" and looks again every second.
+- **Dumpers stay with their worksite:** `AssignDigger` pairs only same-worksite units, and a digger
+  waits for a dumper only if its own worksite has one (`HasHaulersAt`) — the global "any hauler
+  anywhere" check would have left a dumper-less site's digger waiting for ever.
+- Removing a worksite unassigns its vehicles (they park); moving or resizing one makes its vehicles
+  look at their work again.
+- **Tool** (0, `WorksitesHost`): drag on open ground to put the building where the drag starts and
+  draw the area; a click gives a 20 m square. Click an area to select it, drag the building to move
+  it, drag a corner of the selected area to resize, right-click to remove. The stand-in building is a
+  block with a roof and a mast; areas are always outlined, each worksite labelled with its vehicles.
+  The panel shows the selected one and has Assign selected / Release all / Remove. The toolbar button
+  borrows the digger's glyph: the icon sheet is an LFS file this session could not edit.
+- **Assigning:** with units selected, right-click a worksite (its building or anywhere in its area).
+  Right-clicking elsewhere sends them there to hold, and keeps their assignment. The crew panel
+  tags assigned units "· WS n".
+- The terraform shapes keep their site layer — right-click still finds the shape to remove by it —
+  but it no longer assigns anyone. `SiteTrials` and `FeelCapture` switch `NeedWorksite` off, since
+  they drive the crew themselves.
+
+**Verified** under .NET: 472 Terrain and Units tests pass, 7 new (worksite sizing, backwards drags,
+moving, overlap; an unassigned unit parking and then working once assigned; removal letting units
+go; a dumper passing over a nearer digger from another worksite). The whole project, UI included,
+type-checks against Unity's assemblies. **Not seen in play mode.**
+
+**Worth knowing:** a new game starts with the whole crew parked — nothing happens until a worksite is
+put down and units assigned, which is the Captain of Industry rule but a change from before. A road
+longer than a worksite is only graded and paved inside the area of whichever worksite its machines
+belong to.
+

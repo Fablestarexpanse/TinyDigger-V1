@@ -6,9 +6,11 @@ using UnityEngine;
 namespace TinyDiggers.Units.Tests
 {
     /// <summary>
-    /// Sending a crew to work one shape and nothing else (Ronan, 2026-09-23: *"when I tell them to
-    /// dig it, select units, assign, type deal"*). Until now a unit took work from the whole map,
-    /// which is fine for one job and useless the moment there are two.
+    /// Sending a crew to work one place and nothing else (Ronan, 2026-09-23: *"when I tell them to
+    /// dig it, select units, assign, type deal"*). Until then a unit took work from the whole map,
+    /// which is fine for one job and useless the moment there are two. Since 2026-09-24 the place is
+    /// a <see cref="Worksite"/> — a building and a work area, after Captain of Industry — rather
+    /// than a terraform shape.
     /// </summary>
     public class PostedCrewTests
     {
@@ -56,22 +58,18 @@ namespace TinyDiggers.Units.Tests
             return unit;
         }
 
-        /// <summary>Two patches of digging, one on each side of the map, each its own site.</summary>
+        /// <summary>Two patches of digging, one on each side of the map, each with its own worksite (ids 1 and 2).</summary>
         void TwoSites()
         {
             for (var z = 20; z < 26; z++)
                 for (var x = 10; x < 16; x++)
-                {
                     _map.Designate(x, z, DesignationKind.Dig, Ground - 1f);
-                    _map.SetSite(x, z, 1);
-                }
+            _dispatcher.Worksites.Add(new Vector2Int(12, 18), new RectInt(10, 20, 6, 6));
 
             for (var z = 20; z < 26; z++)
                 for (var x = 40; x < 46; x++)
-                {
                     _map.Designate(x, z, DesignationKind.Dig, Ground - 1f);
-                    _map.SetSite(x, z, 2);
-                }
+            _dispatcher.Worksites.Add(new Vector2Int(42, 18), new RectInt(40, 20, 6, 6));
         }
 
         void Work(CrewUnit unit, float seconds)
@@ -153,10 +151,8 @@ namespace TinyDiggers.Units.Tests
             // post a crew and then stall it the moment the first machine filled up.
             for (var z = 20; z < 24; z++)
                 for (var x = 10; x < 14; x++)
-                {
                     _map.Designate(x, z, DesignationKind.Dig, Ground - 2f);
-                    _map.SetSite(x, z, 1);
-                }
+            _dispatcher.Worksites.Add(new Vector2Int(12, 18), new RectInt(10, 20, 4, 4));
 
             // The tip is well outside the site, and belongs to no site at all.
             for (var z = 20; z < 24; z++)
@@ -202,6 +198,57 @@ namespace TinyDiggers.Units.Tests
 
             Assert.That(Dug(_grid, 40, 46, 20, 26), Is.GreaterThan(0f),
                 "and once it is taken off, nothing stops it crossing to the other site");
+        }
+
+        [Test]
+        public void WhereAWorksiteIsNeededAUnitWithoutOneParks()
+        {
+            // Captain of Industry's rule, and the game's: nothing works until it is assigned.
+            TwoSites();
+            _dispatcher.RequireWorksite = true;
+            var unit = Worker(35, 23);
+
+            Work(unit, 60f);
+
+            Assert.That(Dug(_grid, 10, 16, 20, 26) + Dug(_grid, 40, 46, 20, 26), Is.Zero, "it took no work");
+            Assert.That(unit.State, Is.EqualTo(CrewUnitState.Idle));
+            Assert.That(unit.Status, Does.Contain("no worksite"));
+
+            unit.Site = 2;
+            unit.RequestRethink();
+            Work(unit, 120f);
+            Assert.That(Dug(_grid, 40, 46, 20, 26), Is.GreaterThan(0f), "assigned, it goes to work");
+        }
+
+        [Test]
+        public void RemovingAWorksiteLetsItsVehiclesGo()
+        {
+            TwoSites();
+            var unit = Worker(35, 23);
+            unit.Site = 1;
+
+            _dispatcher.Worksites.Remove(1);
+
+            Assert.That(unit.Site, Is.Zero);
+        }
+
+        [Test]
+        public void ADumperServesOnlyItsOwnWorksitesDiggers()
+        {
+            TwoSites();
+            var near = new CrewUnit(_dispatcher, 30, 23, UnitRole.Digger, UnitLoads.Scoop).AsMachine();
+            var far = new CrewUnit(_dispatcher, 50, 30, UnitRole.Digger, UnitLoads.Scoop).AsMachine();
+            var dumper = new CrewUnit(_dispatcher, 31, 26, UnitRole.Hauler, UnitLoads.Bed).AsMachine();
+            _units.Add(near);
+            _units.Add(far);
+            _units.Add(dumper);
+            near.Site = 1;
+            far.Site = 2;
+            dumper.Site = 2;
+
+            Assert.That(_dispatcher.AssignDigger(dumper), Is.EqualTo(far.Id), "its own site's digger, not the nearer one");
+            Assert.That(_dispatcher.HasHaulersAt(1), Is.False, "the first site has no dumper to wait for");
+            Assert.That(_dispatcher.HasHaulersAt(2), Is.True);
         }
 
         [Test]

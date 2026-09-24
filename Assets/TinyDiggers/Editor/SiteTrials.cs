@@ -95,6 +95,9 @@ namespace TinyDiggers.EditorTools
                 _view = FindAnyObjectByType<TerrainView>();
                 _tools = FindAnyObjectByType<PlayerTools>();
                 _crew = FindAnyObjectByType<CrewView>();
+                // The trials drive the crew themselves and have no worksite to assign them to.
+                if (_crew != null)
+                    _crew.NeedWorksite = false;
                 _rts = FindAnyObjectByType<RtsCamera>();
                 _camera = _rts != null ? _rts.GetComponent<Camera>() : Camera.main;
                 while (_view.Grid == null || _crew.Units.Count == 0 || _tools.Map == null)
