@@ -11,7 +11,7 @@ supplies arrive at the dam terminals by ship. A landing craft moves machines acr
 can drive through:
 
 1. **Across open water**: to an islet, round a headland, over a lake.
-2. **Across a river**: see "Rivers" below. The boat is too big to sail in one.
+2. **Not across rivers**: see "Rivers" below. The boat is too big to sail in one, and it is not a bridge.
 3. **Later, from the rim**: a ship docks at a terminal and the landing craft brings its machines ashore.
 
 ## The boat, measured
@@ -28,13 +28,15 @@ At the game's size (x1.41, the same factor as the machines):
 
 Crew robots count by lane: proposed 3 robots per lane (0.41 m each).
 
-## Rivers
+## Rivers: no bridge (ruling)
 
-Rivers are 3 to 6 m wide. The boat is 2.87 m across and 4.9 m long, so it cannot sail up one, and in most
-it cannot turn. What it *can* do is lie across a river, beached at both ends, as a **floating bridge**:
-units drive up one ramp and off the stern onto the far bank. That needs a second ramp at the stern
-(a forge change), or the craft backs across so its ramp touches one bank and its stern the other. This
-is a ruling for Ronan (question 3 below), and the one that most changes what the boat is.
+**Ronan, 2026-09-24:** *"no bridge. If it can't go up river then it stays at beach; the excavator and
+dozer go to it and can be loaded, then the boat can drive around in water and unload them someplace else
+if needed."*
+
+So the craft works **open water only**: the sea, lakes, and whatever water is wide and deep enough for its
+hull. Rivers are 3 to 6 m wide against a 2.87 m beam and a 4.9 m length, so it never sails up one, and
+nothing makes it a bridge. Where the water it can float in ends, it beaches, and the machines come to it.
 
 ## How it plays (proposed)
 
@@ -130,10 +132,8 @@ Each one tested, run in play, and committed on its own.
 
 ## Questions for Ronan
 
-1. **How is it ordered?** Proposed: commanded by hand first (craft to shore, machines to craft), automatic
-   routing later. Or automatic from the start?
-2. **Where does the first one come from?** Proposed: one craft moored off the spawn beach at the start.
-   Or built or bought later, or delivered to a rim terminal?
-3. **Rivers:** a floating bridge across a river (needs a stern ramp from the forge), a ferry for open water
-   only (rivers wait for bridges and fills), or a smaller pontoon for rivers?
-4. **Cargo:** machines only, machines and crew robots (3 per lane), or spoil too (a barge)?
+1. ~~Rivers~~: settled, open water only, no bridge (above).
+2. **How is it ordered?** Proposed: commanded by hand first (craft to a shore, machines to the craft),
+   automatic routing later.
+3. **Where does the first one come from?** Proposed: one craft moored off the spawn beach at the start.
+4. **Cargo:** proposed machines only (digger, dozer, dump truck) to start; crew robots later.
