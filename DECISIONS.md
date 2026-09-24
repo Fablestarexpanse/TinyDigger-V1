@@ -6237,3 +6237,8 @@ A single dumper is untouched, which is the control: nothing was traded away to g
 numbers say about the game is that **around 8 m³ a game minute is what this face and this digger can
 give** — past that, more dumpers buy nothing, and the next step up is a second digger. That is the
 throughput ladder doing what it was built for.
+
+**Confirmed in the game, not only in tests.** A digger and two dumpers assigned to one worksite on
+the island, ninety seconds of play: the digger spent **96% of it digging** (4% walking to a dumper,
+1% loading), and both dumpers reported *"Parked by digger 4"* — the queue the tests describe, in the
+scene Ronan plays. Before the change only one of them could have been assigned at all.
