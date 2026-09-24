@@ -16,10 +16,14 @@ namespace TinyDiggers.Interaction
     /// centre line, the cut faces and embankments the ground will settle into, the nodes, their
     /// handles and each segment's grade.
     ///
-    /// Mouse, with the Road tool: click places a node (onto a road's node to join it); drag a node
-    /// or its handle to reshape; scroll over a node raises or lowers it a metre (Shift: 0.25 m);
-    /// double-click or Enter lays the road; Backspace takes the last node back; Escape drops the
-    /// draft. With no draft, clicking a road picks it up to edit, and Delete removes it.
+    /// Mouse, with the Road tool: the next segment follows the cursor from the last node, with its
+    /// length, grade and depth, before it is laid; click places a node (onto a road's node to join
+    /// it; Alt held skips the 45° snap); drag a node or its handle to reshape; scroll over a node
+    /// raises or lowers it a metre (Shift: 0.25 m); double-click or Enter lays the road; Backspace
+    /// or right-click takes the last node back; Ctrl+Z / Ctrl+Y undo and redo any edit to the
+    /// draft; Escape drops the draft. With no draft, clicking a road picks it up to edit, and
+    /// Delete removes it. V switches the ghost between the ground as it will be once built and
+    /// the plan (grade ribbon over the cut and fill tiles).
     ///
     /// Shaping keys: C rounds the bend at the active node to the minimum turn radius, pulling its
     /// handle or, where that cannot reach, cutting a proper arc into the corner (Shift+C the whole
@@ -47,6 +51,15 @@ namespace TinyDiggers.Interaction
         const float DoubleClickSeconds = 0.35f;
         const int FaceReach = 14;
 
+        /// <summary>
+        /// Seconds between re-plans of the ground (footprint, slumped faces, volumes, the finished
+        /// surface) while the draft keeps changing. The slump pass looks at a 29-cell square round
+        /// every footprint cell, which is far too much to redo on every frame of a drag along a
+        /// long road; the ribbon and the grades still follow the mouse every frame, and the ground
+        /// catches up within this long of the last change.
+        /// </summary>
+        const float GroundReplanSeconds = 0.15f;
+
         static readonly Color32 FineColor = new Color32(120, 230, 160, 120);
         static readonly Color32 SteepColor = new Color32(255, 150, 40, 150);
         static readonly Color32 RefusedColor = new Color32(235, 60, 50, 170);
@@ -55,6 +68,8 @@ namespace TinyDiggers.Interaction
         static readonly Color32 NodeColor = new Color32(255, 255, 255, 230);
         static readonly Color32 ActiveNodeColor = new Color32(255, 220, 60, 240);
         static readonly Color32 BuiltColor = new Color32(250, 240, 200, 150);
+        static readonly Color32 JoinColor = new Color32(90, 200, 255, 220);
+        static readonly Color32 HoverRoadColor = new Color32(250, 240, 200, 90);
 
         PlayerTools _tools;
         TerrainView _terrain;
@@ -81,9 +96,57 @@ namespace TinyDiggers.Interaction
         /// <summary>Each segment's tightest turn, in metres; infinity where it runs straight.</summary>
         readonly List<float> _turns = new List<float>();
         int _plannedVersion = -1;
+        int _groundVersion = -1;
+        float _groundPlannedAt = float.NegativeInfinity;
+
+        /// <summary>
+        /// The ground once built, keyed z × width + x: each planned and slumped cell's finished
+        /// height, and the colour it will show (road bed, the material a cut lays bare, or spoil).
+        /// Made into a mesh when the ground is planned, and copied into the ghost every frame.
+        /// </summary>
+        readonly Dictionary<int, float> _finished = new Dictionary<int, float>();
+        readonly Dictionary<int, Color32> _finishedColor = new Dictionary<int, Color32>();
+        readonly HashSet<int> _bedCells = new HashSet<int>();
+        readonly List<Vector3> _surfaceVertices = new List<Vector3>();
+        readonly List<Color32> _surfaceColors = new List<Color32>();
+        readonly List<int> _surfaceTriangles = new List<int>();
 
         int _dragNode = -1;
         int _dragHandle = -1;
+
+        /// <summary>
+        /// Where the grabbed node or handle sat relative to the cursor when it was grabbed, in
+        /// cells. Kept through the drag so the node moves with the hand instead of jumping its
+        /// centre onto the cursor, up to the whole pick radius away.
+        /// </summary>
+        Vector2 _grabOffset;
+
+        // The cursor, as the last HandleMouse saw it: the proposed segment is drawn from it.
+        bool _hovering;
+        int _hoverFrame = -1;
+        Vector2 _hoverAt;
+        int _hoverNode = -1;
+        bool _freeAngle;
+
+        /// <summary>The node a click would place now, or null: what the segment out to the cursor is drawn to.</summary>
+        RoadNode _proposed;
+        readonly List<RoadNode> _proposedChain = new List<RoadNode>();
+        readonly List<RoadSample> _proposedSamples = new List<RoadSample>();
+        readonly List<RoadSample> _scratchSamples = new List<RoadSample>();
+        float _proposedGrade;
+        float _proposedLength;
+        float _proposedCut;
+        float _proposedFill;
+        int _proposedVersion = -1;
+        Vector2 _proposedAt;
+        bool _proposedFree;
+
+        /// <summary>
+        /// The built road a click would pick up to edit, with no draft in hand, or 0: drawn
+        /// brighter so it is plain which of two roads close together the click will take.
+        /// </summary>
+        int _hoverRoad;
+        Vector2 _hoverRoadAt = new Vector2(float.NaN, float.NaN);
         float _lastClickTime;
         Vector2 _lastClickAt;
         DesignationMap _builtFor;
@@ -118,11 +181,22 @@ namespace TinyDiggers.Interaction
 
         public bool IsDrawing => !Draft.IsEmpty;
 
+        /// <summary>
+        /// Whether the ghost shows the ground as it will be once the road is built — the road bed,
+        /// the cut faces and the embankments at their finished heights, shaded — or the plan: the
+        /// grade-coloured ribbon over the cut and fill tiles. V switches between them.
+        /// </summary>
+        public bool ShowAsBuilt { get; set; } = true;
+
+        bool Dragging => _dragNode >= 0 || _dragHandle >= 0;
+
         public void Init(PlayerTools tools, TerrainView terrain, Material material)
         {
             _tools = tools;
             _terrain = terrain;
-            _mesh = new Mesh { name = "Road Ghost" };
+            // 32-bit indices: the finished surface is four vertices a cell, and a long, wide road
+            // through a hill passes the 65,535 a 16-bit mesh can hold.
+            _mesh = new Mesh { name = "Road Ghost", indexFormat = IndexFormat.UInt32 };
             _mesh.MarkDynamic();
             var holder = new GameObject("Road Ghost") { hideFlags = HideFlags.DontSave };
             holder.transform.SetParent(terrain.transform, false);
@@ -171,15 +245,21 @@ namespace TinyDiggers.Interaction
         {
             var keyboard = Keyboard.current;
             var shift = keyboard != null && keyboard.shiftKey.isPressed;
+            _hovering = hasHover;
+            _hoverFrame = Time.frameCount;
+            _hoverAt = at;
+            _freeAngle = keyboard != null && keyboard.altKey.isPressed;
 
             // Scroll over a node raises or lowers it, and the camera leaves the wheel alone.
             var hovered = hasHover ? PickNode(at) : -1;
+            _hoverNode = hovered;
             if (hovered >= 0)
             {
                 RtsCamera.ScrollCaptured = true;
                 var scroll = mouse.scroll.ReadValue().y;
                 if (Mathf.Abs(scroll) > 0.01f)
                 {
+                    Draft.Remember();
                     Draft.Raise(hovered, Mathf.Sign(scroll) * (shift ? 0.25f : 1f));
                     ActiveNode = hovered;
                     _tools.Say($"Node {hovered + 1} at {Draft.Nodes[hovered].Height:0.##} m");
@@ -207,11 +287,11 @@ namespace TinyDiggers.Interaction
                 }
                 else if (_dragNode >= 0 && hasHover)
                 {
-                    Draft.Move(_dragNode, at, GroundAt);
+                    Draft.Move(_dragNode, at + _grabOffset, GroundAt);
                 }
                 else if (_dragHandle >= 0 && hasHover)
                 {
-                    Draft.DragHandle(_dragHandle, at);
+                    Draft.DragHandle(_dragHandle, at + _grabOffset);
                 }
             }
 
@@ -241,14 +321,18 @@ namespace TinyDiggers.Interaction
                 var node = PickNode(at);
                 if (handle >= 0 && (node < 0 || Vector2.Distance(Draft.HandleTip(handle), at) < Vector2.Distance(Draft.Nodes[node].Position, at)))
                 {
+                    Draft.Remember();
                     _dragHandle = handle;
+                    _grabOffset = Draft.HandleTip(handle) - at;
                     ActiveNode = handle;
                     return;
                 }
 
                 if (node >= 0)
                 {
+                    Draft.Remember();
                     _dragNode = node;
+                    _grabOffset = Draft.Nodes[node].Position - at;
                     ActiveNode = node;
                     return;
                 }
@@ -266,7 +350,8 @@ namespace TinyDiggers.Interaction
                 }
             }
 
-            var placed = Draft.Place(at, GroundAt, Network);
+            Draft.Remember();
+            var placed = Draft.Place(at, GroundAt, Network, snap: !_freeAngle);
             ActiveNode = Draft.Nodes.Count - 1;
             var how = Draft.FollowGround || Draft.Nodes.Count < 2 ? "" : " (holding the level)";
             _tools.Say($"Road: {Draft.Nodes.Count} node{(Draft.Nodes.Count == 1 ? "" : "s")}{how}"
@@ -332,20 +417,30 @@ namespace TinyDiggers.Interaction
         Vector3 WorldOf(Vector2 cells, float height) =>
             _terrain.transform.TransformPoint(new Vector3(cells.x * Grid.CellSize, height, cells.y * Grid.CellSize));
 
-        /// <summary>The road whose centre line passes within its half width (plus a cell) of a point, or 0.</summary>
+        /// <summary>
+        /// The road whose centre line passes nearest a point, within its half width (plus a cell),
+        /// or 0. The nearest, not the first found: where two roads run side by side or cross, the
+        /// one clicked on is the one under the cursor, not whichever was drawn first.
+        /// </summary>
         int RoadAt(Vector2 at)
         {
-            var samples = new List<RoadSample>();
+            var best = 0;
+            var bestDistance = float.PositiveInfinity;
             foreach (var road in Network.Roads())
             {
-                RoadSpline.Sample(Network.Chain(road), 0.5f, samples);
+                RoadSpline.Sample(Network.Chain(road), 0.5f, _scratchSamples);
                 var reach = Network.WidthOf(road) * 0.5f + 1f;
-                foreach (var sample in samples)
-                    if (Vector2.Distance(new Vector2(sample.Position.x, sample.Position.z), at) <= reach)
-                        return road;
+                foreach (var sample in _scratchSamples)
+                {
+                    var distance = Vector2.Distance(new Vector2(sample.Position.x, sample.Position.z), at);
+                    if (distance > reach || distance >= bestDistance)
+                        continue;
+                    bestDistance = distance;
+                    best = road;
+                }
             }
 
-            return 0;
+            return best;
         }
 
         /// <summary>Keys for the Road tool. Returns true for any it used, so PlayerTools does not also act on them.</summary>
@@ -357,6 +452,31 @@ namespace TinyDiggers.Interaction
             var step = shift ? 0.25f : 1f;
             var target = ActiveNode >= 0 && ActiveNode < Draft.Nodes.Count ? ActiveNode : Draft.Nodes.Count - 1;
 
+            // Undo and redo step through the draft's own edits while there are any; past them, the
+            // keys fall through to the designation history as they do for every other tool.
+            var ctrl = keyboard.ctrlKey.isPressed;
+            var undo = ctrl && keyboard.zKey.wasPressedThisFrame && !shift;
+            var redo = ctrl && (keyboard.yKey.wasPressedThisFrame || keyboard.zKey.wasPressedThisFrame && shift);
+            if (undo && Draft.CanUndo || redo && Draft.CanRedo)
+            {
+                if (undo)
+                    Draft.Undo();
+                else
+                    Draft.Redo();
+                if (ActiveNode >= Draft.Nodes.Count)
+                    ActiveNode = Draft.Nodes.Count - 1;
+                _dragNode = _dragHandle = -1;
+                _tools.Say(undo ? "Road: undone" : "Road: redone");
+                return true;
+            }
+
+            if (keyboard.vKey.wasPressedThisFrame && !ctrl)
+            {
+                ShowAsBuilt = !ShowAsBuilt;
+                _tools.Say(ShowAsBuilt ? "Showing the ground as it will be once built" : "Showing the plan: grades, cut and fill");
+                return true;
+            }
+
             if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
             {
                 Commit();
@@ -365,6 +485,7 @@ namespace TinyDiggers.Interaction
 
             if (keyboard.backspaceKey.wasPressedThisFrame && !Draft.IsEmpty)
             {
+                Draft.Remember();
                 Draft.RemoveLast();
                 ActiveNode = Draft.Nodes.Count - 1;
                 return true;
@@ -382,12 +503,14 @@ namespace TinyDiggers.Interaction
 
             if (target >= 0 && keyboard.pageUpKey.wasPressedThisFrame)
             {
+                Draft.Remember();
                 Draft.Raise(target, step);
                 return true;
             }
 
             if (target >= 0 && keyboard.pageDownKey.wasPressedThisFrame)
             {
+                Draft.Remember();
                 Draft.Raise(target, -step);
                 return true;
             }
@@ -403,6 +526,7 @@ namespace TinyDiggers.Interaction
 
             if (keyboard.xKey.wasPressedThisFrame && target >= 0)
             {
+                Draft.Remember();
                 if (shift)
                     Draft.AutoHandle(target);
                 else
@@ -442,6 +566,7 @@ namespace TinyDiggers.Interaction
             }
 
             Draft.CellSize = Grid.CellSize;
+            Draft.Remember();
             var nodes = Draft.Nodes.Count;
             var got = Draft.Round(ActiveNode, Draft.MinTurnRadius);
             var cut = Draft.Nodes.Count > nodes;
@@ -460,6 +585,7 @@ namespace TinyDiggers.Interaction
             }
 
             Draft.CellSize = Grid.CellSize;
+            Draft.Remember();
             var nodes = Draft.Nodes.Count;
             Draft.RoundAll(Draft.MinTurnRadius);
             var cut = Draft.Nodes.Count - nodes;
@@ -483,6 +609,7 @@ namespace TinyDiggers.Interaction
         public void ApplyGradeToWholeRoad()
         {
             Draft.CellSize = Grid.CellSize;
+            Draft.Remember();
             var moved = Draft.ApplyGrade(Draft.MaxGrade);
             _tools.Say(moved == 0
                 ? "Nothing to re-cut"
@@ -495,6 +622,7 @@ namespace TinyDiggers.Interaction
             if (index < 0 || index >= Draft.Nodes.Count)
                 return;
             metres = Mathf.Max(0f, metres);
+            Draft.Remember();
             Draft.SetGroundOffset(index, metres, GroundAt);
             _tools.Say(metres <= 0f ? "Node back on the ground" : $"Node held {metres:0.#} m over the ground");
         }
@@ -514,12 +642,34 @@ namespace TinyDiggers.Interaction
         {
             if (ActiveNode < 0 || ActiveNode >= Draft.Nodes.Count)
                 return;
+            Draft.Remember();
             Draft.SetHeight(ActiveNode, metres);
             _tools.Say($"Node set to {metres:0.#} m");
         }
 
         static string Describe(float radius) =>
             float.IsInfinity(radius) ? "straight" : $"{radius:0.#} m radius";
+
+        /// <summary>
+        /// What a right-click does while a new road is being drawn: takes the last node back,
+        /// rather than throwing the whole draft away — one stray right-click on a long road used
+        /// to lose all of it. Ctrl+Z puts the node back. Returns false, leaving the caller to
+        /// cancel as before, while a built road is being edited: there a right-click still means
+        /// "leave the road as it was".
+        /// </summary>
+        public bool TakeBackLast()
+        {
+            if (Draft.IsEmpty || Draft.EditingRoad != 0)
+                return false;
+            Draft.Remember();
+            Draft.RemoveLast();
+            ActiveNode = Draft.Nodes.Count - 1;
+            _dragNode = _dragHandle = -1;
+            _tools.Say(Draft.IsEmpty
+                ? "Road dropped (Ctrl+Z brings it back)"
+                : $"Took the last node back: {Draft.Nodes.Count} left (Ctrl+Z puts it back)");
+            return true;
+        }
 
         /// <summary>Drops the draft; an edit leaves the road as it was built.</summary>
         public void Cancel()
@@ -532,8 +682,10 @@ namespace TinyDiggers.Interaction
         /// <summary>Locks the active node to the ground, or frees it (the panel's toggle).</summary>
         public void SetActiveLocked(bool locked)
         {
-            if (ActiveNode >= 0 && ActiveNode < Draft.Nodes.Count)
-                Draft.SetLocked(ActiveNode, locked, GroundAt);
+            if (ActiveNode < 0 || ActiveNode >= Draft.Nodes.Count)
+                return;
+            Draft.Remember();
+            Draft.SetLocked(ActiveNode, locked, GroundAt);
         }
 
         public bool ActiveLocked => ActiveNode >= 0 && ActiveNode < Draft.Nodes.Count && Draft.Nodes[ActiveNode].LockToGround;
@@ -543,6 +695,11 @@ namespace TinyDiggers.Interaction
         {
             if (Draft.Nodes.Count < 2)
                 return false;
+            // The spoil warning below reads the volumes, which may be a moment behind the draft.
+            if (Draft.Version != _plannedVersion)
+                PlanLine();
+            if (Draft.Version != _groundVersion)
+                PlanGround();
             if (!Draft.CanCommit(Grid.CellSize))
             {
                 _tools.Say($"Too steep to build: a segment is over {Draft.MaxGrade * 200f:0}% (twice the {Draft.MaxGrade * 100f:0}% limit)");
@@ -602,17 +759,26 @@ namespace TinyDiggers.Interaction
             EnsureBuilder();
             Builder?.Tick();
             PlanDraft();
+            ProposeSegment();
             DrawGhost();
         }
 
+        /// <summary>
+        /// Plans the draft in two parts: the line — samples, grades, bends, depths — on every
+        /// change, because it is cheap and it is what the hand is watching; and the ground under
+        /// it at most every <see cref="GroundReplanSeconds"/>, because that is not cheap.
+        /// </summary>
         void PlanDraft()
         {
-            if (Draft.Version == _plannedVersion)
-                return;
+            if (Draft.Version != _plannedVersion)
+                PlanLine();
+            if (Draft.Version != _groundVersion && Time.unscaledTime - _groundPlannedAt >= GroundReplanSeconds)
+                PlanGround();
+        }
+
+        void PlanLine()
+        {
             _plannedVersion = Draft.Version;
-            _footprint.Clear();
-            _faces.Clear();
-            Cut = Fill = 0f;
             Draft.CellSize = Grid.CellSize;
             State = Draft.Grades(Grid.CellSize, _grades);
             TurnState = Draft.Turns(_turns);
@@ -628,16 +794,174 @@ namespace TinyDiggers.Interaction
             }
 
             if (Draft.Nodes.Count < 2)
+            {
+                _samples.Clear();
+                DeepestCut = HighestFill = Length = 0f;
                 return;
+            }
 
             RoadSpline.Sample(Draft.Nodes, RoadPlanner.SampleSpacing, _samples);
-            RoadPlanner.Footprint(Grid, _samples, Draft.Width, _footprint, _bed, includeSettled: true);
-            RoadPlanner.Settle(Grid, _footprint, MaterialTable.DirtLoose, FaceReach, _faces);
-            Blueprints.Volumes(_footprint, out var cut, out var fill, Grid.CellArea);
-            Blueprints.Volumes(_faces, out var faceCut, out var faceFill, Grid.CellArea);
-            Cut = cut + faceCut;
-            Fill = fill + faceFill;
             MeasureDepth();
+        }
+
+        /// <summary>
+        /// The ground the draft asks for: its footprint, the faces the slump will leave beyond it,
+        /// the cut and fill, and the finished surface drawn from them. Plans from the samples the
+        /// line was last planned with, so the two always agree when they are both current.
+        /// </summary>
+        void PlanGround()
+        {
+            _groundVersion = _plannedVersion;
+            _groundPlannedAt = Time.unscaledTime;
+            _footprint.Clear();
+            _faces.Clear();
+            _bed.Clear();
+            Cut = Fill = 0f;
+            if (Draft.Nodes.Count >= 2 && _samples.Count >= 2)
+            {
+                RoadPlanner.Footprint(Grid, _samples, Draft.Width, _footprint, _bed, includeSettled: true);
+                RoadPlanner.Settle(Grid, _footprint, MaterialTable.DirtLoose, FaceReach, _faces);
+                Blueprints.Volumes(_footprint, out var cut, out var fill, Grid.CellArea);
+                Blueprints.Volumes(_faces, out var faceCut, out var faceFill, Grid.CellArea);
+                Cut = cut + faceCut;
+                Fill = fill + faceFill;
+            }
+
+            PlanFinishedSurface();
+        }
+
+        /// <summary>
+        /// What the land will look like once the road is built: every footprint and face cell at
+        /// the height it settles at, coloured as it will be — road bed as Road, a cut as whatever
+        /// the dig lays bare at that depth, an embankment as tipped spoil — and made into a shaded
+        /// surface (Ronan, 2026-09-24: "it should show what the land will look like once built").
+        /// </summary>
+        void PlanFinishedSurface()
+        {
+            _finished.Clear();
+            _finishedColor.Clear();
+            _bedCells.Clear();
+            _surfaceVertices.Clear();
+            _surfaceColors.Clear();
+            _surfaceTriangles.Clear();
+            if (_footprint.Count == 0)
+                return;
+
+            var grid = Grid;
+            var width = grid.Width;
+            var materials = grid.Materials;
+            var road = Colour(MaterialTable.Road);
+            var spoil = Colour(MaterialTable.DirtLoose);
+            foreach (var cell in _bed)
+                _bedCells.Add(cell.y * width + cell.x);
+
+            foreach (var cell in _footprint)
+            {
+                var index = cell.Z * width + cell.X;
+                _finished[index] = cell.Height;
+                _finishedColor[index] = _bedCells.Contains(index) ? road
+                    : cell.Fill > 0f ? spoil
+                    : Exposed(cell.X, cell.Z, cell.Height);
+            }
+
+            foreach (var face in _faces)
+            {
+                var index = face.Z * width + face.X;
+                _finished[index] = face.Height;
+                _finishedColor[index] = face.IsDig ? Exposed(face.X, face.Z, face.Height) : spoil;
+            }
+
+            GhostMesh.Surface(grid, _finished, index => _finishedColor[index], 0.03f,
+                _surfaceVertices, _surfaceColors, _surfaceTriangles);
+
+            Color32 Colour(MaterialId material)
+            {
+                var color = materials.Contains(material) ? materials.Get(material).Color : new Color32(170, 150, 120, 255);
+                color.a = 235;
+                return color;
+            }
+
+            // The material a cut down to this height leaves showing; the top one if nothing is cut.
+            Color32 Exposed(int x, int z, float height)
+            {
+                var material = grid.GetMaterialAt(x, z, height - 0.01f);
+                return Colour(material.IsNone ? grid.GetTopMaterial(x, z) : material);
+            }
+        }
+
+        /// <summary>
+        /// The node a click would place now and the segment out to it from the last node, with its
+        /// length, grade and depth — so where a click lands, and what it will cost, is seen before
+        /// it is made rather than after. Re-worked only when the cursor, the Alt key or the draft
+        /// has changed.
+        /// </summary>
+        void ProposeSegment()
+        {
+            var live = _tools.Mode == ToolMode.Road && _hovering && _hoverFrame >= Time.frameCount - 1 && !Dragging;
+            if (!(live && Draft.IsEmpty))
+            {
+                _hoverRoad = 0;
+                _hoverRoadAt = new Vector2(float.NaN, float.NaN);
+            }
+            else if (_hoverRoadAt != _hoverAt)
+            {
+                _hoverRoadAt = _hoverAt;
+                _hoverRoad = RoadAt(_hoverAt);
+            }
+
+            if (!live || Draft.IsEmpty || _hoverNode >= 0 || PickHandle(_hoverAt) >= 0)
+            {
+                _proposed = null;
+                _proposedVersion = -1;
+                return;
+            }
+
+            if (_proposed != null && _proposedVersion == Draft.Version && _proposedAt == _hoverAt && _proposedFree == _freeAngle)
+                return;
+            _proposedVersion = Draft.Version;
+            _proposedAt = _hoverAt;
+            _proposedFree = _freeAngle;
+
+            Draft.CellSize = Grid.CellSize;
+            var node = Draft.Propose(_hoverAt, GroundAt, Network, snap: !_freeAngle);
+            var last = Draft.Nodes[Draft.Nodes.Count - 1];
+            if (Vector2.Distance(node.Position, last.Position) < 0.5f)
+            {
+                _proposed = null;
+                return;
+            }
+
+            _proposed = node;
+            _proposedChain.Clear();
+            _proposedChain.AddRange(Draft.Nodes);
+            _proposedChain.Add(node);
+            var segment = _proposedChain.Count - 2;
+            RoadSpline.Sample(_proposedChain, RoadPlanner.SampleSpacing, _scratchSamples);
+            _proposedSamples.Clear();
+            foreach (var sample in _scratchSamples)
+                if (sample.Segment == segment)
+                    _proposedSamples.Add(sample);
+
+            _proposedGrade = RoadSpline.Grade(_proposedChain, segment, Grid.CellSize);
+            _proposedLength = 0f;
+            _proposedCut = _proposedFill = 0f;
+            for (var i = 0; i < _proposedSamples.Count; i++)
+            {
+                var at = _proposedSamples[i].Position;
+                if (i > 0)
+                {
+                    var before = _proposedSamples[i - 1].Position;
+                    _proposedLength += new Vector2(at.x - before.x, at.z - before.z).magnitude * Grid.CellSize;
+                }
+
+                var x = Mathf.FloorToInt(at.x);
+                var z = Mathf.FloorToInt(at.z);
+                if (!Grid.IsGround(x, z))
+                    continue;
+                var over = at.y - Grid.GetSurfaceHeight(x, z);
+                _proposedFill = Mathf.Max(_proposedFill, over);
+                _proposedCut = Mathf.Max(_proposedCut, -over);
+            }
         }
 
         /// <summary>
@@ -650,6 +974,14 @@ namespace TinyDiggers.Interaction
         {
             DeepestCut = 0f;
             HighestFill = 0f;
+            Length = 0f;
+            for (var i = 1; i < _samples.Count; i++)
+            {
+                var a = _samples[i - 1].Position;
+                var b = _samples[i].Position;
+                Length += new Vector2(b.x - a.x, b.z - a.z).magnitude * Grid.CellSize;
+            }
+
             foreach (var sample in _samples)
             {
                 if (sample.Segment < 0 || sample.Segment >= _cutDepth.Count)
@@ -672,6 +1004,9 @@ namespace TinyDiggers.Interaction
                 }
             }
         }
+
+        /// <summary>Metres of road along its centre line, as drawn.</summary>
+        public float Length { get; private set; }
 
         /// <summary>Metres the road is sunk below the ground at its deepest point.</summary>
         public float DeepestCut { get; private set; }
@@ -703,39 +1038,83 @@ namespace TinyDiggers.Interaction
             var cell = Grid.CellSize;
             var roadTool = _tools.Mode == ToolMode.Road;
 
+            // The finished surface goes in first: the ghost is drawn without a depth test, in the
+            // order its triangles are listed, so everything after it lies on top of it.
+            if (ShowAsBuilt && Draft.Nodes.Count >= 2 && _surfaceVertices.Count > 0)
+            {
+                _vertices.AddRange(_surfaceVertices);
+                _colors.AddRange(_surfaceColors);
+                _triangles.AddRange(_surfaceTriangles);
+            }
+
             if (roadTool)
             {
                 // Built roads' centre lines, so they can be found and picked up.
-                var samples = new List<RoadSample>();
                 foreach (var road in Network.Roads())
                 {
                     if (road == Draft.EditingRoad)
                         continue;
-                    RoadSpline.Sample(Network.Chain(road), 0.5f, samples);
-                    Ribbon(samples, 0.25f, 0.12f, _ => BuiltColor, cell);
+                    RoadSpline.Sample(Network.Chain(road), 0.5f, _scratchSamples);
+                    if (road == _hoverRoad)
+                        Ribbon(_scratchSamples, Network.WidthOf(road) * 0.5f, 0.12f, _ => HoverRoadColor, cell);
+                    else
+                        Ribbon(_scratchSamples, 0.25f, 0.12f, _ => BuiltColor, cell);
                 }
             }
 
             if (Draft.Nodes.Count >= 2)
             {
-                // Faces first, under the ribbon.
-                // A cut face is drawn on the ground it will take away, an embankment where it will
-                // stand; drawn at a cut's settled height it would be buried in the hill.
-                foreach (var face in _faces)
+                if (ShowAsBuilt)
                 {
-                    var top = Mathf.Max(face.Height, Grid.GetSurfaceHeight(face.X, face.Z)) + 0.05f;
-                    DesignationsView.AddTile(face.X, face.Z, top, top, top, top,
-                        face.IsDig ? CutFaceColor : FillFaceColor, _vertices, _colors, _triangles, cell);
+                    // Over the finished ground, the road itself is already there to see; what is
+                    // left to say is the grade, so only the centre line carries its colour.
+                    Ribbon(_samples, 0.2f, 0.1f, SegmentColor, cell);
                 }
-                Ribbon(_samples, Draft.Width * 0.5f, 0.08f, SegmentColor, cell);
-                Ribbon(_samples, 0.12f, 0.1f, _ => NodeColor, cell);
+                else
+                {
+                    // Faces first, under the ribbon.
+                    // A cut face is drawn on the ground it will take away, an embankment where it will
+                    // stand; drawn at a cut's settled height it would be buried in the hill.
+                    foreach (var face in _faces)
+                    {
+                        var top = Mathf.Max(face.Height, Grid.GetSurfaceHeight(face.X, face.Z)) + 0.05f;
+                        DesignationsView.AddTile(face.X, face.Z, top, top, top, top,
+                            face.IsDig ? CutFaceColor : FillFaceColor, _vertices, _colors, _triangles, cell);
+                    }
+                    Ribbon(_samples, Draft.Width * 0.5f, 0.08f, SegmentColor, cell);
+                    Ribbon(_samples, 0.12f, 0.1f, _ => NodeColor, cell);
+                }
+            }
+
+            // The segment a click would lay, fainter than the road already drawn, in the colour its
+            // grade would earn it.
+            if (_proposed != null && _proposedSamples.Count >= 2)
+            {
+                var color = RoadPlanner.Judge(_proposedGrade, Draft.MaxGrade) switch
+                {
+                    RoadGradeState.Refused => RefusedColor,
+                    RoadGradeState.Steep => SteepColor,
+                    _ => FineColor,
+                };
+                color.a = (byte)(color.a / 2);
+                Ribbon(_proposedSamples, Draft.Width * 0.5f, 0.08f, _ => color, cell);
+                Ribbon(_proposedSamples, 0.08f, 0.1f, _ => NodeColor, cell);
+                // Ending on another road's node joins it: that node shows blue behind the new one.
+                if (_proposed.Id != 0)
+                    Disc(_proposed.Position, _proposed.Height + 0.14f, 0.8f, JoinColor, cell);
+                var faint = NodeColor;
+                faint.a = 140;
+                Disc(_proposed.Position, _proposed.Height + 0.15f, 0.45f, faint, cell);
             }
 
             for (var i = 0; i < Draft.Nodes.Count; i++)
             {
                 var node = Draft.Nodes[i];
                 var active = i == ActiveNode;
-                Disc(node.Position, node.Height + 0.15f, 0.55f, active ? ActiveNodeColor : NodeColor, cell);
+                // The node under the cursor swells, so it is plain that a press will grab it rather
+                // than lay another section.
+                var radius = i == _hoverNode && !Dragging ? 0.75f : 0.55f;
+                Disc(node.Position, node.Height + 0.15f, radius, active ? ActiveNodeColor : NodeColor, cell);
                 if (Draft.Nodes.Count >= 2)
                 {
                     var tip = Draft.HandleTip(i);
@@ -780,7 +1159,7 @@ namespace TinyDiggers.Interaction
 
         void OnGUI()
         {
-            if (Event.current.type != EventType.Repaint || Draft.Nodes.Count < 2 || _tools.Mode != ToolMode.Road || _samples.Count < 2)
+            if (Event.current.type != EventType.Repaint || _tools.Mode != ToolMode.Road)
                 return;
             var camera = _tools.Camera;
             if (camera == null)
@@ -793,6 +1172,9 @@ namespace TinyDiggers.Interaction
 
             var cell = Grid.CellSize;
             var terrain = _terrain.transform;
+            DrawProposal(camera, terrain, cell);
+            if (Draft.Nodes.Count < 2 || _samples.Count < 2)
+                return;
             for (var segment = 0; segment < _grades.Count; segment++)
             {
                 // The label sits on the middle of its segment.
@@ -835,6 +1217,34 @@ namespace TinyDiggers.Interaction
         }
 
         /// <summary>
+        /// The segment a click would lay, read out beside the node it would place: how long, how
+        /// steep, and how far it rides over or sinks into the ground — and whether it joins a road.
+        /// </summary>
+        void DrawProposal(Camera camera, Transform terrain, float cell)
+        {
+            if (_proposed == null)
+                return;
+            var world = terrain.TransformPoint(new Vector3(_proposed.Position.x * cell, _proposed.Height + 1.6f,
+                _proposed.Position.y * cell));
+            var screen = camera.WorldToScreenPoint(world);
+            if (screen.z <= 0f)
+                return;
+            var state = RoadPlanner.Judge(_proposedGrade, Draft.MaxGrade);
+            var says = $"{_proposedLength:0.#} m  {_proposedGrade * 100f:0.#}%";
+            if (_proposedFill >= 0.05f || _proposedCut >= 0.05f)
+                says += "\n" + (_proposedFill >= _proposedCut ? $"fill {_proposedFill:0.#} m" : $"cut {_proposedCut:0.#} m");
+            if (_proposed.Id != 0)
+                says += "\njoins road";
+            var lines = says.Split('\n').Length;
+            var high = 8f + lines * 16f;
+            var old = GUI.color;
+            GUI.color = state == RoadGradeState.Refused ? new Color(1f, 0.45f, 0.4f, 0.85f)
+                : state == RoadGradeState.Steep ? new Color(1f, 0.75f, 0.35f, 0.85f) : new Color(1f, 1f, 1f, 0.85f);
+            GUI.Box(new Rect(screen.x + 18f, Screen.height - screen.y - high * 0.5f, 116f, high), says, _label);
+            GUI.color = old;
+        }
+
+        /// <summary>
         /// What each node is doing: how far its road height stands over or under the ground it
         /// sits on. "+2.4 m" is a bank that has to be built and held up; "-1.8 m" is a cutting
         /// that has to be dug and its sides tapered back.
@@ -862,7 +1272,7 @@ namespace TinyDiggers.Interaction
         /// <summary>The whole line at a glance: what it moves, and the worst of it either way.</summary>
         void DrawTally()
         {
-            var says = $"cut {Cut:0.#} m³   fill {Fill:0.#} m³";
+            var says = $"{Length:0.#} m long   cut {Cut:0.#} m³   fill {Fill:0.#} m³";
             if (DeepestCut >= 0.05f)
                 says += $"   deepest cut {DeepestCut:0.#} m";
             if (HighestFill >= 0.05f)
@@ -880,7 +1290,7 @@ namespace TinyDiggers.Interaction
             GUI.color = State == RoadGradeState.Refused || TurnState == RoadGradeState.Refused
                 ? new Color(1f, 0.45f, 0.4f)
                 : TurnState == RoadGradeState.Steep ? new Color(1f, 0.85f, 0.6f) : Color.white;
-            GUI.Box(new Rect(Screen.width * 0.5f - 270f, 12f, 540f, 28f), says, _label);
+            GUI.Box(new Rect(Screen.width * 0.5f - 320f, 12f, 640f, 28f), says, _label);
             GUI.color = old;
         }
     }

@@ -38,6 +38,7 @@ namespace TinyDiggers.Interaction
         Toggle _holdGrade, _cutThrough;
         Text _bends;
         Toggle _snap45;
+        Toggle _asBuilt;
         Toggle _lockNode;
         Slider _brush;
         Text _brushValue;
@@ -101,17 +102,20 @@ namespace TinyDiggers.Interaction
             _capNote = UiKit.NewLabel(_capRow, "", 296f, 0f, 170f, RowHeight, 14);
 
             _widthRow = Row("Width");
-            UiKit.NewLabel(_widthRow, "Road width", 0f, 0f, 120f, RowHeight);
-            var x = 124f;
+            UiKit.NewLabel(_widthRow, "Road width", 0f, 0f, 90f, RowHeight);
+            var x = 94f;
             foreach (var cells in new[] { 3, 5, 7 })
             {
                 var captured = cells;
                 var button = UiKit.NewButton(_widthRow, $"{cells} cells", () => _tools.RoadWidth = captured);
-                UiKit.Place((RectTransform)button.transform, x, 2f, 76f, RowHeight - 4f);
-                x += 80f;
+                UiKit.Place((RectTransform)button.transform, x, 2f, 64f, RowHeight - 4f);
+                x += 68f;
             }
 
-            _width = UiKit.NewLabel(_widthRow, "", x + 4f, 0f, 100f, RowHeight, 14);
+            _width = UiKit.NewLabel(_widthRow, "", x + 4f, 0f, 56f, RowHeight, 14);
+            _asBuilt = UiKit.NewToggle(_widthRow, "As built", true, on => _tools.Roads.ShowAsBuilt = on);
+            UiKit.Place((RectTransform)_asBuilt.transform, x + 64f, 4f, Width - 2 * Pad - x - 64f, RowHeight - 8f);
+            UiKit.AddTooltip(_asBuilt, () => "Show the ground as it will be once the road is built; off shows the plan: grades over the cut and fill (V)");
 
             _rampRow = Row("Ramp");
             _ramp = UiKit.NewToggle(_rampRow, "Ramp to", false, on =>
@@ -180,7 +184,7 @@ namespace TinyDiggers.Interaction
             UiKit.AddTooltip(_overGroundField, () => "Carry the node this far over the land, still following it — a causeway (H, Shift+H)");
 
             _roadHintRow = Row("Road hints");
-            UiKit.NewLabel(_roadHintRow, "Click: node · drag a node or handle · Ctrl+drag: raise it · scroll: height · C: round · Enter: lay",
+            UiKit.NewLabel(_roadHintRow, "Click: node (Alt: free) · drag · Ctrl+drag: raise · C: round · right-click: back · Ctrl+Z · V: view · Enter: lay",
                 0f, 0f, Width - 2 * Pad, RowHeight, 12).color = new Color(0.75f, 0.77f, 0.8f);
 
             _clearRow = Row("Clear");
@@ -342,7 +346,11 @@ namespace TinyDiggers.Interaction
             }
 
             if (_widthRow.gameObject.activeSelf)
+            {
                 _width.text = $"now {_tools.RoadWidth}";
+                if (_tools.Roads != null)
+                    _asBuilt.SetIsOnWithoutNotify(_tools.Roads.ShowAsBuilt);
+            }
 
             if (_rampRow.gameObject.activeSelf)
             {

@@ -99,5 +99,95 @@ namespace TinyDiggers.Interaction.Tests
             Assert.That(changed, Does.Contain(other), "the road through the moved junction is re-planned too");
             Assert.That(network.Roads(), Is.EquivalentTo(new[] { road, other }));
         }
+
+        [Test]
+        public void AProposedNodeIsTheOneAClickWouldPlaceButIsNotAdded()
+        {
+            var network = new RoadNetwork();
+            network.AddRoad(new[] { new Vector3(30f, 7f, 0f), new Vector3(40f, 7f, 0f) }, 3);
+            var draft = new RoadDraft();
+            draft.Place(new Vector2(10f, 10f), Ground);
+            var version = draft.Version;
+
+            var proposed = draft.Propose(new Vector2(20f, 13f), Ground, network);
+            Assert.That(draft.Nodes.Count, Is.EqualTo(1), "proposing adds nothing");
+            Assert.That(draft.Version, Is.EqualTo(version), "and does not re-plan the draft");
+            var placed = draft.Place(new Vector2(20f, 13f), Ground, network);
+            Assert.That(proposed.Position, Is.EqualTo(placed.Position), "same 45° snap");
+            Assert.That(proposed.Height, Is.EqualTo(placed.Height).Within(1e-5f), "same height");
+
+            var free = draft.Propose(new Vector2(25f, 17f), Ground, network, snap: false);
+            Assert.That(free.Position, Is.EqualTo(new Vector2(25f, 17f)), "Alt skips the snap for one node");
+
+            var join = draft.Propose(new Vector2(30.5f, 0.5f), Ground, network);
+            Assert.That(join.Id, Is.Not.Zero, "a node on a road joins it");
+        }
+
+        [Test]
+        public void UndoAndRedoStepThroughRememberedEdits()
+        {
+            var draft = new RoadDraft { Snap45 = false };
+            draft.Remember();
+            draft.Place(new Vector2(0f, 0f), Ground);
+            draft.Remember();
+            draft.Place(new Vector2(10f, 0f), Ground);
+            draft.Remember();
+            draft.Move(1, new Vector2(10f, 4f), Ground);
+            draft.Move(1, new Vector2(10f, 6f), Ground); // the same drag: one step
+
+            Assert.That(draft.Undo(), Is.True);
+            Assert.That(draft.Nodes[1].Position, Is.EqualTo(new Vector2(10f, 0f)), "the whole drag comes back in one step");
+            Assert.That(draft.Undo(), Is.True);
+            Assert.That(draft.Nodes.Count, Is.EqualTo(1));
+            Assert.That(draft.Redo(), Is.True);
+            Assert.That(draft.Nodes.Count, Is.EqualTo(2));
+
+            draft.Remember();
+            draft.RemoveLast();
+            Assert.That(draft.CanRedo, Is.False, "a new edit drops what could be redone");
+            Assert.That(draft.Undo(), Is.True);
+            Assert.That(draft.Nodes.Count, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void RememberingAnUnchangedDraftTwiceIsOneStep()
+        {
+            var draft = new RoadDraft();
+            draft.Place(new Vector2(0f, 0f), Ground);
+            draft.Remember();
+            draft.Remember(); // a click on a node that never moved it
+            draft.Raise(0, 1f);
+
+            Assert.That(draft.Undo(), Is.True);
+            Assert.That(draft.CanUndo, Is.False);
+        }
+
+        [Test]
+        public void ClearingOrLoadingForgetsTheUndoSteps()
+        {
+            var draft = new RoadDraft();
+            draft.Remember();
+            draft.Place(new Vector2(0f, 0f), Ground);
+            draft.Clear();
+            Assert.That(draft.CanUndo, Is.False);
+        }
+
+        [Test]
+        public void ChangingTheWidthOrLimitsRePlansTheGhost()
+        {
+            var draft = new RoadDraft();
+            var version = draft.Version;
+            draft.Width = 5;
+            Assert.That(draft.Version, Is.Not.EqualTo(version), "width");
+            version = draft.Version;
+            draft.MaxGrade = 0.08f;
+            Assert.That(draft.Version, Is.Not.EqualTo(version), "max grade");
+            version = draft.Version;
+            draft.MinTurnRadius = 6f;
+            Assert.That(draft.Version, Is.Not.EqualTo(version), "min bend");
+            version = draft.Version;
+            draft.Width = 5;
+            Assert.That(draft.Version, Is.EqualTo(version), "setting the same width changes nothing");
+        }
     }
 }

@@ -5842,3 +5842,51 @@ stepped and turned the outline into an accidental dashed line. `GhostMesh.Line` 
 for each end, so consecutive pieces meet.
 
 The node discs moved onto the ground with it, for the same reason.
+
+## 2026-09-24 — Road tool: smoother drawing, and the ground as it will be
+
+Asked for: *"look for improvements in the road tools making them smoother and more useful"*, then
+*"it should show what the land will look like once built"*. Built:
+
+- **The next segment follows the cursor.** Before, nothing was drawn until a node was placed, so where
+  a click would land, how steep it would be and what it would dig were found out afterwards.
+  `RoadDraft.Propose` is `Place` without the adding (same join, 45° snap, grade lock and
+  cut-through rules), and `RoadsHost` draws that segment faintly in its grade's colour, with a label
+  at the cursor: length, grade, deepest cut or highest fill, and "joins road" (ringed blue) when the
+  click would join a node. Alt held skips the 45° snap for one click.
+- **Dragging no longer re-plans the ground every frame.** Planning is split: the line (samples,
+  grades, bends, depths) on every change, the ground (footprint, `RoadPlanner.Settle`, volumes, the
+  finished surface) at most every 0.15 s. `Settle` looks at a 29 × 29 patch round every footprint
+  cell — roughly a million steps for 100 m of 3-wide road — and was running on every mouse move of a
+  drag. Estimated from the loop, not profiled. `Commit` re-plans first, so the spoil warning never
+  reads stale volumes.
+- **A grabbed node or handle keeps its offset from the cursor** instead of jumping its centre onto it
+  (up to the 22 px pick radius). The node under the cursor swells, so a press plainly grabs it.
+- **Right-click takes the last node back** rather than dropping the whole draft; editing a built road
+  still cancels the edit, as before. **Ctrl+Z / Ctrl+Y undo and redo draft edits** — every click,
+  drag, scroll, key and panel field that changes the draft is one step (`RoadDraft.Remember`, 50
+  deep, a no-change step is skipped). Past the draft's own steps the keys fall through to the
+  designation history as before.
+- **The ghost shows the land as built (V, or "As built" on the width row; on by default).** Every
+  footprint and slumped-face cell at its finished height, as one continuous surface
+  (`GhostMesh.Surface`: each corner averages the finished heights round it, cells outside the plan
+  at today's ground, so the edge meets the land), coloured as it will be — road bed as Road, a cut as
+  whatever `GetMaterialAt` says the dig lays bare at that depth, an embankment as loose dirt — and
+  shaded from one fixed light so faces read as faces. Only the centre line carries the grade colour
+  over it. V back gives the old plan view: grade ribbon over the cut and fill tiles.
+- Smaller: `Width`, `MaxGrade` and `MinTurnRadius` re-plan the ghost when changed (`]` used to leave
+  the ribbon at its old width until a node was touched); clicking between two roads picks the
+  nearer one, not the first drawn; the tally leads with the road's length.
+
+**Verified:** everything under `Assets/TinyDiggers` except Editor type-checks against Unity's
+reference assemblies (with stand-ins for the Input System and UI packages). The 44 existing road
+tests and 8 new ones (`RoadDraftTests`, `GhostMeshTests`) pass under .NET with a managed stand-in
+for UnityEngine's maths. The finished surface was drawn offline from the real planner for a level road
+through a hill, and reads as intended. **Not yet seen in play mode**: the ghost's look against the
+real terrain renderer, the label placement, and the drag feel all want a look in the editor. One
+thing to watch: the surface is drawn without a depth test, like the rest of the ghost, so a hill
+between the camera and a cutting is painted over where the cutting shows.
+
+**Not done from the list:** inserting and deleting a node mid-road, T-junctions that split a road,
+joining while dragging an end, and direction arrows. A click on an existing road with no draft still
+picks it up to edit, so a new road cannot start from a built road's node — only end on one.

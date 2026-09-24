@@ -34,10 +34,42 @@ namespace TinyDiggers.Interaction
         /// <summary>The road being edited, or 0 for a new one.</summary>
         public int EditingRoad { get; private set; }
 
-        public int Width = 3;
-        public float MaxGrade = RoadPlanner.DefaultMaxGrade;
-        public float MinTurnRadius = RoadPlanner.DefaultMinTurnRadius;
+        /// <summary>
+        /// Cells across, and the two limits the road is judged against. Properties rather than
+        /// fields so that changing one re-plans the ghost: `]` widened the road but the ribbon kept
+        /// its old width until the next node was touched.
+        /// </summary>
+        public int Width
+        {
+            get => _width;
+            set { if (_width != value) { _width = value; Version++; } }
+        }
+
+        public float MaxGrade
+        {
+            get => _maxGrade;
+            set { if (_maxGrade != value) { _maxGrade = value; Version++; } }
+        }
+
+        public float MinTurnRadius
+        {
+            get => _minTurnRadius;
+            set { if (_minTurnRadius != value) { _minTurnRadius = value; Version++; } }
+        }
+
+        int _width = 3;
+        float _maxGrade = RoadPlanner.DefaultMaxGrade;
+        float _minTurnRadius = RoadPlanner.DefaultMinTurnRadius;
+
         public bool Snap45 = true;
+
+        /// <summary>How many edits back <see cref="Undo"/> can go.</summary>
+        public const int UndoCapacity = 50;
+
+        // Each step back is the nodes as they were. The width is left out on purpose: it is a
+        // setting of the tool, like the max grade, and undoing a drag should not narrow the road.
+        readonly List<List<RoadNode>> _undo = new List<List<RoadNode>>();
+        readonly List<List<RoadNode>> _redo = new List<List<RoadNode>>();
 
         /// <summary>
         /// Metres across a cell, so the draft can talk about grades and turns in metres without
@@ -80,7 +112,75 @@ namespace TinyDiggers.Interaction
         {
             Nodes.Clear();
             EditingRoad = 0;
+            _undo.Clear();
+            _redo.Clear();
             Version++;
+        }
+
+        // --- undo -------------------------------------------------------------------------------
+
+        public bool CanUndo => _undo.Count > 0;
+
+        public bool CanRedo => _redo.Count > 0;
+
+        /// <summary>
+        /// Keeps the draft as it is now, so the next <see cref="Undo"/> comes back to it. Called
+        /// once at the start of each thing the player does — a click, the start of a drag, a key —
+        /// not on every frame of a drag, so one drag is one step back.
+        /// </summary>
+        public void Remember()
+        {
+            // A click on a node that never moved it would otherwise leave a step that undoes nothing.
+            if (_undo.Count > 0 && Same(_undo[_undo.Count - 1]))
+                return;
+            _undo.Add(Take());
+            if (_undo.Count > UndoCapacity)
+                _undo.RemoveAt(0);
+            _redo.Clear();
+        }
+
+        /// <summary>Puts the draft back as it was before the last remembered edit. False if there is none.</summary>
+        public bool Undo() => Step(_undo, _redo);
+
+        /// <summary>Takes back the last <see cref="Undo"/>. False if there is none.</summary>
+        public bool Redo() => Step(_redo, _undo);
+
+        bool Step(List<List<RoadNode>> from, List<List<RoadNode>> to)
+        {
+            if (from.Count == 0)
+                return false;
+            to.Add(Take());
+            var back = from[from.Count - 1];
+            from.RemoveAt(from.Count - 1);
+            Nodes.Clear();
+            foreach (var node in back)
+                Nodes.Add(Copy(node));
+            Version++;
+            return true;
+        }
+
+        bool Same(List<RoadNode> snapshot)
+        {
+            if (snapshot.Count != Nodes.Count)
+                return false;
+            for (var i = 0; i < Nodes.Count; i++)
+            {
+                var a = snapshot[i];
+                var b = Nodes[i];
+                if (a.Id != b.Id || a.Position != b.Position || a.Height != b.Height || a.Handle != b.Handle
+                    || a.LockToGround != b.LockToGround || a.GroundOffset != b.GroundOffset)
+                    return false;
+            }
+
+            return true;
+        }
+
+        List<RoadNode> Take()
+        {
+            var snapshot = new List<RoadNode>(Nodes.Count);
+            foreach (var node in Nodes)
+                snapshot.Add(Copy(node));
+            return snapshot;
         }
 
         /// <summary>Takes a built road out of the network into the draft for editing.</summary>
@@ -90,7 +190,9 @@ namespace TinyDiggers.Interaction
             foreach (var node in network.Chain(road))
                 Nodes.Add(Copy(node));
             EditingRoad = road;
-            Width = network.WidthOf(road);
+            _width = network.WidthOf(road);
+            _undo.Clear();
+            _redo.Clear();
             Version++;
         }
 
@@ -99,7 +201,21 @@ namespace TinyDiggers.Interaction
         /// <see cref="JoinRadius"/>, taking its place and height; otherwise it is turned onto the
         /// nearest 45° from the last node if <see cref="Snap45"/>, and sits on the ground there.
         /// </summary>
-        public RoadNode Place(Vector2 at, Func<Vector2, float> groundAt, RoadNetwork network = null)
+        public RoadNode Place(Vector2 at, Func<Vector2, float> groundAt, RoadNetwork network = null, bool snap = true)
+        {
+            var node = Propose(at, groundAt, network, snap);
+            Nodes.Add(node);
+            Version++;
+            return node;
+        }
+
+        /// <summary>
+        /// The node <see cref="Place"/> would add at <paramref name="at"/>, without adding it: the
+        /// same join, snap and height rules, so the segment drawn out to the cursor is the one a
+        /// click will lay. A node that joins the network carries that node's id.
+        /// <paramref name="snap"/> false skips the 45° turn for this one node (Alt held).
+        /// </summary>
+        public RoadNode Propose(Vector2 at, Func<Vector2, float> groundAt, RoadNetwork network = null, bool snap = true)
         {
             var join = network?.NodeNear(at, JoinRadius);
             RoadNode node;
@@ -109,7 +225,7 @@ namespace TinyDiggers.Interaction
             }
             else
             {
-                if (Snap45 && Nodes.Count > 0)
+                if (Snap45 && snap && Nodes.Count > 0)
                     at = SnapAngle(Nodes[Nodes.Count - 1].Position, at);
                 node = new RoadNode
                 {
@@ -139,8 +255,6 @@ namespace TinyDiggers.Interaction
                 }
             }
 
-            Nodes.Add(node);
-            Version++;
             return node;
         }
 

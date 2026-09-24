@@ -542,8 +542,13 @@ namespace TinyDiggers.Interaction
             {
                 if (IsDrawing)
                 {
-                    CancelDrawing();
-                    LastAction = "Cancelled";
+                    // A road being drawn loses its last node, not the whole road; the Road tool
+                    // says what it did. Everything else is cancelled outright as before.
+                    if (!(Mode == ToolMode.Road && Roads != null && Roads.TakeBackLast()))
+                    {
+                        CancelDrawing();
+                        LastAction = "Cancelled";
+                    }
                 }
                 else if (Mode == ToolMode.Terraform && HasHover)
                 {

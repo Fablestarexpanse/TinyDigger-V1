@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TinyDiggers.Terrain;
 using TinyDiggers.Units;
 using UnityEngine;
 
@@ -53,6 +54,74 @@ namespace TinyDiggers.Interaction
                 triangles.Add(b + 1); triangles.Add(b + 3); triangles.Add(b + 2);
             }
         }
+
+        /// <summary>
+        /// The ground as it will be once the work is done: every cell in <paramref name="heights"/>
+        /// (keyed z × width + x, in metres) drawn at its finished height, as one continuous,
+        /// shaded surface rather than a scatter of flat tiles. Each corner takes the average of the
+        /// finished heights of the cells round it — cells not in the plan count at the ground's
+        /// height today — so the surface meets the untouched land at its edge instead of standing
+        /// off it. Light is baked in from one fixed sun, because a cutting's faces only read as
+        /// faces when they are darker than the road between them.
+        /// </summary>
+        public static void Surface(TerrainGrid grid, IReadOnlyDictionary<int, float> heights, Func<int, Color32> colorOf,
+            float lift, List<Vector3> vertices, List<Color32> colors, List<int> triangles)
+        {
+            if (grid == null || heights == null || heights.Count == 0)
+                return;
+            var width = grid.Width;
+            var cell = grid.CellSize;
+
+            float Finished(int x, int z)
+            {
+                if (!grid.IsGround(x, z))
+                    return float.NaN;
+                return heights.TryGetValue(z * width + x, out var height) ? height : grid.GetSurfaceHeight(x, z);
+            }
+
+            // A corner is shared by the four cells round it; void cells (sea, off the map) do not count.
+            float Corner(int cx, int cz)
+            {
+                var sum = 0f;
+                var count = 0;
+                for (var dz = -1; dz <= 0; dz++)
+                {
+                    for (var dx = -1; dx <= 0; dx++)
+                    {
+                        var height = Finished(cx + dx, cz + dz);
+                        if (float.IsNaN(height))
+                            continue;
+                        sum += height;
+                        count++;
+                    }
+                }
+
+                return count > 0 ? sum / count : 0f;
+            }
+
+            foreach (var pair in heights)
+            {
+                var x = pair.Key % width;
+                var z = pair.Key / width;
+                var sw = Corner(x, z);
+                var nw = Corner(x, z + 1);
+                var ne = Corner(x + 1, z + 1);
+                var se = Corner(x + 1, z);
+                var slopeX = (se + ne - sw - nw) * 0.5f / cell;
+                var slopeZ = (nw + ne - sw - se) * 0.5f / cell;
+                var normal = new Vector3(-slopeX, 1f, -slopeZ).normalized;
+                var light = Mathf.Lerp(0.5f, 1.05f, Mathf.Clamp01(Vector3.Dot(normal, Sun)));
+                var color = colorOf(pair.Key);
+                color.r = (byte)Mathf.Min(255f, color.r * light);
+                color.g = (byte)Mathf.Min(255f, color.g * light);
+                color.b = (byte)Mathf.Min(255f, color.b * light);
+                DesignationsView.AddTile(x, z, sw + lift, nw + lift, ne + lift, se + lift, color,
+                    vertices, colors, triangles, cell);
+            }
+        }
+
+        /// <summary>The light the finished surface is shaded by: high, from the south-west.</summary>
+        static readonly Vector3 Sun = new Vector3(-0.35f, 0.85f, -0.4f).normalized;
 
         public static void Disc(Vector2 at, float height, float radius, Color32 color,
             List<Vector3> vertices, List<Color32> colors, List<int> triangles, float cell = 1f)

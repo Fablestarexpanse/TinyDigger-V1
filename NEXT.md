@@ -10,6 +10,11 @@ is done, what is running, what comes next.
 
 ## NEXT
 
+**Road tool, 2026-09-24:** the segment to the cursor, undo, right-click takes a node back, smooth
+drags, and the ghost showing the land as built (V) — see `DECISIONS.md`. Tested outside Unity only;
+**look at it in play mode first**, then the rest of the list: insert/delete a node mid-road, T-junctions,
+starting a road from a built road's node.
+
 **Road tool (Ronan's current ask).** The taper was already built — `RoadPlanner.Settle` batters a
 cutting back to the ground's angle of repose and builds an embankment up to the spoil's, and the
 ghost draws it. What was missing was the numbers, and those are in now and verified in play mode:
