@@ -14,11 +14,20 @@ namespace TinyDiggers.Interaction
     /// mining tower: a building put down at a job, a work area round it, and vehicles assigned to
     /// it that work that area and nothing else.
     ///
-    /// Mouse, with the Worksite tool: drag on open ground to put a building down where the drag
-    /// starts and draw its area; a click without a drag gives a square area centred on it. Click
-    /// inside an area to select that worksite; drag its building to move it, area and all; drag a
-    /// corner of the selected area to resize it. Right-click a worksite to remove it — its vehicles
-    /// park. With units selected, right-clicking a worksite in the Select tool assigns them to it.
+    /// The work area is a closed outline, a spline or straight edges through nodes, so it can be any
+    /// shape and size (Ronan, 2026-09-24: "you should be able to set work area with splines to get
+    /// any size shape needed").
+    ///
+    /// Mouse, with the Worksite tool:
+    /// - **New worksite:** click round the area you want, one node a click; Enter, a double-click
+    ///   or a click back on the first node closes it, and the building goes in the middle. A quick
+    ///   drag on open ground makes a rectangle instead, with the building where the drag started.
+    ///   Backspace or right-click takes the last node back; C switches curved and straight.
+    /// - **Editing:** click inside an area to select it. Drag its nodes to reshape it, Ctrl+click
+    ///   its edge to add a node, Delete the node last touched, C to switch curved and straight.
+    ///   Drag the building to move the whole worksite.
+    /// - Right-click a worksite to remove it — its vehicles park. With units selected,
+    ///   right-clicking a worksite in the Select tool assigns them to it.
     ///
     /// The worksites themselves live on the crew's <see cref="JobDispatcher"/>, where the crew
     /// logic reads them; this draws them and edits them.
@@ -50,15 +59,25 @@ namespace TinyDiggers.Interaction
         readonly Dictionary<int, Transform> _buildings = new Dictionary<int, Transform>();
         readonly List<int> _gone = new List<int>();
 
-        enum Drag { None, New, Move, Corner }
+        const float DoubleClickSeconds = 0.35f;
+
+        enum Drag { None, Pressed, Rectangle, Move, Node }
 
         Drag _drag;
         Vector2Int _dragFrom;
         Vector2Int _dragTo;
         int _dragSite;
+        int _dragNode = -1;
 
-        /// <summary>The corner of the area held still while another is dragged.</summary>
-        Vector2Int _fixedCorner;
+        /// <summary>The outline being drawn for a new worksite, in cells, or empty.</summary>
+        readonly List<Vector2> _draft = new List<Vector2>();
+        bool _draftCurved = true;
+        float _lastClickTime;
+        Vector2 _cursor;
+
+        /// <summary>The node of the selected worksite last grabbed, for Delete; -1 for none.</summary>
+        int _activeNode = -1;
+        readonly List<Vector2> _scratch = new List<Vector2>();
 
         /// <summary>The worksite the panel shows and whose corners can be dragged, or 0.</summary>
         public int Selected { get; private set; }
@@ -68,7 +87,7 @@ namespace TinyDiggers.Interaction
             ? _tools.Crew.Dispatcher.Worksites
             : null;
 
-        public bool IsDrawing => _drag == Drag.New;
+        public bool IsDrawing => _draft.Count > 0 || _drag == Drag.Rectangle;
 
         TerrainGrid Grid => _terrain != null ? _terrain.Grid : null;
 
@@ -98,12 +117,118 @@ namespace TinyDiggers.Interaction
         {
             Sites?.Clear();
             Selected = 0;
-            _drag = Drag.None;
+            Cancel();
         }
 
         public void Cancel()
         {
             _drag = Drag.None;
+            _draft.Clear();
+        }
+
+        /// <summary>Right-click while drawing: the last node back, not the whole outline. False when there is none.</summary>
+        public bool TakeBackLast()
+        {
+            if (_draft.Count == 0)
+                return false;
+            _draft.RemoveAt(_draft.Count - 1);
+            _tools.Say(_draft.Count == 0 ? "Outline dropped" : $"Outline: {_draft.Count} node{(_draft.Count == 1 ? "" : "s")}");
+            return true;
+        }
+
+        /// <summary>Keys for the Worksite tool. Returns true for any it used.</summary>
+        public bool HandleKeys(Keyboard keyboard)
+        {
+            if (keyboard == null)
+                return false;
+            if ((keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame) && _draft.Count > 0)
+            {
+                Close();
+                return true;
+            }
+
+            if (keyboard.backspaceKey.wasPressedThisFrame && _draft.Count > 0)
+            {
+                TakeBackLast();
+                return true;
+            }
+
+            if (keyboard.cKey.wasPressedThisFrame && !keyboard.ctrlKey.isPressed)
+            {
+                var sites = Sites;
+                var site = sites?.Get(Selected);
+                if (_draft.Count > 0 || site == null)
+                {
+                    _draftCurved = !_draftCurved;
+                    _tools.Say(_draftCurved ? "New outlines curve through their nodes" : "New outlines have straight edges");
+                }
+                else
+                {
+                    sites.SetOutline(site.Id, site.Nodes, !site.Curved);
+                    _tools.Say(site.Curved ? $"{site.Name}: curved" : $"{site.Name}: straight edges");
+                }
+
+                return true;
+            }
+
+            if (keyboard.deleteKey.wasPressedThisFrame && _draft.Count == 0)
+            {
+                var sites = Sites;
+                var site = sites?.Get(Selected);
+                if (site == null || _activeNode < 0 || _activeNode >= site.Nodes.Count)
+                    return false;
+                if (site.Nodes.Count <= 3)
+                {
+                    _tools.Say("An area needs three nodes at least");
+                    return true;
+                }
+
+                _scratch.Clear();
+                _scratch.AddRange(site.Nodes);
+                _scratch.RemoveAt(_activeNode);
+                if (sites.SetOutline(site.Id, _scratch, site.Curved))
+                    _activeNode = -1;
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>Closes the outline being drawn and puts the worksite down, its building in the middle.</summary>
+        void Close()
+        {
+            var sites = Sites;
+            if (sites == null)
+                return;
+            if (_draft.Count < 3)
+            {
+                _tools.Say("An area needs three nodes at least");
+                return;
+            }
+
+            var site = sites.Add(Middle(_draft), _draft, _draftCurved);
+            if (site == null)
+            {
+                _tools.Say("That outline holds no ground");
+                return;
+            }
+
+            // Where the outline's own middle falls outside it (a crescent, an L), the building goes
+            // on the area's cell nearest that middle instead.
+            if (!site.Contains(site.Building.x, site.Building.y))
+                sites.PlaceBuilding(site.Id, site.Building);
+            _draft.Clear();
+            Selected = site.Id;
+            _tools.Say($"{site.Name} set up: {Describe(site)}. Select units and right-click it to assign them");
+        }
+
+        static Vector2Int Middle(List<Vector2> points)
+        {
+            var sum = Vector2.zero;
+            foreach (var point in points)
+                sum += point;
+            sum /= points.Count;
+            return new Vector2Int(Mathf.FloorToInt(sum.x), Mathf.FloorToInt(sum.y));
         }
 
         // --- input, from PlayerTools while the Worksite tool is in hand -------------------------------
@@ -114,60 +239,97 @@ namespace TinyDiggers.Interaction
             if (sites == null)
                 return;
             var cell = new Vector2Int(Mathf.FloorToInt(at.x), Mathf.FloorToInt(at.y));
+            if (hasHover)
+                _cursor = at;
 
             if (mouse.leftButton.wasPressedThisFrame && hasHover)
-                Press(sites, at, cell);
+            {
+                var ctrl = Keyboard.current != null && Keyboard.current.ctrlKey.isPressed;
+                Press(sites, at, cell, ctrl);
+            }
 
             if (mouse.leftButton.isPressed && hasHover && _drag != Drag.None)
             {
                 _dragTo = cell;
                 switch (_drag)
                 {
+                    case Drag.Pressed:
+                        // Moved far enough from where it was pressed: this is a rectangle, not a click.
+                        if (Vector2.Distance(_dragFrom, cell) >= ClickCells)
+                            _drag = Drag.Rectangle;
+                        break;
                     case Drag.Move:
                         sites.Move(_dragSite, cell);
                         break;
-                    case Drag.Corner:
-                        sites.SetArea(_dragSite, Between(_fixedCorner, cell));
+                    case Drag.Node:
+                        var site = sites.Get(_dragSite);
+                        if (site != null && _dragNode < site.Nodes.Count)
+                        {
+                            _scratch.Clear();
+                            _scratch.AddRange(site.Nodes);
+                            _scratch[_dragNode] = at;
+                            sites.SetOutline(site.Id, _scratch, site.Curved);
+                        }
+
                         break;
                 }
             }
 
             if (mouse.leftButton.wasReleasedThisFrame && _drag != Drag.None)
             {
-                if (_drag == Drag.New)
+                if (_drag == Drag.Rectangle)
                 {
-                    var site = Vector2.Distance(_dragFrom, _dragTo) < ClickCells
-                        ? sites.Add(_dragFrom, DefaultSide)
-                        : sites.Add(_dragFrom, Between(_dragFrom, _dragTo));
+                    var site = sites.Add(_dragFrom, Between(_dragFrom, _dragTo));
                     Selected = site.Id;
                     _tools.Say($"{site.Name} set up: {Describe(site)}. Select units and right-click it to assign them");
+                }
+                else if (_drag == Drag.Pressed)
+                {
+                    // A click on open ground: the first node of a new outline.
+                    _draft.Clear();
+                    _draft.Add(at);
+                    _lastClickTime = Time.unscaledTime;
+                    _tools.Say("Outline: click round the area, Enter or double-click to close it (C: curved or straight)");
                 }
 
                 _drag = Drag.None;
             }
         }
 
-        void Press(Worksites sites, Vector2 at, Vector2Int cell)
+        void Press(Worksites sites, Vector2 at, Vector2Int cell, bool ctrl)
         {
-            // A corner of the selected area first: it is the smallest target.
+            // Drawing an outline: every click is a node, until it closes.
+            if (_draft.Count > 0)
+            {
+                var doubleClick = Time.unscaledTime - _lastClickTime < DoubleClickSeconds;
+                _lastClickTime = Time.unscaledTime;
+                if (doubleClick && _draft.Count >= 3 || _draft.Count >= 3 && Near(_draft[0], at))
+                {
+                    Close();
+                    return;
+                }
+
+                _draft.Add(at);
+                _tools.Say($"Outline: {_draft.Count} nodes — Enter or double-click to close it");
+                return;
+            }
+
+            // The selected worksite's nodes and edges first: they are the smallest targets.
             var selected = sites.Get(Selected);
             if (selected != null)
             {
-                var corners = Corners(selected.Area);
-                for (var i = 0; i < 4; i++)
+                for (var i = 0; i < selected.Nodes.Count; i++)
                 {
-                    if (!Near(corners[i], at))
+                    if (!Near(selected.Nodes[i], at))
                         continue;
-                    _drag = Drag.Corner;
+                    _drag = Drag.Node;
                     _dragSite = selected.Id;
-                    // The corner diagonally opposite stays where it is. Corners are cell edges, so
-                    // the cell kept is the one just inside that corner.
-                    var opposite = corners[(i + 2) % 4];
-                    _fixedCorner = new Vector2Int(
-                        opposite.x > corners[i].x ? Mathf.RoundToInt(opposite.x) - 1 : Mathf.RoundToInt(opposite.x),
-                        opposite.y > corners[i].y ? Mathf.RoundToInt(opposite.y) - 1 : Mathf.RoundToInt(opposite.y));
+                    _dragNode = _activeNode = i;
                     return;
                 }
+
+                if (ctrl && InsertOnEdge(sites, selected, at))
+                    return;
             }
 
             foreach (var site in sites.All)
@@ -175,6 +337,7 @@ namespace TinyDiggers.Interaction
                 if (!Near(new Vector2(site.Building.x + 0.5f, site.Building.y + 0.5f), at))
                     continue;
                 Selected = site.Id;
+                _activeNode = -1;
                 _drag = Drag.Move;
                 _dragSite = site.Id;
                 return;
@@ -184,12 +347,42 @@ namespace TinyDiggers.Interaction
             if (under != null)
             {
                 Selected = under.Id;
-                _tools.Say($"{under.Name}: {Describe(under)}");
+                _activeNode = -1;
+                _tools.Say($"{under.Name}: {Describe(under)} — drag its nodes to reshape it, Ctrl+click an edge to add one");
                 return;
             }
 
-            _drag = Drag.New;
+            // Open ground: a click starts an outline, a drag makes a rectangle. Which it is shows on release.
+            _drag = Drag.Pressed;
             _dragFrom = _dragTo = cell;
+        }
+
+        /// <summary>Ctrl+click on the selected worksite's edge: a new node there, grabbed for dragging.</summary>
+        bool InsertOnEdge(Worksites sites, Worksite site, Vector2 at)
+        {
+            var nodes = site.Nodes;
+            for (var i = 0; i < nodes.Count; i++)
+            {
+                var a = nodes[i];
+                var b = nodes[(i + 1) % nodes.Count];
+                var along = b - a;
+                var t = along.sqrMagnitude > 1e-6f ? Mathf.Clamp01(Vector2.Dot(at - a, along) / along.sqrMagnitude) : 0f;
+                var point = a + along * t;
+                if (!Near(point, at))
+                    continue;
+                _scratch.Clear();
+                _scratch.AddRange(nodes);
+                _scratch.Insert(i + 1, at);
+                if (!sites.SetOutline(site.Id, _scratch, site.Curved))
+                    return false;
+                _drag = Drag.Node;
+                _dragSite = site.Id;
+                _dragNode = _activeNode = i + 1;
+                _tools.Say($"{site.Name}: node added");
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>Right-click with the Worksite tool: takes away the worksite under the cursor. Its vehicles park.</summary>
@@ -281,14 +474,13 @@ namespace TinyDiggers.Interaction
         string Describe(Worksite site)
         {
             var cell = Grid != null ? Grid.CellSize : 1f;
-            return $"{site.Area.width * cell:0.#} × {site.Area.height * cell:0.#} m, {Crew(site)}";
+            return $"{site.CellCount * cell * cell:#,0} m², {(site.Curved ? "curved" : "straight edges")}, {Crew(site)}";
         }
 
         /// <summary>The area between two cells, both included.</summary>
         static RectInt Between(Vector2Int a, Vector2Int b) =>
             new RectInt(Mathf.Min(a.x, b.x), Mathf.Min(a.y, b.y), Mathf.Abs(a.x - b.x) + 1, Mathf.Abs(a.y - b.y) + 1);
 
-        /// <summary>An area's four corners in cells, going round: south-west, south-east, north-east, north-west.</summary>
         static Vector2[] Corners(RectInt area) => new[]
         {
             new Vector2(area.x, area.y),
@@ -333,16 +525,40 @@ namespace TinyDiggers.Interaction
             foreach (var site in sites.All)
             {
                 var selected = site.Id == Selected;
-                GhostMesh.LoopOnGround(Corners(site.Area), Ground, selected ? 0.22f : 0.14f,
+                GhostMesh.LoopOnGround(site.Outline, Ground, selected ? 0.22f : 0.14f,
                     selected ? SelectedAreaColor : AreaColor, _vertices, _colors, _triangles, cell);
                 if (selected && _tools.Mode == ToolMode.Worksite)
-                    foreach (var corner in Corners(site.Area))
-                        GhostMesh.Disc(corner, Ground(corner) + 0.02f, 0.9f, CornerColor, _vertices, _colors, _triangles, cell);
+                    for (var i = 0; i < site.Nodes.Count; i++)
+                        GhostMesh.Disc(site.Nodes[i], Ground(site.Nodes[i]) + 0.02f, i == _activeNode ? 1.1f : 0.9f,
+                            CornerColor, _vertices, _colors, _triangles, cell);
             }
 
-            if (_drag == Drag.New)
+            if (_drag == Drag.Rectangle)
                 GhostMesh.LoopOnGround(Corners(Between(_dragFrom, _dragTo)), Ground, 0.18f, DrawingColor,
                     _vertices, _colors, _triangles, cell);
+
+            // The outline being drawn, closed through the cursor so its shape shows before the click.
+            if (_draft.Count > 0 && _tools.Mode == ToolMode.Worksite)
+            {
+                _scratch.Clear();
+                _scratch.AddRange(_draft);
+                _scratch.Add(_cursor);
+                var preview = _scratch;
+                if (_draftCurved && _scratch.Count >= 3)
+                {
+                    var loop = new List<RoadNode>(_scratch.Count);
+                    foreach (var point in _scratch)
+                        loop.Add(new RoadNode { Position = point, LockToGround = false });
+                    var samples = new List<RoadSample>();
+                    LandformSpline.SampleLoop(loop, 0.5f, samples);
+                    preview = new List<Vector2>();
+                    LandformSpline.Outline(samples, preview);
+                }
+
+                GhostMesh.LoopOnGround(preview, Ground, 0.18f, DrawingColor, _vertices, _colors, _triangles, cell);
+                foreach (var point in _draft)
+                    GhostMesh.Disc(point, Ground(point) + 0.02f, 0.8f, CornerColor, _vertices, _colors, _triangles, cell);
+            }
 
             _mesh.Clear();
             _mesh.SetVertices(_vertices);

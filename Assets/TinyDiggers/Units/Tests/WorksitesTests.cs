@@ -7,15 +7,65 @@ namespace TinyDiggers.Units.Tests
     public class WorksitesTests
     {
         [Test]
-        public void AnAreaIsKeptWithinTheSizesAllowed()
+        public void AnAreaCanBeAnySizeButNotSmallerThanTheBuilding()
         {
-            var sites = new Worksites { MaxSide = 40 };
-            var big = sites.Add(new Vector2Int(50, 50), new RectInt(0, 0, 400, 10));
+            var sites = new Worksites();
+            var big = sites.Add(new Vector2Int(50, 50), new RectInt(0, 0, 900, 10));
             var tiny = sites.Add(new Vector2Int(5, 5), new RectInt(5, 5, 1, 1));
 
-            Assert.That(big.Area.width, Is.EqualTo(40));
+            Assert.That(big.Area.width, Is.EqualTo(900), "no longest side: whatever the job needs");
+            Assert.That(big.CellCount, Is.EqualTo(9000));
             Assert.That(tiny.Area.width, Is.EqualTo(Worksites.MinSide));
             Assert.That(big.Id, Is.Not.EqualTo(tiny.Id));
+        }
+
+        [Test]
+        public void AnOutlineCanBeAnyShape()
+        {
+            // An L: the notch out of its top right is not part of the site.
+            var sites = new Worksites();
+            var site = sites.Add(new Vector2Int(2, 2), new[]
+            {
+                new Vector2(0f, 0f), new Vector2(20f, 0f), new Vector2(20f, 10f),
+                new Vector2(10f, 10f), new Vector2(10f, 20f), new Vector2(0f, 20f),
+            }, curved: false);
+
+            Assert.That(site.Contains(15, 5), Is.True, "the foot of the L");
+            Assert.That(site.Contains(5, 15), Is.True, "its upright");
+            Assert.That(site.Contains(15, 15), Is.False, "the notch is outside");
+            Assert.That(site.CellCount, Is.EqualTo(300));
+            Assert.That(site.Area, Is.EqualTo(new RectInt(0, 0, 20, 20)));
+
+            sites.PlaceBuilding(site.Id, new Vector2Int(16, 16));
+            Assert.That(site.Contains(site.Building.x, site.Building.y), Is.True, "a building in the notch is put on the L");
+            Assert.That(site.Contains(15, 15), Is.False, "and the area did not move");
+        }
+
+        [Test]
+        public void ACurvedOutlineRoundsOutThroughItsNodes()
+        {
+            var sites = new Worksites();
+            var corners = new[] { new Vector2(10f, 10f), new Vector2(30f, 10f), new Vector2(30f, 30f), new Vector2(10f, 30f) };
+            var straight = sites.Add(new Vector2Int(20, 20), corners, curved: false);
+            var curved = sites.Add(new Vector2Int(20, 20), corners, curved: true);
+
+            // A spline through a square's corners bows out past its edges between them.
+            Assert.That(straight.Contains(20, 30), Is.False);
+            Assert.That(curved.Contains(20, 30), Is.True, "past the middle of the top edge");
+            Assert.That(curved.Contains(20, 20), Is.True);
+            Assert.That(curved.CellCount, Is.GreaterThan(straight.CellCount));
+        }
+
+        [Test]
+        public void AnOutlineThatHoldsNothingIsRefused()
+        {
+            var sites = new Worksites();
+            Assert.That(sites.Add(new Vector2Int(0, 0), new[] { new Vector2(0f, 0f), new Vector2(5f, 0f) }, false), Is.Null,
+                "two nodes are a line, not an area");
+            var site = sites.Add(new Vector2Int(0, 0), new RectInt(0, 0, 10, 10));
+            Assert.That(sites.SetOutline(site.Id, new[] { new Vector2(0f, 0f), new Vector2(5f, 0f), new Vector2(10f, 0f) }, false), Is.False,
+                "a flat outline holds no cell");
+            Assert.That(site.CellCount, Is.EqualTo(100), "and the area it had is kept");
         }
 
         [Test]
@@ -40,6 +90,8 @@ namespace TinyDiggers.Units.Tests
             sites.Move(site.Id, new Vector2Int(30, 12));
 
             Assert.That(site.Area, Is.EqualTo(new RectInt(25, 7, 10, 10)));
+            Assert.That(site.Contains(25, 7), Is.True, "the cells went with it");
+            Assert.That(site.Contains(5, 5), Is.False);
             Assert.That(changed, Is.EqualTo(1));
         }
 

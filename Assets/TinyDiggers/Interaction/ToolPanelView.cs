@@ -222,7 +222,7 @@ namespace TinyDiggers.Interaction
             var remove = UiKit.NewButton(_worksiteButtons, "Remove", () => _tools.Worksites?.RemoveSelected(), null, 13);
             UiKit.Place((RectTransform)remove.transform, 292f, 2f, Width - 2 * Pad - 292f, RowHeight - 4f);
             _worksiteHint = Row("Worksite hints");
-            UiKit.NewLabel(_worksiteHint, "Drag: new worksite · click: select · drag building: move · drag corner: resize · right-click: remove",
+            UiKit.NewLabel(_worksiteHint, "Click round an area, Enter: new · drag: rectangle · drag nodes · Ctrl+click edge: add · Del · C: curve",
                 0f, 0f, Width - 2 * Pad, RowHeight, 12).color = new Color(0.75f, 0.77f, 0.8f);
         }
 
@@ -321,7 +321,7 @@ namespace TinyDiggers.Interaction
                     ToolMode.Quarry => "Quarry  —  drag where the crew may dig for fill material, down to H",
                     ToolMode.Terraform => "Terraform  —  click corners, Enter to commit; the crew build it to H",
                     ToolMode.Clear => "Clear  —  drag over designations to take them off",
-                    ToolMode.Worksite => "Worksite  —  a building and a work area; vehicles assigned to it work there",
+                    ToolMode.Worksite => "Worksite  —  outline a work area, any shape; vehicles assigned to it work there",
                     _ => "",
                 };
             }
@@ -383,7 +383,7 @@ namespace TinyDiggers.Interaction
                 var site = sites != null && sites.Sites != null ? sites.Sites.Get(sites.Selected) : null;
                 _worksiteNote.text = site == null
                     ? (sites != null && sites.Sites != null && sites.Sites.Count > 0 ? "Click a worksite to select it" : "No worksites yet: drag one out")
-                    : $"{site.Name}: {site.Area.width * _tools.CellSize:0.#} × {site.Area.height * _tools.CellSize:0.#} m — {sites.Crew(site)}";
+                    : $"{site.Name}: {site.CellCount * _tools.CellSize * _tools.CellSize:#,0} m² — {sites.Crew(site)}";
             }
 
             if (_widthRow.gameObject.activeSelf)

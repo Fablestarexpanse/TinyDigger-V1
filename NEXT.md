@@ -10,7 +10,7 @@ is done, what is running, what comes next.
 
 ## NEXT
 
-**Worksites, 2026-09-24:** Captain of Industry style — a building and a work area (tool 0); vehicles
+**Worksites, 2026-09-24:** Captain of Industry style — a building and a spline-outlined work area of any shape (tool 0); vehicles
 are assigned by right-clicking it and work only there; unassigned vehicles park. Replaces posting to
 terraform shapes. See `DECISIONS.md`. Look at it in play mode first.
 

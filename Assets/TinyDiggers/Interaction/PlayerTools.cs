@@ -369,6 +369,8 @@ namespace TinyDiggers.Interaction
 
             if (Mode == ToolMode.Road && Roads != null && Roads.HandleKeys(keyboard))
                 return;
+            if (Mode == ToolMode.Worksite && Worksites != null && Worksites.HandleKeys(keyboard))
+                return;
             if (Mode == ToolMode.Terraform && Terraform != null && Terraform.HandleKeys(keyboard))
                 return;
 
@@ -567,7 +569,8 @@ namespace TinyDiggers.Interaction
                 {
                     // A road being drawn loses its last node, not the whole road; the Road tool
                     // says what it did. Everything else is cancelled outright as before.
-                    if (!(Mode == ToolMode.Road && Roads != null && Roads.TakeBackLast()))
+                    if (!(Mode == ToolMode.Road && Roads != null && Roads.TakeBackLast())
+                        && !(Mode == ToolMode.Worksite && Worksites != null && Worksites.TakeBackLast()))
                     {
                         CancelDrawing();
                         LastAction = "Cancelled";

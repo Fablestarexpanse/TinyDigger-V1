@@ -6019,3 +6019,28 @@ put down and units assigned, which is the Captain of Industry rule but a change 
 longer than a worksite is only graded and paved inside the area of whichever worksite its machines
 belong to.
 
+## 2026-09-24 — Worksite areas are spline outlines
+
+Asked: *"you should be able to set work area with splines to get any size shape needed."*
+
+- A worksite's area is now a **closed outline through nodes** — a spline through them (the terraform
+  shapes' `LandformSpline.SampleLoop`, ends joined) or straight edges, **C** to switch. The cells whose
+  centres fall inside are filled once per change by an even-odd scanline and kept in a set, so the
+  crew's `Contains` stays one lookup. `Area` is now the bounding rectangle of those cells.
+- **No longest side any more**; a rectangle still has the 4-cell minimum. An outline that holds no
+  cell is refused, and an edit that would leave one keeps the old area.
+- **Tool:** click round the area and Enter, double-click or click the first node to close; the
+  building goes on the cell nearest the outline's middle that is inside it (`PlaceBuilding`), so an
+  L or a crescent still has its building on it. A quick drag on open ground still makes a
+  rectangle (four straight nodes). Selected: drag nodes, Ctrl+click an edge to add one, Delete the
+  last one touched, drag the building to move everything. Right-click or Backspace while drawing
+  takes a node back.
+- The panel and labels give the area in m² rather than width × height.
+
+**Verified** under .NET: an L-shape leaves its notch out and holds exactly its 300 cells; a curve
+through a square's corners bows out past the straight edges; a flat outline is refused and the old
+area kept; the building dropped in an L's notch lands on the L; a 900-cell-long area is allowed.
+475 Terrain and Units tests pass, the same 11 stand-in failures as before; everything type-checks.
+**Not seen in play mode.** Dragging a node of a very large area re-fills it every frame — fine at
+hundreds of cells a side, worth throttling like the road ghost if areas get much bigger.
+
