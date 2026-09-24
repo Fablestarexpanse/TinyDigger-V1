@@ -53,6 +53,26 @@ namespace TinyDiggers.Units
                 throw new ArgumentNullException(nameof(into));
 
             into.Clear();
+            Scan(outline, (x, z) =>
+            {
+                if (x >= 0 && z >= 0 && x < grid.Width && z < grid.Height && grid.IsGround(x, z))
+                    into.Add(z * grid.Width + x);
+            });
+        }
+
+        /// <summary>
+        /// The scanline itself, with no map behind it: calls back with every cell whose centre lies
+        /// inside the closed polygon, wherever it is. <see cref="Fill"/> is this plus "and is part of
+        /// the world"; a worksite's area is this plus "and remember the bounds".
+        ///
+        /// It lives on its own because the two of them had it written out twice, line for line — the
+        /// same crossing test, the same span arithmetic — which is a disagreement waiting to happen
+        /// between the ground a shape claims and the ground a site claims (2026-09-24).
+        /// </summary>
+        public static void Scan(IReadOnlyList<Vector2> outline, Action<int, int> onCell)
+        {
+            if (onCell == null)
+                throw new ArgumentNullException(nameof(onCell));
             if (outline == null || outline.Count < 3)
                 return;
 
@@ -64,11 +84,8 @@ namespace TinyDiggers.Units
                 if (point.y > maxZ) maxZ = point.y;
             }
 
-            var firstRow = Mathf.Max(0, Mathf.FloorToInt(minZ - 0.5f));
-            var lastRow = Mathf.Min(grid.Height - 1, Mathf.CeilToInt(maxZ));
             var crossings = new List<float>();
-
-            for (var z = firstRow; z <= lastRow; z++)
+            for (var z = Mathf.FloorToInt(minZ - 0.5f); z <= Mathf.CeilToInt(maxZ); z++)
             {
                 // The line through the middle of the row: cells are tested by their centres, so a
                 // shape drawn exactly along a cell boundary takes the cells it covers, not both.
@@ -91,11 +108,10 @@ namespace TinyDiggers.Units
 
                 for (var pair = 0; pair + 1 < crossings.Count; pair += 2)
                 {
-                    var from = Mathf.Max(0, Mathf.CeilToInt(crossings[pair] - 0.5f));
-                    var to = Mathf.Min(grid.Width - 1, Mathf.CeilToInt(crossings[pair + 1] - 0.5f) - 1);
+                    var from = Mathf.CeilToInt(crossings[pair] - 0.5f);
+                    var to = Mathf.CeilToInt(crossings[pair + 1] - 0.5f) - 1;
                     for (var x = from; x <= to; x++)
-                        if (grid.IsGround(x, z))
-                            into.Add(z * grid.Width + x);
+                        onCell(x, z);
                 }
             }
         }

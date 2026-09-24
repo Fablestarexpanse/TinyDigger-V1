@@ -6090,3 +6090,18 @@ been replaced, and a passing test for a design you no longer have is worse than 
 covered it were rewritten onto the new path in the same change, so nothing was left watching the old
 one. Renaming the leftover was the actual fix — two names for one idea is a bug that has not happened
 yet.
+
+### One scanline, two consumers (2026-09-24)
+
+Finishing the same merge in the geometry. A worksite's area and a landform's footprint were filled by
+two copies of the same even-odd scanline — same half-open crossing test, same
+`Ceiling(crossing − 0.5)` span arithmetic, written out twice. `Worksite.Rebuild` was already calling
+`LandformSpline` for its curved outlines, so it was half sharing the code already.
+
+`LandformRaster.Scan` is now the scanline, with no map behind it: it calls back with every cell whose
+centre is inside a closed polygon, wherever that is. `Fill` is Scan plus "and is part of the world";
+a worksite's area is Scan plus "and remember the bounds". Neither keeps its own copy.
+
+The point is not the forty lines saved. Two implementations of "which cells are inside this outline"
+is a disagreement waiting to happen between the ground a shape claims and the ground a site claims,
+and it would show up as a bot standing one cell outside its own worksite with nothing to do.

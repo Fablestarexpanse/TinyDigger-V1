@@ -70,50 +70,17 @@ namespace TinyDiggers.Units
                 Outline.AddRange(Nodes);
             }
 
-            var minX = float.MaxValue;
-            var minZ = float.MaxValue;
-            var maxX = float.MinValue;
-            var maxZ = float.MinValue;
-            foreach (var point in Outline)
-            {
-                minX = Math.Min(minX, point.x);
-                minZ = Math.Min(minZ, point.y);
-                maxX = Math.Max(maxX, point.x);
-                maxZ = Math.Max(maxZ, point.y);
-            }
-
-            var crossings = new List<float>();
+            // The scanline is LandformRaster's, so the ground a worksite claims and the ground a
+            // drawn shape claims can never disagree about where an outline's edge falls.
             int lowX = int.MaxValue, lowZ = int.MaxValue, highX = int.MinValue, highZ = int.MinValue;
-            for (var z = (int)Math.Floor(minZ); z <= (int)Math.Ceiling(maxZ); z++)
+            LandformRaster.Scan(Outline, (x, z) =>
             {
-                // Where a line through this row's cell centres crosses the outline.
-                var row = z + 0.5f;
-                crossings.Clear();
-                for (var i = 0; i < Outline.Count; i++)
-                {
-                    var a = Outline[i];
-                    var b = Outline[(i + 1) % Outline.Count];
-                    if (a.y <= row == b.y <= row)
-                        continue;
-                    crossings.Add(a.x + (row - a.y) / (b.y - a.y) * (b.x - a.x));
-                }
-
-                crossings.Sort();
-                for (var i = 0; i + 1 < crossings.Count; i += 2)
-                {
-                    // Cells whose centre x + 0.5 lies between this pair of crossings.
-                    var first = (int)Math.Ceiling(crossings[i] - 0.5f);
-                    var last = (int)Math.Ceiling(crossings[i + 1] - 0.5f) - 1;
-                    for (var x = first; x <= last; x++)
-                    {
-                        _cells.Add(Key(x, z));
-                        lowX = Math.Min(lowX, x);
-                        highX = Math.Max(highX, x);
-                        lowZ = Math.Min(lowZ, z);
-                        highZ = Math.Max(highZ, z);
-                    }
-                }
-            }
+                _cells.Add(Key(x, z));
+                lowX = Math.Min(lowX, x);
+                highX = Math.Max(highX, x);
+                lowZ = Math.Min(lowZ, z);
+                highZ = Math.Max(highZ, z);
+            });
 
             Area = _cells.Count == 0 ? default : new RectInt(lowX, lowZ, highX - lowX + 1, highZ - lowZ + 1);
         }
