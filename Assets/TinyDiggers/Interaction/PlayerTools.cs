@@ -57,6 +57,9 @@ namespace TinyDiggers.Interaction
         [SerializeField] Camera _camera;
         [SerializeField] DesignationsView _designations;
         [SerializeField] CrewView _crew;
+
+        /// <summary>The crew the tools give work to, or null in a scene without one.</summary>
+        public CrewView Crew => _crew;
         [SerializeField] Material _overlayMaterial;
         [SerializeField] Color32 _previewColor = new Color32(255, 240, 160, 90);
         [SerializeField] Color32 _rectColor = new Color32(140, 220, 255, 90);

@@ -31,6 +31,7 @@ namespace TinyDiggers.Interaction
                 case CrewUnitState.Digging:
                 case CrewUnitState.Tipping:
                 case CrewUnitState.Transferring:
+                case CrewUnitState.RoadWork:
                     return Work;
             }
 

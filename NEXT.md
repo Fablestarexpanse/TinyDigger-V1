@@ -10,6 +10,9 @@ is done, what is running, what comes next.
 
 ## NEXT
 
+**Road machines, 2026-09-24:** a Bulldozer and a Paver stand-in (dumper-sized boxes) now grade and
+surface roads as crew units; nothing grades or paves on its own any more. Look at them in play.
+
 **Roads graded smooth, 2026-09-24:** earthworks → graded (drawn at the true grade; `AutoGrade`
 stands in for the bulldozer) → surfaced (gravel and speed; nothing does it until the paver unit
 exists). See `DECISIONS.md`. Next for Ronan's units: `RoadBuilder.NeedsGrading`/`Grade` and

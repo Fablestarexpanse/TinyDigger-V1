@@ -16,6 +16,8 @@ namespace TinyDiggers.Units
         public const string Worker = "Starter robot";
         public const string Digger = "Digger mech";
         public const string Hauler = "Dumper mech";
+        public const string Bulldozer = "Bulldozer";
+        public const string Paver = "Paver";
 
         /// <summary>
         /// The one word that tells the three apart, for somewhere too narrow for the full name —
@@ -27,6 +29,8 @@ namespace TinyDiggers.Units
             {
                 case UnitRole.Digger: return "Digger";
                 case UnitRole.Hauler: return "Dumper";
+                case UnitRole.Bulldozer: return "Dozer";
+                case UnitRole.Paver: return "Paver";
                 default: return "Robot";
             }
         }
@@ -38,6 +42,8 @@ namespace TinyDiggers.Units
             {
                 case UnitRole.Digger: return Digger;
                 case UnitRole.Hauler: return Hauler;
+                case UnitRole.Bulldozer: return Bulldozer;
+                case UnitRole.Paver: return Paver;
                 default: return Worker;
             }
         }
@@ -56,6 +62,18 @@ namespace TinyDiggers.Units
         /// and never waits for a hauler.
         /// </summary>
         Worker,
+
+        /// <summary>
+        /// Grades a road once its earthworks are done: smooths the stepped ground to the road's
+        /// true grade (<see cref="RoadBuilder.Grade"/>). Never digs, fills or carries.
+        /// </summary>
+        Bulldozer,
+
+        /// <summary>
+        /// Lays the final layer on a graded road (<see cref="RoadBuilder.LaySurface"/>), which is
+        /// what makes it quicker to drive. Never digs, fills or carries.
+        /// </summary>
+        Paver,
     }
 
     public enum CrewUnitState
@@ -85,6 +103,9 @@ namespace TinyDiggers.Units
 
         /// <summary>Loaded, with nowhere it is allowed to tip. The player needs to say where.</summary>
         NeedsSomewhereToTip,
+
+        /// <summary>A bulldozer grading or a paver surfacing the road cells round where it stands.</summary>
+        RoadWork,
     }
 
     public enum CrewJobKind
@@ -113,6 +134,12 @@ namespace TinyDiggers.Units
 
         /// <summary>Going where the player ordered it.</summary>
         Go,
+
+        /// <summary>A bulldozer grading a stretch of road whose earthworks are done.</summary>
+        Grade,
+
+        /// <summary>A paver laying the final layer on a graded stretch of road.</summary>
+        Surface,
     }
 
     /// <summary>
@@ -543,8 +570,26 @@ namespace TinyDiggers.Units
         /// <summary>The hauler serving this digger, or the digger this hauler serves; -1 for neither.</summary>
         public int Partner => Role == UnitRole.Hauler ? _dispatcher.DiggerFor(Id) : _dispatcher.HaulerFor(Id);
 
-        /// <summary>Whether it digs: diggers and workers do, haulers never touch the ground.</summary>
-        public bool Digs => Role != UnitRole.Hauler;
+        /// <summary>Whether it digs: diggers and workers do; haulers and the road machines never cut the ground.</summary>
+        public bool Digs => Role == UnitRole.Digger || Role == UnitRole.Worker;
+
+        /// <summary>Whether it works roads rather than designations: the bulldozer and the paver.</summary>
+        public bool WorksRoads => Role == UnitRole.Bulldozer || Role == UnitRole.Paver;
+
+        /// <summary>Seconds a bulldozer takes over one pass of its blade: the road cells round it graded.</summary>
+        public float GradeSeconds = 0.8f;
+
+        /// <summary>Seconds a paver takes to lay the final layer on the road cells round it.</summary>
+        public float SurfaceSeconds = 1.2f;
+
+        /// <summary>
+        /// Cells either side of where a road machine stands that one pass works: 1 is a 3 × 3 patch,
+        /// a metre and a half at the game's half-metre cells — about a blade's width.
+        /// </summary>
+        public int RoadReachCells = 1;
+
+        /// <summary>Road cells this unit has graded or surfaced, for readouts and tests.</summary>
+        public int RoadCellsDone { get; private set; }
 
         /// <summary>
         /// The shape this unit has been posted to, or 0 for anywhere — which is every unit until it
@@ -742,8 +787,9 @@ namespace TinyDiggers.Units
                 WorkReachCells = MachineWorkReach;
                 WorksFromInside = true;
             }
+            // The road machines are built on the dumper's chassis, so they take its room.
             Radius = Role == UnitRole.Digger ? DiggerRadius
-                : Role == UnitRole.Hauler ? HaulerRadius : CrewRadius;
+                : Role == UnitRole.Worker ? CrewRadius : HaulerRadius;
             return this;
         }
 
@@ -795,6 +841,9 @@ namespace TinyDiggers.Units
                     break;
                 case CrewUnitState.Parked:
                     ParkStep(deltaTime);
+                    break;
+                case CrewUnitState.RoadWork:
+                    RoadWorkStep(deltaTime);
                     break;
             }
 
@@ -915,6 +964,12 @@ namespace TinyDiggers.Units
                 return;
             }
 
+            if (WorksRoads)
+            {
+                ChooseRoadJob(start);
+                return;
+            }
+
             UpdateUnreachable();
 
             // Work it cannot reach asks for a way in whatever else it is doing. A ramp used to be
@@ -931,6 +986,129 @@ namespace TinyDiggers.Units
                 ChooseHaulerJob(start);
             else
                 ChooseDiggerJob(start);
+        }
+
+        // --- road work ----------------------------------------------------------------------------
+
+        /// <summary>Road cells this unit could not find a way to, left out until it next finds nothing.</summary>
+        readonly HashSet<int> _roadSkip = new HashSet<int>();
+
+        /// <summary>
+        /// A bulldozer or a paver picks the nearest road cell waiting for it — graded ground for the
+        /// paver, finished earthworks for the bulldozer — that no other unit has claimed and it can
+        /// get to, and drives onto it. Working from on top of the road, a pass covers the cells
+        /// round it (<see cref="RoadReachCells"/>), and the next nearest is usually the next patch
+        /// along, so it crawls the road the way the real machine does.
+        /// </summary>
+        void ChooseRoadJob(Vector2Int start)
+        {
+            var roads = _dispatcher.Roads;
+            var grading = Role == UnitRole.Bulldozer;
+            var what = grading ? "graded" : "surfaced";
+            if (roads == null)
+            {
+                IdleOnRoads($"Idle: no road to be {what}");
+                return;
+            }
+
+            var width = _grid.Width;
+            // A handful of tries: a cell the pathfinder cannot reach is skipped and the next
+            // nearest tried, rather than giving up on the whole road for one bad cell.
+            for (var attempt = 0; attempt < 8; attempt++)
+            {
+                var best = -1;
+                var bestDistance = long.MaxValue;
+                foreach (var cell in grading ? roads.UngradedCells : roads.UnsurfacedCells)
+                {
+                    if (_roadSkip.Contains(cell))
+                        continue;
+                    var x = cell % width;
+                    var z = cell / width;
+                    if (grading ? !roads.NeedsGrading(x, z) : !roads.NeedsSurface(x, z))
+                        continue;
+                    if (_dispatcher.IsClaimedByOther(x, z, Id))
+                        continue;
+                    long dx = x - start.x;
+                    long dz = z - start.y;
+                    var distance = dx * dx + dz * dz;
+                    if (distance >= bestDistance)
+                        continue;
+                    if (!_dispatcher.Regions.CanReach(start.x, start.y, x, z))
+                        continue;
+                    bestDistance = distance;
+                    best = cell;
+                }
+
+                if (best < 0)
+                    break;
+                var target = new Vector2Int(best % width, best / width);
+                if (target != start && !_pathfinder.TryFindPath(start.x, start.y, target.x, target.y, _path))
+                {
+                    _roadSkip.Add(best);
+                    continue;
+                }
+
+                _dispatcher.Claim(target.x, target.y, Id);
+                Job = grading ? CrewJobKind.Grade : CrewJobKind.Surface;
+                JobTarget = JobStand = target;
+                if (target == start)
+                {
+                    Arrive();
+                    return;
+                }
+
+                _pathIndex = 0;
+                _repath = false;
+                MarkPath();
+                SetState(CrewUnitState.Moving, $"Going to {(grading ? "grade" : "surface")} {DescribeJob()}");
+                return;
+            }
+
+            _roadSkip.Clear();
+            IdleOnRoads(roads.Ungraded + roads.Waiting == 0
+                ? $"Idle: no road to be {what}"
+                : grading ? "Idle: no road with its earthworks done" : "Idle: no graded road to surface");
+        }
+
+        void IdleOnRoads(string status)
+        {
+            Job = CrewJobKind.None;
+            _dispatcher.Release(Id);
+            SetState(CrewUnitState.Idle, status);
+        }
+
+        /// <summary>One pass of the blade or the screed: every road cell round it that is waiting for this machine.</summary>
+        void RoadWorkStep(float deltaTime)
+        {
+            _workTimer += deltaTime;
+            var interval = Role == UnitRole.Bulldozer ? GradeSeconds : SurfaceSeconds;
+            if (_workTimer < interval)
+                return;
+            _workTimer = 0f;
+            _rethink = true;
+            if (Cell != JobStand)
+            {
+                OffStand++;
+                return;
+            }
+
+            var roads = _dispatcher.Roads;
+            if (roads == null)
+                return;
+            for (var dz = -RoadReachCells; dz <= RoadReachCells; dz++)
+            {
+                for (var dx = -RoadReachCells; dx <= RoadReachCells; dx++)
+                {
+                    var x = JobStand.x + dx;
+                    var z = JobStand.y + dz;
+                    if (!_grid.InBounds(x, z) || _dispatcher.IsClaimedByOther(x, z, Id))
+                        continue;
+                    if (Role == UnitRole.Bulldozer ? roads.Grade(x, z) : roads.LaySurface(x, z))
+                        RoadCellsDone++;
+                }
+            }
+
+            _dispatcher.Release(Id);
         }
 
         void ChooseDiggerJob(Vector2Int start)
@@ -1924,6 +2102,12 @@ namespace TinyDiggers.Units
                     _parkLoadVersion = Inventory.Version;
                     SetState(CrewUnitState.Parked, $"Parked by digger {_dispatcher.DiggerFor(Id)}");
                     break;
+                case CrewJobKind.Grade:
+                    SetState(CrewUnitState.RoadWork, "Grading " + DescribeJob());
+                    break;
+                case CrewJobKind.Surface:
+                    SetState(CrewUnitState.RoadWork, "Surfacing " + DescribeJob());
+                    break;
                 default:
                     SetState(CrewUnitState.Tipping, (Job == CrewJobKind.Fill ? "Filling " : "Dumping ") + DescribeJob());
                     break;
@@ -2293,6 +2477,9 @@ namespace TinyDiggers.Units
                 case CrewJobKind.Escape:
                 case CrewJobKind.Go:
                     return $"({JobTarget.x}, {JobTarget.y})";
+                case CrewJobKind.Grade:
+                case CrewJobKind.Surface:
+                    return $"road at ({JobTarget.x}, {JobTarget.y})";
                 default:
                     return "nothing";
             }

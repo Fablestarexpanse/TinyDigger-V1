@@ -96,6 +96,15 @@ namespace TinyDiggers.Units
         /// <summary>Footprint cells planned but not yet graded.</summary>
         public int Ungraded => _ungraded.Count;
 
+        /// <summary>
+        /// Every cell not yet graded, finished or not, keyed z × width + x: where a bulldozer looks
+        /// for work, asking <see cref="NeedsGrading"/> of each. Not to be changed while walked.
+        /// </summary>
+        public IReadOnlyCollection<int> UngradedCells => _ungraded;
+
+        /// <summary>Every road-bed cell not yet surfaced, graded or not: where a paver looks, asking <see cref="NeedsSurface"/>.</summary>
+        public IReadOnlyCollection<int> UnsurfacedCells => _waiting;
+
         public bool IsPlanned(int road) => _plans.ContainsKey(road);
 
         public bool IsGraded(int x, int z) => _graded.ContainsKey(z * _grid.Width + x);

@@ -62,15 +62,16 @@ namespace TinyDiggers.Interaction
             _hireRow = UiKit.Place(UiKit.NewRect(_panel, "Hire"), 4f, 0f, Width - 8f, HireHeight);
             UiKit.NewLabel(_hireRow, "Take on", 6f, 0f, 56f, HireHeight, 14);
             // One word a button, not the full name: three full names side by side ran into each
-            // other at this width (2026-09-23). The full name is in the tooltip.
+            // other at this width (2026-09-23). The full name is in the tooltip. Five now, with the
+            // road machines (2026-09-24), so narrower buttons in a smaller hand.
             var x = 60f;
-            foreach (var role in new[] { UnitRole.Worker, UnitRole.Digger, UnitRole.Hauler })
+            foreach (var role in new[] { UnitRole.Worker, UnitRole.Digger, UnitRole.Hauler, UnitRole.Bulldozer, UnitRole.Paver })
             {
                 var captured = role;
-                var button = UiKit.NewButton(_hireRow, UnitNames.Short(role), () => _crew.Hire(captured));
-                UiKit.Place((RectTransform)button.transform, x, 2f, 82f, HireHeight - 4f);
+                var button = UiKit.NewButton(_hireRow, UnitNames.Short(role), () => _crew.Hire(captured), null, 12);
+                UiKit.Place((RectTransform)button.transform, x, 2f, 49f, HireHeight - 4f);
                 UiKit.AddTooltip(button, () => $"Take on one more {UnitNames.Of(captured).ToLowerInvariant()}; it turns up in the yard with the rest");
-                x += 86f;
+                x += 52f;
             }
         }
 
@@ -118,7 +119,9 @@ namespace TinyDiggers.Interaction
         }
 
         static ToolIcon RoleIcon(UnitRole role) =>
-            role == UnitRole.Hauler ? ToolIcon.Hauler : role == UnitRole.Digger ? ToolIcon.Digger : ToolIcon.Worker;
+            // The road machines are on the dumper's chassis until they have icons of their own.
+            role == UnitRole.Hauler || role == UnitRole.Bulldozer || role == UnitRole.Paver ? ToolIcon.Hauler
+            : role == UnitRole.Digger ? ToolIcon.Digger : ToolIcon.Worker;
 
         void Clicked(int index)
         {

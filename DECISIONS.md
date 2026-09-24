@@ -5941,3 +5941,35 @@ of a road cut across a hillside shows the treads gone. **Not yet seen in play mo
   heights — which is right for the simulation, and invisible unless a rule ever compares the two.
 - The bulldozer and the paver themselves.
 
+## 2026-09-24 — Stand-ins for the bulldozer and the paver
+
+Asked: *"can you make stand-ins for these units, they should be size of the dump truck"*.
+
+- **Two new roles on the ordinary crew code** (`UnitRole.Bulldozer`, `UnitRole.Paver`), so they path,
+  queue, give way, park in the yard, show in the crew panel and are hired and dismissed like
+  everyone else. A new `CrewJobKind` each (`Grade`, `Surface`) and one new state, `RoadWork`.
+- **The job:** pick the nearest road cell waiting for this machine — finished earthworks for the
+  bulldozer (`RoadBuilder.NeedsGrading`), graded bed for the paver (`NeedsSurface`) — that no one
+  has claimed and the region map says it can reach; drive onto it; after one pass
+  (`GradeSeconds` 0.8 s, `SurfaceSeconds` 1.2 s) every waiting cell in the 3 × 3 round it is done.
+  The next nearest is usually the next patch along, so they crawl the road. The road builder
+  reaches them through `JobDispatcher.Roads`, set by `RoadsHost`.
+- **In the game `AutoGrade` and `AutoSurface` are both off now**: a road is smoothed only where a
+  bulldozer has been, and paved (and quicker to drive) only where a paver has. A paver with no
+  bulldozer ahead of it idles with "no graded road to surface".
+- **Size:** the stand-in is a box measured from the dumper prefab's own renderers at start-up (so
+  it follows the model, not `_haulerBodySize`, which is not the model's size), times `bodyScale`;
+  they take the dumper's room (`HaulerRadius`). The bulldozer is orange with a dark blade across the
+  front, the paver asphalt grey with a roller; both have a cab at the back so their heading reads.
+  The crew panel uses the dumper's icon for both.
+- The scene starts with one of each (`_bulldozerCount`, `_paverCount` on `CrewView`); the Take on
+  row has five narrower buttons.
+- Neither digs, fills or carries (`Digs` is now diggers and workers only, where it was "not a
+  hauler"), and **the paver uses no material yet** — laying the layer from a quarry's gravel is the
+  obvious next step when it is more than a stand-in.
+
+**Verified** under .NET: a bulldozer and a paver sent at a 24-cell road grade and pave the whole
+bed and touch nothing else; a paver alone does nothing and says why; both have the dumper's room
+and never dig. 465 Terrain and Units tests pass; the same 11 stand-in-noise failures as before.
+Type-checks against Unity's assemblies. **Not seen in play mode** — the stand-in bodies especially.
+

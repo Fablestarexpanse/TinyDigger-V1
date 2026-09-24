@@ -734,7 +734,9 @@ namespace TinyDiggers.Interaction
             _builtFor = map;
             if (Builder != null)
                 Builder.DrawnChanged -= Redraw;
-            Builder = new RoadBuilder(Grid, map);
+            // Grading is the bulldozer's and surfacing the paver's, now that both are in the crew:
+            // nothing is smoothed or paved that a machine has not been over.
+            Builder = new RoadBuilder(Grid, map) { AutoGrade = false, AutoSurface = false };
             Builder.DrawnChanged += Redraw;
             // A graded road is drawn at its true grade, not the height steps it was built in; the
             // grid hands that to the renderer and to anything that rides the ground.
@@ -779,6 +781,10 @@ namespace TinyDiggers.Interaction
             if (Grid == null || _tools == null)
                 return;
             EnsureBuilder();
+            // The road machines find their work in the builder, through the crew's dispatcher.
+            var dispatcher = _tools.Crew != null ? _tools.Crew.Dispatcher : null;
+            if (dispatcher != null && dispatcher.Roads != Builder)
+                dispatcher.Roads = Builder;
             Builder?.Tick();
             PlanDraft();
             ProposeSegment();

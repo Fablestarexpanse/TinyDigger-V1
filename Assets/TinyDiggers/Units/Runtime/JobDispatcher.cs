@@ -115,6 +115,13 @@ namespace TinyDiggers.Units
 
         public RegionMap Regions { get; }
 
+        /// <summary>
+        /// The island's roads as built so far, for the bulldozer and the paver to find their work
+        /// in; null until something hands them over. Roads are not designations — a graded or
+        /// surfaced cell has no dig or fill on it — so they are not claimed through the map.
+        /// </summary>
+        public RoadBuilder Roads { get; set; }
+
         public TerrainGrid Grid => _grid;
 
         public GridPathfinder Pathfinder => _pathfinder;

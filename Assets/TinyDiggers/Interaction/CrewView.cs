@@ -39,6 +39,12 @@ namespace TinyDiggers.Interaction
         [Tooltip("How many haulers to spawn.")]
         [SerializeField, Min(0)] int _haulerCount;
 
+        [Tooltip("How many bulldozers to spawn: they grade finished road earthworks to the road's true grade.")]
+        [SerializeField, Min(0)] int _bulldozerCount = 1;
+
+        [Tooltip("How many pavers to spawn: they lay the final layer on graded road.")]
+        [SerializeField, Min(0)] int _paverCount = 1;
+
         [Tooltip("Metres per second.")]
         [SerializeField, Min(0.1f)] float _speed = 3f;
 
@@ -207,10 +213,14 @@ namespace TinyDiggers.Interaction
             }
 
             _yard = spawn;
-            var total = _workerCount + _diggerCount + _haulerCount;
-            for (var i = 0; i < total; i++)
-                Hire(i < _workerCount ? UnitRole.Worker
-                    : i < _workerCount + _diggerCount ? UnitRole.Digger : UnitRole.Hauler);
+            var counts = new[]
+            {
+                (UnitRole.Worker, _workerCount), (UnitRole.Digger, _diggerCount), (UnitRole.Hauler, _haulerCount),
+                (UnitRole.Bulldozer, _bulldozerCount), (UnitRole.Paver, _paverCount),
+            };
+            foreach (var (role, count) in counts)
+                for (var i = 0; i < count; i++)
+                    Hire(role);
         }
 
         /// <summary>
@@ -366,9 +376,11 @@ namespace TinyDiggers.Interaction
             body.hideFlags = HideFlags.DontSave;
             body.transform.SetParent(transform, false);
             // A unit is a one-cell machine to the crew logic, so its body is sized to the cell.
-            body.transform.localScale = (role == UnitRole.Digger ? _bodySize : _haulerBodySize) * cellSize;
+            body.transform.localScale = BoxSize(role, cellSize);
             var bodyRenderer = body.GetComponent<MeshRenderer>();
-            bodyRenderer.material.color = role == UnitRole.Digger ? _bodyColor : _haulerColor;
+            bodyRenderer.material.color = BoxColor(role);
+            if (role == UnitRole.Bulldozer || role == UnitRole.Paver)
+                AddRoadMachineParts(body.transform, role);
             _bodies.Add(body.transform);
             _renderers.Add(bodyRenderer);
             _robotRenderers.Add(null);
@@ -390,6 +402,10 @@ namespace TinyDiggers.Interaction
                     return _diggerPrefab != null ? _diggerPrefab : _bodyPrefab;
                 case UnitRole.Hauler:
                     return _haulerPrefab != null ? _haulerPrefab : _bodyPrefab;
+                case UnitRole.Bulldozer:
+                case UnitRole.Paver:
+                    // Not modelled yet: a stand-in box the size of the dumper (AddBox).
+                    return null;
                 default:
                     return _bodyPrefab;
             }
@@ -527,6 +543,99 @@ namespace TinyDiggers.Interaction
         }
 
         /// <summary>Longest slice of time the crew is stepped by at once, in seconds.</summary>
+        [Tooltip("Bulldozer stand-in colour.")]
+        [SerializeField] Color _bulldozerColor = new Color(0.95f, 0.5f, 0.1f);
+
+        [Tooltip("Paver stand-in colour.")]
+        [SerializeField] Color _paverColor = new Color(0.3f, 0.3f, 0.33f);
+
+        Vector3? _dumperSize;
+
+        /// <summary>
+        /// The dumper model's size as it is drawn at <see cref="bodyScale"/> 1, measured once from
+        /// the prefab, or null without one. The road machines are stand-ins the size of the dumper
+        /// (Ronan, 2026-09-24: "they should be size of the dump truck"), so they are measured from
+        /// it rather than guessed: the model is not the size <see cref="_haulerBodySize"/> says.
+        /// </summary>
+        Vector3? DumperSize()
+        {
+            if (_dumperSize.HasValue || _haulerPrefab == null)
+                return _dumperSize;
+            var probe = Instantiate(_haulerPrefab, transform, false);
+            probe.transform.localPosition = Vector3.zero;
+            probe.transform.localRotation = Quaternion.identity;
+            probe.transform.localScale = Vector3.one;
+            var renderers = probe.GetComponentsInChildren<Renderer>();
+            if (renderers.Length > 0)
+            {
+                var bounds = renderers[0].bounds;
+                foreach (var r in renderers)
+                    bounds.Encapsulate(r.bounds);
+                var scale = transform.lossyScale;
+                _dumperSize = new Vector3(bounds.size.x / scale.x, bounds.size.y / scale.y, bounds.size.z / scale.z);
+            }
+
+            DestroyImmediate(probe);
+            return _dumperSize;
+        }
+
+        /// <summary>A box body's size, in this view's local units.</summary>
+        Vector3 BoxSize(UnitRole role, float cellSize)
+        {
+            if (role == UnitRole.Bulldozer || role == UnitRole.Paver)
+            {
+                var dumper = DumperSize();
+                if (dumper.HasValue)
+                    return dumper.Value * bodyScale;
+            }
+
+            return (role == UnitRole.Digger ? _bodySize : _haulerBodySize) * cellSize;
+        }
+
+        Color BoxColor(UnitRole role) =>
+            role == UnitRole.Digger ? _bodyColor
+            : role == UnitRole.Bulldozer ? _bulldozerColor
+            : role == UnitRole.Paver ? _paverColor
+            : _haulerColor;
+
+        /// <summary>
+        /// Enough on a stand-in box to tell the two road machines apart and see which way they
+        /// face: a blade across the front of the bulldozer, a roller across the front of the paver,
+        /// and a cab at the back of both. Sized as fractions of the box, so they follow it.
+        /// </summary>
+        static void AddRoadMachineParts(Transform body, UnitRole role)
+        {
+            var box = body.localScale;
+            if (role == UnitRole.Bulldozer)
+            {
+                Part(body, PrimitiveType.Cube, new Vector3(0f, -0.2f, 0.56f), Quaternion.identity,
+                    new Vector3(1.2f, 0.55f, 0.1f), new Color(0.22f, 0.22f, 0.24f));
+            }
+            else
+            {
+                // A cylinder is two units long on its own y, turned onto the box's x to lie across it.
+                var across = 0.5f * box.y;
+                Part(body, PrimitiveType.Cylinder, new Vector3(0f, -0.25f, 0.62f), Quaternion.Euler(0f, 0f, 90f),
+                    new Vector3(across / box.y, 0.55f, across / box.z), new Color(0.6f, 0.6f, 0.63f));
+            }
+
+            Part(body, PrimitiveType.Cube, new Vector3(0f, 0.7f, -0.2f), Quaternion.identity,
+                new Vector3(0.7f, 0.45f, 0.4f), new Color(0.15f, 0.17f, 0.2f));
+        }
+
+        static void Part(Transform body, PrimitiveType shape, Vector3 at, Quaternion rotation, Vector3 scale, Color color)
+        {
+            var part = GameObject.CreatePrimitive(shape);
+            part.hideFlags = HideFlags.DontSave;
+            // Clicks land on the body's own box; a collider here would take them and select nothing.
+            Destroy(part.GetComponent<Collider>());
+            part.transform.SetParent(body, false);
+            part.transform.localPosition = at;
+            part.transform.localRotation = rotation;
+            part.transform.localScale = scale;
+            part.GetComponent<MeshRenderer>().material.color = color;
+        }
+
         const float MaxTickSeconds = 0.1f;
 
         /// <summary>Most slices one frame may be broken into: twenty seconds of crew work.</summary>
@@ -727,11 +836,10 @@ namespace TinyDiggers.Interaction
                 var rotation = terrainTransform.rotation * Quaternion.Euler(0f, unit.Heading, 0f);
                 if (_renderers[i] != null)
                 {
-                    var size = (unit.Role == UnitRole.Digger ? _bodySize : _haulerBodySize) * cellSize;
+                    var size = BoxSize(unit.Role, cellSize);
                     _bodies[i].SetPositionAndRotation(
                         terrainTransform.TransformPoint(new Vector3(position.x, unit.Height + size.y * 0.5f, position.y)), rotation);
-                    _renderers[i].material.color = _selection.Contains(i) ? _selectedColor
-                        : unit.Role == UnitRole.Digger ? _bodyColor : _haulerColor;
+                    _renderers[i].material.color = _selection.Contains(i) ? _selectedColor : BoxColor(unit.Role);
                 }
                 else
                 {

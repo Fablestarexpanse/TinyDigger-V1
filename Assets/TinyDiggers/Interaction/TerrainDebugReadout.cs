@@ -165,6 +165,9 @@ namespace TinyDiggers.Interaction
                 if (shown.Role == UnitRole.Worker)
                     _unitText.Append("Worker: carries its own barrow")
                         .AppendLine(shown.Holding ? "   HOLDING" + (shown.OrderTarget is Vector2Int to ? $" (ordered to ({to.x}, {to.y}))" : "") : "");
+                else if (shown.WorksRoads)
+                    _unitText.Append(shown.Role == UnitRole.Bulldozer ? "Bulldozer: graded " : "Paver: surfaced ")
+                        .Append(shown.RoadCellsDone).AppendLine(" road cells");
                 else if (shown.Role == UnitRole.Digger)
                     _unitText.Append("Hauler: ").Append(shown.Partner >= 0 ? shown.Partner.ToString() : "none")
                         .Append("   waited for one ").Append(shown.WaitedForHauler.ToString("0.0")).Append(" s over ")

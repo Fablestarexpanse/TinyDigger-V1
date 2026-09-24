@@ -223,12 +223,13 @@ normals violate 4. That is why it reads as "voxel". The fix is rendering, not da
      height before it was rounded to the step — and *drawn* there (`TerrainGrid.DrawnHeight`,
      read by the smoothed renderer and `TerrainSurface`, so units ride it too; never by the
      simulation). A graded cell dug into or tipped on afterwards is drawn where it is. Grading is
-     the planned bulldozer's job (`RoadBuilder.Grade`); until it exists `AutoGrade` stands in.
+     the **bulldozer's** job (`UnitRole.Bulldozer` → `RoadBuilder.Grade`, a 3 × 3 patch a pass).
   3. **Surfaced:** the top 0.25 m of a graded road-bed cell becomes `Road` (packed gravel, id 18)
-     in place, so the height does not change. That is the planned paver's job
-     (`RoadBuilder.LaySurface`); nothing does it on its own (`AutoSurface` is off). **Until then a
-     road is whatever material it crosses** — the rock a cut laid bare, the spoil a fill was
-     built from.
+     in place, so the height does not change. That is the **paver's** job (`UnitRole.Paver` →
+     `RoadBuilder.LaySurface`). **Until then a road is whatever material it crosses** — the rock a
+     cut laid bare, the spoil a fill was built from.
+  - Both machines are stand-ins for now: boxes the size of the dumper, on the ordinary crew code.
+    Neither digs, fills or carries, and the paver uses no material yet.
   - Deleting the road turns its Road back to Dirt.
   - Editing a built road re-designates only what moved, and re-grades only what moved.
   - A cell shared by two roads stays Road while either does.
