@@ -6044,3 +6044,21 @@ area kept; the building dropped in an L's notch lands on the L; a 900-cell-long 
 **Not seen in play mode.** Dragging a node of a very large area re-fills it every frame — fine at
 hundreds of cells a side, worth throttling like the road ghost if areas get much bigger.
 
+### The build was verified, not assumed (2026-09-23)
+
+The build settings were changed to ship `TerrainSandbox` instead of Unity's sample scene, and that
+claim was then actually tested rather than left as an assertion: a Windows player was built from the
+bridge.
+
+It succeeded. `Build/Check/` holds a complete ~55 MB player — `TinyDiggers.exe`, `UnityPlayer.dll`,
+and a `TinyDiggers_Data` with exactly one scene (`level0`) and all four runtime assemblies
+(`TinyDiggers.Terrain/Units/Presentation/Interaction.dll`). **No test assembly shipped**: the only
+DLLs matching "Tests" belong to Unity's own Collections package. That is the asmdefs doing their job
+— every test assembly is `includePlatforms: [Editor]` with a `UNITY_INCLUDE_TESTS` constraint.
+
+Two static checks worth keeping as habits, both of which passed and either of which would have broken
+the build: no runtime assembly references `UnityEditor` unguarded (the one use, saving a camera
+preset in `RtsCamera.cs:178`, is inside `#if UNITY_EDITOR`), and no test or editor assembly is
+reachable from a runtime one.
+
+The build output is gitignored and left in place, so it can be double-clicked and played.
