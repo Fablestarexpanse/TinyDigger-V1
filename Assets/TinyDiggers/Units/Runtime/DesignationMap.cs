@@ -84,7 +84,7 @@ namespace TinyDiggers.Units
         readonly int[] _quarrySlot;
         readonly float[] _quarryFloor;
         readonly List<int> _quarryCells = new List<int>();
-        readonly int[] _site;
+        readonly int[] _shape;
         bool _disposed;
 
         public DesignationMap(TerrainGrid grid)
@@ -100,7 +100,7 @@ namespace TinyDiggers.Units
             _dumpCap = new float[cells];
             _quarrySlot = new int[cells];
             _quarryFloor = new float[cells];
-            _site = new int[cells];
+            _shape = new int[cells];
             for (var i = 0; i < cells; i++)
             {
                 _slot[i] = -1;
@@ -196,17 +196,23 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
-        /// Which site a cell belongs to, or 0 for none. A site is a shape the player has drawn —
-        /// a pit, a pad, a heap — and a unit posted to one works only its cells (Ronan, 2026-09-23:
-        /// *"when I tell them to dig it, select units, assign, type deal"*).
+        /// Which drawn shape a cell belongs to, or 0 for none — a pit, a pad, a heap. It is how the
+        /// terraform tool knows which shape the cursor is over, so that right-clicking takes that
+        /// whole shape away rather than rubbing out cells.
         ///
-        /// It is a plain layer with no undo of its own, because the plan that sets it is the record:
-        /// sites are written when a landform is committed and cleared when it is moved or removed.
+        /// **It is not what a bot is assigned to.** Bots are assigned to a <see cref="Worksite"/>,
+        /// which a building puts down (Ronan, 2026-09-24: *"the building item that designated the
+        /// build site will be the new way forward with us able to assign bots to that site"*). This
+        /// layer used to answer that question too, and having two things called a site — with the
+        /// same id space — was how a crew posted to a landform ended up able to work nowhere at all.
+        ///
+        /// A plain layer with no undo of its own, because the plan that sets it is the record:
+        /// written when a landform is committed, cleared when it is moved or removed.
         /// </summary>
-        public int SiteAt(int x, int z) => _site[Index(x, z)];
+        public int ShapeAt(int x, int z) => _shape[Index(x, z)];
 
-        /// <summary>Puts a cell in a site, or takes it out of one with 0.</summary>
-        public void SetSite(int x, int z, int site) => _site[Index(x, z)] = site;
+        /// <summary>Puts a cell in a drawn shape, or takes it out of one with 0.</summary>
+        public void SetShape(int x, int z, int shape) => _shape[Index(x, z)] = shape;
 
         /// <summary>Cubic metres a quarry cell still holds above its floor, or 0.</summary>
         public float QuarryLeft(int x, int z) =>

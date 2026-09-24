@@ -300,7 +300,7 @@ namespace TinyDiggers.Interaction
             Plan.Surface(Grid, _surface, _owners);
             Plan.Zones(Grid, _caps, _floors, _owners);
             Builder.CommitZones(_caps, _floors);
-            Builder.CommitSites(_owners);
+            Builder.CommitShapes(_owners);
             _tools.History?.Commit();
 
             Blueprints.Volumes(_committedCells, out var cut, out var fill, Grid.CellArea);
@@ -313,14 +313,14 @@ namespace TinyDiggers.Interaction
         }
 
         /// <summary>Which shape covers the cell under the cursor, or 0 for bare ground.</summary>
-        public int SiteAt(Vector2 at)
+        public int ShapeAt(Vector2 at)
         {
             var grid = Grid;
             if (grid == null)
                 return 0;
             var x = Mathf.FloorToInt(at.x);
             var z = Mathf.FloorToInt(at.y);
-            return grid.InBounds(x, z) && _tools.Map != null ? _tools.Map.SiteAt(x, z) : 0;
+            return grid.InBounds(x, z) && _tools.Map != null ? _tools.Map.ShapeAt(x, z) : 0;
         }
 
         /// <summary>Takes the shape under the cursor out of the plan, and its orders with it.</summary>
@@ -329,7 +329,7 @@ namespace TinyDiggers.Interaction
             var grid = Grid;
             if (grid == null)
                 return false;
-            var id = SiteAt(at);
+            var id = ShapeAt(at);
             if (id == 0)
                 return false;
 

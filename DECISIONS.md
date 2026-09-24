@@ -6062,3 +6062,31 @@ preset in `RtsCamera.cs:178`, is inside `#if UNITY_EDITOR`), and no test or edit
 reachable from a runtime one.
 
 The build output is gitignored and left in place, so it can be double-clicked and played.
+
+### 2026-09-24 — One site: the building puts it down
+
+Two things were called a site, sharing one id space on `CrewUnit.Site`: a **worksite**, which a
+building puts down and keeps its own cells, and the layer a committed **landform** wrote on the
+designation map. Ronan settled it: *"needs to be merged, the building item that designated the build
+site will be the new way forward with us able to assign bots to that site."*
+
+Most of the merge was already done by the worksite work — `PlayerTools` assigns a selection to a
+worksite on a right-click, and `CrewUnit.InMyArea` asks the worksite registry. What was left was the
+landform layer still *calling itself* a site while answering nothing, and that gap was live: a crew
+posted to a landform could take no work at all, because `Worksites.Contains` answers false for an id
+no worksite owns. A test written to check it dug 0 m³ where it should have dug.
+
+So the words mean one thing each now:
+
+- A **worksite** is what bots are assigned to. `CrewUnit.Site` is a worksite id and nothing else.
+- A **shape** is which drawn landform covers a cell — `DesignationMap.ShapeAt` / `SetShape`, written
+  by `LandformBuilder.CommitShapes`. It exists so the terraform tool knows what the cursor is over
+  and can take a whole shape away at once. It assigns nobody.
+
+The test that checked landform posting was deleted rather than fixed: it encoded the model that has
+been replaced, and a passing test for a design you no longer have is worse than no test.
+
+**Worth keeping:** the regression existed because a mechanism was repointed and the tests that
+covered it were rewritten onto the new path in the same change, so nothing was left watching the old
+one. Renaming the leftover was the actual fix — two names for one idea is a bug that has not happened
+yet.

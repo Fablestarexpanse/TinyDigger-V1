@@ -252,7 +252,7 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
-        public void ACellLeavingThePlanStopsBelongingToItsSite()
+        public void ACellLeavingThePlanStopsBelongingToItsShape()
         {
             var plan = new LandformPlan();
             var nodes = new List<RoadNode>();
@@ -268,14 +268,14 @@ namespace TinyDiggers.Units.Tests
             var owners = new Dictionary<int, int>();
             var surface = new Dictionary<int, float>();
             plan.Surface(_grid, surface, owners);
-            builder.CommitSites(owners);
-            Assert.That(_map.SiteAt(15, 25), Is.EqualTo(form.Id), "the shape's ground belongs to it");
+            builder.CommitShapes(owners);
+            Assert.That(_map.ShapeAt(15, 25), Is.EqualTo(form.Id), "the shape's ground is marked as its own");
 
             plan.Remove(form.Id);
             plan.Surface(_grid, surface, owners);
-            builder.CommitSites(owners);
+            builder.CommitShapes(owners);
 
-            Assert.That(_map.SiteAt(15, 25), Is.Zero, "and belongs to nobody once the shape is gone");
+            Assert.That(_map.ShapeAt(15, 25), Is.Zero, "and belongs to nobody once the shape is gone");
         }
     }
 }

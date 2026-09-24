@@ -34,7 +34,7 @@ namespace TinyDiggers.Units
         readonly Dictionary<int, float> _committed = new Dictionary<int, float>();
         readonly Dictionary<int, float> _caps = new Dictionary<int, float>();
         readonly Dictionary<int, float> _floors = new Dictionary<int, float>();
-        readonly Dictionary<int, int> _sites = new Dictionary<int, int>();
+        readonly Dictionary<int, int> _shapes = new Dictionary<int, int>();
 
         public LandformBuilder(TerrainGrid grid, DesignationMap map)
         {
@@ -121,23 +121,26 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
-        /// Marks which shape owns each cell, so a unit posted to one can tell its own work from
-        /// everyone else's. Cells that have left the plan go back to belonging to nobody.
+        /// Marks which shape owns each cell, so the tool knows what the cursor is over and can take
+        /// a whole shape away at once. Cells that have left the plan go back to belonging to nobody.
+        ///
+        /// This is not what bots are assigned to — that is a <see cref="Worksite"/>, put down with a
+        /// building (Ronan, 2026-09-24).
         /// </summary>
-        public void CommitSites(IReadOnlyDictionary<int, int> owners)
+        public void CommitShapes(IReadOnlyDictionary<int, int> owners)
         {
             var width = _grid.Width;
-            foreach (var pair in _sites)
+            foreach (var pair in _shapes)
                 if (owners == null || !owners.ContainsKey(pair.Key))
-                    _map.SetSite(pair.Key % width, pair.Key / width, 0);
+                    _map.SetShape(pair.Key % width, pair.Key / width, 0);
 
-            _sites.Clear();
+            _shapes.Clear();
             if (owners == null)
                 return;
             foreach (var pair in owners)
             {
-                _map.SetSite(pair.Key % width, pair.Key / width, pair.Value);
-                _sites[pair.Key] = pair.Value;
+                _map.SetShape(pair.Key % width, pair.Key / width, pair.Value);
+                _shapes[pair.Key] = pair.Value;
             }
         }
 
@@ -147,7 +150,7 @@ namespace TinyDiggers.Units
             Release(null);
             _committed.Clear();
             CommitZones(null, null);
-            CommitSites(null);
+            CommitShapes(null);
         }
 
         /// <summary>
