@@ -114,6 +114,19 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
+        public void ItWillNotMoorAcrossARiver()
+        {
+            // A river 5.5 m wide, wide enough to float the craft lengthwise but narrower than the
+            // craft is long: lying across it, bow on one bank, its stern would be on the other.
+            Fill((x, z) => Mathf.Abs(z - 24) <= 5 ? -2f : 1f);
+            var landing = LandingFinder.Find(_grid, Nav(), new Vector2Int(24, 24), 16,
+                HalfLength, RampReach, RampRise, LineUp, MaxStep);
+            if (landing.Found)
+                Assert.That(Mathf.Abs(Mathf.DeltaAngle(landing.Heading, 0f)) > 50f && Mathf.Abs(Mathf.DeltaAngle(landing.Heading, 180f)) > 50f,
+                    Is.True, $"it may only lie along the river, not across it (heading {landing.Heading:0})");
+        }
+
+        [Test]
         public void ItWillNotBeachUnderACliffAndSaysWhy()
         {
             // Deep water straight up to a wall three metres high.

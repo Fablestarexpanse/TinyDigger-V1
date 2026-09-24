@@ -64,6 +64,9 @@ namespace TinyDiggers.Interaction
         /// <summary>The crew the tools give work to, or null in a scene without one.</summary>
         public CrewView Crew => _crew;
         [SerializeField] Material _overlayMaterial;
+
+        [Tooltip("The landing craft (Art/Units/Forge/boat/boat.prefab). Empty: no craft.")]
+        [SerializeField] GameObject _landingCraftPrefab;
         [SerializeField] Color32 _previewColor = new Color32(255, 240, 160, 90);
         [SerializeField] Color32 _rectColor = new Color32(140, 220, 255, 90);
 
@@ -143,6 +146,9 @@ namespace TinyDiggers.Interaction
 
         /// <summary>The worksites and the Worksite tool (2026-09-24).</summary>
         public WorksitesHost Worksites { get; private set; }
+
+        /// <summary>The landing craft (FERRY_PROPOSAL.md).</summary>
+        public FerryHost Ferries { get; private set; }
 
         /// <summary>The landform plan and the Terraform tool.</summary>
         public TerraformHost Terraform { get; private set; }
@@ -265,6 +271,8 @@ namespace TinyDiggers.Interaction
             Terraform.Init(this, _terrain, _overlayMaterial);
             Worksites = gameObject.AddComponent<WorksitesHost>();
             Worksites.Init(this, _terrain, _overlayMaterial);
+            Ferries = gameObject.AddComponent<FerryHost>();
+            Ferries.Init(this, _terrain, _landingCraftPrefab, null);
         }
 
         public void SetMode(ToolMode mode)
@@ -479,6 +487,12 @@ namespace TinyDiggers.Interaction
                     var count = _crew.SelectInScreenRect(Box, _camera, add);
                     LastAction = $"Selected {count} unit{(count == 1 ? "" : "s")}";
                 }
+                else if (Ferries != null && Ferries.TrySelectAt(_camera.ScreenPointToRay(at)))
+                {
+                    // The landing craft took the click: it is commanded on its own.
+                    _crew.Deselect();
+                    LastAction = "Landing craft: right-click a shore to send it there";
+                }
                 else if (!_crew.TrySelectAt(_camera.ScreenPointToRay(at), add) && !add)
                 {
                     _crew.Deselect();
@@ -486,6 +500,12 @@ namespace TinyDiggers.Interaction
 
                 _boxPressed = false;
                 BoxActive = false;
+            }
+
+            if (rightDown && HasHover && Ferries != null && Ferries.Selected)
+            {
+                Ferries.OrderSailTo(HoverX, HoverZ);
+                return;
             }
 
             if (rightDown && HasHover && _crew.SelectedCount > 0)

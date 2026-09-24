@@ -1300,6 +1300,7 @@ MonoBehaviour:
   _designations: {fileID: 1108996318}
   _crew: {fileID: 170383080}
   _overlayMaterial: {fileID: 2100000, guid: 189053e189be60c4eb80f5df95575af8, type: 2}
+  _landingCraftPrefab: {fileID: 4121300535495451160, guid: 4f1761e88d7ffc344845f2b451c04255, type: 3}
   _previewColor:
     serializedVersion: 2
     rgba: 1520496895

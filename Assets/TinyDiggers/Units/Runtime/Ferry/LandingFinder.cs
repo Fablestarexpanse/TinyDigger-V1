@@ -120,6 +120,18 @@ namespace TinyDiggers.Units
                             bowOnLand = !grid.IsGround(c.x, c.y) || grid.GetSurfaceHeight(c.x, c.y) > water + 0.1f;
                         }
 
+                        // The whole hull behind the bow, stern end and both sides, lies over water.
+                        // Checking one point near the stern let a craft moor across a river with its
+                        // stern on the far bank: a bridge, which it is not (Ronan, 2026-09-24).
+                        var halfBeam = nav.HalfBeamCells;
+                        var side = new Vector2(dir.y, -dir.x);
+                        for (var k = -toBow; k <= toBow * 0.5f && !bowOnLand; k += 0.5f)
+                            for (var w = -halfBeam; w <= halfBeam + 1e-3f && !bowOnLand; w += halfBeam)
+                            {
+                                var c = Cell(hull + dir * k + side * w);
+                                bowOnLand = !grid.IsGround(c.x, c.y) || grid.GetSurfaceHeight(c.x, c.y) > water + 0.1f;
+                            }
+
                         var footHeight = grid.GetSurfaceHeight(foot.x, foot.y);
                         if (bowOnLand || Math.Abs(footHeight - water) > rampRise)
                         {

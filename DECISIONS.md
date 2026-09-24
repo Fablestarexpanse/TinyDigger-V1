@@ -6612,3 +6612,18 @@ passable ground within 0.5 m of the water, a straight run behind it to line up o
 **Correction:** the proposal first said no river is wide enough; a 2.87 m beam passes a 5 m river and not a
 2.5 m one, so the beam and draft decide, as Ronan's ruling puts it ("if it can't go up river...").
 
+## Landing craft slice B: it sails (2026-09-24)
+
+`Ferry` (plain C#) takes a trip: raise the ramp, back off the beach, sail the `WaterNav` route to a point
+out from the new landing, turn onto its line, run in bow first, lower the ramp; 2 m/s, turning at 40 degrees
+a second and slowing while well off course. `FerryHost` moors one craft at the start on the nearest beach
+to the crew's spawn that opens onto open water, drives the prefab's place and heading (the WaterFloater
+does the rest), plays RampDown/RampUp and the props while under way, and draws the route when selected.
+Click the craft, right-click a shore; a refusal says why.
+
+The first take moored it **across a river**, bow in one bank and stern on the other, which is a bridge by
+another name. Two gaps: `LandingFinder` checked one point near the stern for water, not the whole hull, and
+the mooring took the first landing found in any water. Now every point of the hull behind the bow, both
+sides and the stern end, must lie over water, and the mooring must be joined to at least 2000 floating cells
+(about 500 m²). In play it then backed off a lake beach, sailed 51 cells and beached on the far side in 31 s.
+

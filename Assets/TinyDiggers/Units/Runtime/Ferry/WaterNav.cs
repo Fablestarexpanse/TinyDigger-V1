@@ -83,6 +83,32 @@ namespace TinyDiggers.Units
         }
 
         /// <summary>
+        /// How many floating cells are joined to <paramref name="from"/>, counting no further than
+        /// <paramref name="cap"/>: enough to tell open water from a pool or a stretch of river.
+        /// </summary>
+        public int OpenWater(Vector2Int from, int cap)
+        {
+            if (!Floats(from.x, from.y))
+                return 0;
+            var width = _grid.Width;
+            var seen = new HashSet<int> { from.y * width + from.x };
+            var queue = new Queue<Vector2Int>();
+            queue.Enqueue(from);
+            while (queue.Count > 0 && seen.Count < cap)
+            {
+                var c = queue.Dequeue();
+                for (var n = 0; n < 4; n++)
+                {
+                    var next = new Vector2Int(c.x + (n == 0 ? 1 : n == 1 ? -1 : 0), c.y + (n == 2 ? 1 : n == 3 ? -1 : 0));
+                    if (Floats(next.x, next.y) && seen.Add(next.y * width + next.x))
+                        queue.Enqueue(next);
+                }
+            }
+
+            return Math.Min(seen.Count, cap);
+        }
+
+        /// <summary>
         /// The shortest way over floating cells from <paramref name="from"/> to
         /// <paramref name="to"/>, both cells a hull floats on, eight ways round. False if the
         /// water does not join them.
