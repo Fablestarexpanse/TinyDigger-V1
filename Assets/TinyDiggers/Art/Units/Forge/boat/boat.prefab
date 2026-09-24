@@ -41,6 +41,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 4875232701465718298}
+  - component: {fileID: 4654656022443876611}
   m_Layer: 0
   m_Name: boat
   m_TagString: Untagged
@@ -64,6 +65,26 @@ Transform:
   - {fileID: 3223054034602403819}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4654656022443876611
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4121300535495451160}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b1f1ce0a1653bc45a486ff168911380, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PromptWaffle.DynamicWater::PromptWaffle.DynamicWater.WaterFloater
+  _floatPoints:
+  - {x: 1.2713667, y: 0, z: 1.9776816}
+  - {x: -1.2713667, y: 0, z: 1.9776816}
+  - {x: 1.2713667, y: 0, z: -1.9776816}
+  - {x: -1.2713667, y: 0, z: -1.9776816}
+  _waterline: 0.16951557
+  _response: 0.06
+  _maxTilt: 12
 --- !u!1001 &4725019582424793311
 PrefabInstance:
   m_ObjectHideFlags: 0

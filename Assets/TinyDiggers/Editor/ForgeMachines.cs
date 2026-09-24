@@ -30,6 +30,9 @@ namespace TinyDiggers.EditorTools
         /// <summary>The dumper's ruled height over all, metres (Ronan, 2026-09-22).</summary>
         const float DumperHeight = 0.79f;
 
+        /// <summary>The landing craft's waterline above its keel, loaded, at forge size (boat.machine.json).</summary>
+        const float BoatWaterlineLoaded = 0.12f;
+
         struct Machine
         {
             public string Name;
@@ -141,7 +144,17 @@ namespace TinyDiggers.EditorTools
             ramp.AddState("RampDown").motion = Clip("boat", "RampDown");
             ramp.AddState("RampUp").motion = Clip("boat", "RampUp");
 
-            Save(Assemble("boat", scale, controller), "boat");
+            // It rides the water as drawn, swell and all (Ronan, 2026-09-24: "make sure boat floats
+            // on our water"). Float points and the loaded waterline are the forge's
+            // (boat.machine.json: corners at 0.9 x 1.4 m, waterline 0.12 m loaded), at our size.
+            var boat = Assemble("boat", scale, controller);
+            var floater = boat.AddComponent<PromptWaffle.DynamicWater.WaterFloater>();
+            floater.Configure(new[]
+            {
+                new Vector3(0.9f, 0f, 1.4f) * scale, new Vector3(-0.9f, 0f, 1.4f) * scale,
+                new Vector3(0.9f, 0f, -1.4f) * scale, new Vector3(-0.9f, 0f, -1.4f) * scale,
+            }, BoatWaterlineLoaded * scale);
+            Save(boat, "boat");
         }
 
         /// <summary>

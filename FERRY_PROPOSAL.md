@@ -11,7 +11,7 @@ supplies arrive at the dam terminals by ship. A landing craft moves machines acr
 can drive through:
 
 1. **Across open water**: to an islet, round a headland, over a lake.
-2. **Not across rivers**: see "Rivers" below. The boat is too big to sail in one, and it is not a bridge.
+2. **Up wide rivers, not narrow ones**: see "Rivers" below. It is never a bridge.
 3. **Later, from the rim**: a ship docks at a terminal and the landing craft brings its machines ashore.
 
 ## The boat, measured
@@ -34,9 +34,13 @@ Crew robots count by lane: proposed 3 robots per lane (0.41 m each).
 dozer go to it and can be loaded, then the boat can drive around in water and unload them someplace else
 if needed."*
 
-So the craft works **open water only**: the sea, lakes, and whatever water is wide and deep enough for its
-hull. Rivers are 3 to 6 m wide against a 2.87 m beam and a 4.9 m length, so it never sails up one, and
-nothing makes it a bridge. Where the water it can float in ends, it beaches, and the machines come to it.
+So the craft goes wherever the water floats it and is never a bridge. The **beam and draft decide**, not
+a rule about rivers: a 2.87 m beam passes a 5 m river with its sides clear but not a 2.5 m one (rivers
+run 3 to 6 m, creeks 1 to 2 m), so it goes up a wide deep river and waits at the mouth of a narrow one.
+Where the water it can float in ends, it beaches, and the machines come to it.
+
+(Corrected 2026-09-24: this section first said no river is wide enough. That was wrong; slice A's tests
+measured it.)
 
 ## How it plays (proposed)
 

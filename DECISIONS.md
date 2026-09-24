@@ -6588,3 +6588,27 @@ tail onto ground it was not filling. Now a rear-tipping truck (`TipsWholeLoad`):
 First version reversed for 0.7 s (only the last cells, tip ahead); with the line-up it reversed 9 cells
 over 2.1 s in the same take, and the heap forms behind the tailgate.
 
+## Landing craft: floating on our water, and slice A (2026-09-24)
+
+Ronan: *"make sure boat floats on our water as well"*. `WaterFloater` (in the water package, generic) samples
+`WaterZone.TrySampleAny` at the hull's float points, which is the simulated surface plus the swell as the
+shader draws it, puts the waterline on their mean and fits pitch and roll to them. The boat prefab gets
+one from the forge's float points and loaded waterline (0.12 m at forge size, 0.17 m at ours).
+
+- **Its first take hovered.** Logging (`SetLogging`) showed the hull following the sampled swell (±0.9 m,
+  ~6 s) but 0.3 s behind it, up to 0.46 m off on the down-slope. The response is now 0.06 s: the float
+  points over a 4.9 m hull already smooth out short waves; time smoothing only lags long ones. Now within 5 cm.
+- **The sampled surface is the drawn one**, checked with floating marker balls: each sits half-submerged.
+  Reading the pictures was the trap: from a camera near the water, the "surface line" is the far water,
+  the shadow under the craft is on the seabed seen through clear water, and a craft drawing 0.17 m rides
+  with its waterline at the keel stripe. None of those is hovering.
+- A recompile during play (writing new scripts while a take ran) reloaded the domain and left `TerrainView.Grid`
+  null; the first probes failed on that. No source edits while play-mode captures run.
+
+Slice A (`Units/Runtime/Ferry`): `WaterNav` (a hull floats where the water is draft + 0.15 m deep and so is
+everything within half its beam, measured to the edge of the shallow cells; its own A* over those) and
+`LandingFinder` (stern afloat, middle over at least the draft, bow onto sand at the waterline, ramp foot on dry
+passable ground within 0.5 m of the water, a straight run behind it to line up on; refusals say why).
+**Correction:** the proposal first said no river is wide enough; a 2.87 m beam passes a 5 m river and not a
+2.5 m one, so the beam and draft decide, as Ronan's ruling puts it ("if it can't go up river...").
+
