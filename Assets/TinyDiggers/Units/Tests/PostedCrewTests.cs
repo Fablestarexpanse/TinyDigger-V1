@@ -221,6 +221,26 @@ namespace TinyDiggers.Units.Tests
         }
 
         [Test]
+        public void AnUnassignedUnitStillGoesWhereItIsSent()
+        {
+            // The other half of the rule, and the half easy to break while enforcing the first
+            // (Ronan, 2026-09-24: "I can still move them around but they won't work until
+            // assigned"). Parking must mean "takes no work", not "ignores you".
+            TwoSites();
+            _dispatcher.RequireWorksite = true;
+            var unit = Worker(35, 23);
+
+            var sent = unit.OrderMoveTo(30, 34);
+            Work(unit, 90f);
+
+            Assert.That(sent, Is.True, "the order is accepted");
+            Assert.That(Vector2Int.Distance(unit.Cell, new Vector2Int(30, 34)), Is.LessThan(3f),
+                $"and it walks there — it got to {unit.Cell}");
+            Assert.That(Dug(_grid, 10, 16, 20, 26) + Dug(_grid, 40, 46, 20, 26), Is.Zero,
+                "while still doing no work of its own");
+        }
+
+        [Test]
         public void RemovingAWorksiteLetsItsVehiclesGo()
         {
             TwoSites();

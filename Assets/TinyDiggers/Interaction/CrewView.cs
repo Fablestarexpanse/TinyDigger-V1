@@ -211,7 +211,17 @@ namespace TinyDiggers.Interaction
             _pathfinder = new GridPathfinder(grid) { MaxStepHeight = maxStepHeight };
             if (maxSlopeDegrees > 0f)
                 _pathfinder.MaxSlopeDegrees = maxSlopeDegrees;
-            Dispatcher = new JobDispatcher(grid, _designations.Map, _pathfinder);
+            Dispatcher = new JobDispatcher(grid, _designations.Map, _pathfinder)
+            {
+                // Nothing works until it is told where (Ronan, 2026-09-24: "I don't want them
+                // wandering, they won't do anything till assigned — I can still move them around but
+                // they won't work until assigned"). A unit with no worksite parks where it is.
+                //
+                // Set here rather than as the default, because the tests of the crew's own rules —
+                // what a unit can reach, dig, carry and tip — are about a unit with work in front of
+                // it, and would all have to hand out worksites to say anything at all.
+                RequireWorksite = true,
+            };
 
             var wish = (_terrain.DiscCentre + _spawnOffset) / grid.CellSize;
             var wishX = Mathf.Clamp(Mathf.FloorToInt(wish.x), 0, grid.Width - 1);

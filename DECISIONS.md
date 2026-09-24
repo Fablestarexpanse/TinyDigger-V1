@@ -6105,3 +6105,19 @@ a worksite's area is Scan plus "and remember the bounds". Neither keeps its own 
 The point is not the forty lines saved. Two implementations of "which cells are inside this outline"
 is a disagreement waiting to happen between the ground a shape claims and the ground a site claims,
 and it would show up as a bot standing one cell outside its own worksite with nothing to do.
+
+### Nothing works until it is assigned (2026-09-24)
+
+Ronan: *"I don't want them wandering, they won't do anything till assigned — I can still move them
+around but they won't work until assigned."* `RequireWorksite` is on.
+
+It is set where the game builds its dispatcher (`CrewView.Start`), not as `JobDispatcher`'s default.
+The crew's own rules — what a unit can reach, dig, carry and tip — are tested on a unit with work in
+front of it, and flipping the default would make every one of those tests hand out a worksite before
+it could say anything about digging.
+
+**The half worth testing was the second one.** "Parks" has to mean *takes no work*, not *ignores
+you*, and enforcing the first is exactly how you break the second. Reading the code says an order
+survives — the park check sits in the job-choosing path, not the movement one — but this session has
+twice punished reasoning where measuring was available, so there is now a test that sends an
+unassigned unit across the map and asserts both that it arrives and that it digs nothing on the way.
