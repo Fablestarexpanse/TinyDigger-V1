@@ -7082,3 +7082,42 @@ Ronan: "make fixes on these and also see if you can stop the deck of the ferry f
   proud (top z 0.235) in machine-forge `specs/boat.json`. It was rebuilt and re-imported through
   `td_forge_import.py`, and `FerryHost.DeckHeight` is 0.31 → 0.33 (0.235 × 1.41). The play capture
   under way shows a solid deck.
+
+## Water machines from the forge: dredge, gold dredge, scow, tug (Ronan, 2026-09-25)
+
+*"We have some more units to add to the game from F:\machine-forge\out: Dredge, Golddredge, Scow and
+Tug. The other boats are not done yet"* (the bismarck, iowa and yamato stay out). Rulings:
+- **Afloat first.** Slice A puts all four in the game as craft you select and sail, like the landing
+  craft: they bob, make foam and play their idle clips. Gameplay comes in later slices.
+- **Dredge loop.** The dredge digs the bed where it is ordered to (channels, harbours) and loads a
+  scow moored alongside (the forge's LoadScow clip). A tug pushes the full scow to a dump area, and
+  the scow bottom-dumps its spoil onto the bed there, which builds it up and can reclaim land.
+- **Gold dredge.** Gold is a new resource. The gold dredge floats in its own pond, digs forward
+  through the ground, leaves tailing piles behind and puts gold into the inventory.
+- **Size.** *"It's pretty big, could fit 3-4 excavators on its deck length."* The dredge barge is
+  4.6 excavator lengths at forge size, and the same ×1.41 factor as every other machine keeps that
+  relation: dredge about 8.4 m, scow about 13.6 m, tug about 6 m, gold dredge about 17.5 m long.
+
+**Slice A built: afloat (2026-09-25).** Ronan: "continue".
+- **Import.** `td_forge_import.py` exports the four. `ForgeMachines` now also:
+  - makes a URP material for any colour no machine had before (`forge_7ea2e4`, `forge_a65a30`) and
+    remaps the FBX files onto it;
+  - sets whether each clip loops. The FBX comes in with every clip playing once, so Bob stopped
+    after 5 s; the first machines had been set by hand, which a re-export would lose.
+  - builds each craft's prefab with Bob, the tug's Props, a `WaterFloater` from the forge's float
+    points and waterline, and a foam emitter;
+  - fills `Resources/FleetCatalog` so the game finds the prefabs without a scene edit.
+- **Rest poses.** The scow's rest pose has its bottom doors hanging open 1.7 m under the keel, and
+  the gold dredge's has its ladder down 3 m. Each holds a closing clip at its end on its own layer:
+  `DoorsClose`, `LadderRaise`.
+- **Sailing.** `Vessel` (units, plain C#) sails to open water over its own `WaterNav` (draft and beam
+  per `VesselSpecs`, ×1.41) and anchors there. A refused order keeps the course it has. `FleetHost`
+  moors one of each near the landing craft 10 s in; click to select, right-click water to send.
+- **Shared search buffers.** A `WaterNav` route search held 115 MB of scratch on the game island.
+  All navs now share it, rather than five craft costing over half a gigabyte.
+- **Mooring checks the whole hull.** The nav only checks water within half the beam, so the 13.6 m
+  scow moored with its stern on the sand. Mooring now checks the hull's length as well. Still open:
+  a craft sent close to shore can anchor with its length over the shallows.
+- **Tests:** 7 new ones. Each kind crosses a strait and anchors without going over water too shallow
+  for it. The scow refuses a shelf the tug takes. A refused order keeps the course. A send far
+  inland is refused. 712 pass.

@@ -1,0 +1,33 @@
+{
+ "asset": "scow",
+ "materials": [
+  "forge_0d3b5c",
+  "forge_a3a6a4",
+  "forge_a65a30",
+  "forge_e8b33a",
+  "forge_ee6a35",
+  "forge_f2c12e"
+ ],
+ "clips": {
+  "Bob": [
+   1,
+   145
+  ],
+  "DoorsClose": [
+   1,
+   25
+  ],
+  "DoorsOpen": [
+   1,
+   25
+  ],
+  "Dump": [
+   1,
+   105
+  ],
+  "Fill": [
+   1,
+   121
+  ]
+ }
+}

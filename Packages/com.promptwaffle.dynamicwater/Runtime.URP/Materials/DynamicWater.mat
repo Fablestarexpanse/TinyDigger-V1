@@ -33,6 +33,7 @@ Material:
     - _FoamFromSpeed: 0.35
     - _FoamScale: 2.5
     - _FoamSpeedCap: 0.5
+    - _HullFoam: 1
     - _NormalStrength: 1.4
     - _Refraction: 0.04
     - _RippleStrength: 0.25

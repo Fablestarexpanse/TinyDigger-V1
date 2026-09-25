@@ -150,6 +150,9 @@ namespace TinyDiggers.Interaction
         /// <summary>The landing craft (FERRY_PROPOSAL.md).</summary>
         public FerryHost Ferries { get; private set; }
 
+        /// <summary>The forge's working craft: dredge, gold dredge, scow, tug (2026-09-25).</summary>
+        public FleetHost Fleet { get; private set; }
+
         /// <summary>The landform plan and the Terraform tool.</summary>
         public TerraformHost Terraform { get; private set; }
 
@@ -273,6 +276,8 @@ namespace TinyDiggers.Interaction
             Worksites.Init(this, _terrain, _overlayMaterial);
             Ferries = gameObject.AddComponent<FerryHost>();
             Ferries.Init(this, _terrain, _landingCraftPrefab, null);
+            Fleet = gameObject.AddComponent<FleetHost>();
+            Fleet.Init(this, _terrain);
         }
 
         public void SetMode(ToolMode mode)
@@ -485,13 +490,21 @@ namespace TinyDiggers.Interaction
                 if (SelectionBox.IsDrag(_boxStart, _boxNow))
                 {
                     var count = _crew.SelectInScreenRect(Box, _camera, add);
+                    Fleet?.Deselect();
                     LastAction = $"Selected {count} unit{(count == 1 ? "" : "s")}";
                 }
                 else if (Ferries != null && Ferries.TrySelectAt(_camera.ScreenPointToRay(at)))
                 {
                     // The landing craft took the click: it is commanded on its own.
                     _crew.Deselect();
+                    Fleet?.Deselect();
                     LastAction = "Landing craft: right-click a shore to send it there";
+                }
+                else if (Fleet != null && Fleet.TrySelectAt(_camera.ScreenPointToRay(at)))
+                {
+                    // So did a working craft.
+                    _crew.Deselect();
+                    LastAction = "Right-click water to send it there";
                 }
                 else if (!_crew.TrySelectAt(_camera.ScreenPointToRay(at), add) && !add)
                 {
@@ -505,6 +518,12 @@ namespace TinyDiggers.Interaction
             if (rightDown && HasHover && Ferries != null && Ferries.Selected)
             {
                 Ferries.OrderSailTo(HoverX, HoverZ);
+                return;
+            }
+
+            if (rightDown && HasHover && Fleet != null && Fleet.Selected != null)
+            {
+                Fleet.OrderSailTo(HoverX, HoverZ);
                 return;
             }
 

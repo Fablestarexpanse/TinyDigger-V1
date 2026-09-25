@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1b4444d30f2179845889e434168d4a7b, type: 3}
+  m_Name: FleetCatalog
+  m_EditorClassIdentifier: TinyDiggers.Interaction::TinyDiggers.Interaction.FleetCatalog
+  Dredge: {fileID: 2774905929645445095, guid: d72757c1f0e37354eba78f6fa312c58e, type: 3}
+  GoldDredge: {fileID: 7685537977958230502, guid: c5f0350d11033ef46aaa8e7261d8b311, type: 3}
+  Scow: {fileID: 1205150700366989570, guid: 69ca4660e9f90d44ebdcd22e5472d90d, type: 3}
+  Tug: {fileID: 5271570341791266121, guid: 271172a7f0c72b142ae8cd66df95da37, type: 3}

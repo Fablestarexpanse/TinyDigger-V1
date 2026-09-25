@@ -1,0 +1,22 @@
+{
+ "asset": "tug",
+ "materials": [
+  "forge_0d3b5c",
+  "forge_33a9a1",
+  "forge_7ea2e4",
+  "forge_a3a6a4",
+  "forge_ee6a35",
+  "forge_f2c12e",
+  "forge_f3eee3"
+ ],
+ "clips": {
+  "Bob": [
+   1,
+   97
+  ],
+  "Props": [
+   1,
+   9
+  ]
+ }
+}

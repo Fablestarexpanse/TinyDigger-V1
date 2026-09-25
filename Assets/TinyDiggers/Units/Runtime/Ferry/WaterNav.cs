@@ -23,10 +23,15 @@ namespace TinyDiggers.Units
     {
         readonly TerrainGrid _grid;
         bool[] _floats;
-        float[] _cost;
-        int[] _parent;
-        int[] _stamp;
-        int _search;
+
+        // The route search's scratch, shared by every nav: 12 bytes a cell, 115 MB on the game
+        // island, and each craft keeping its own would have cost half a gigabyte once the working
+        // craft came in (2026-09-25). Searches run one at a time on the main thread; the stamp
+        // count is shared too, so one nav's marks never pass for another's.
+        static float[] s_cost;
+        static int[] s_parent;
+        static int[] s_stamp;
+        static int s_search;
 
         /// <summary>Metres the hull sits below the water, loaded.</summary>
         public float Draft { get; }
@@ -123,20 +128,24 @@ namespace TinyDiggers.Units
 
             var width = _grid.Width;
             var cells = width * _grid.Height;
-            if (_cost == null || _cost.Length != cells)
+            if (s_cost == null || s_cost.Length != cells)
             {
-                _cost = new float[cells];
-                _parent = new int[cells];
-                _stamp = new int[cells];
+                s_cost = new float[cells];
+                s_parent = new int[cells];
+                s_stamp = new int[cells];
+                s_search = 0;
             }
 
-            _search++;
+            var costs = s_cost;
+            var parents = s_parent;
+            var stamps = s_stamp;
+            var search = ++s_search;
             var start = from.y * width + from.x;
             var goal = to.y * width + to.x;
             var open = new MinHeap();
-            _stamp[start] = _search;
-            _cost[start] = 0f;
-            _parent[start] = -1;
+            stamps[start] = search;
+            costs[start] = 0f;
+            parents[start] = -1;
             open.Push(start, Octile(from, to));
             while (open.Count > 0)
             {
@@ -156,19 +165,19 @@ namespace TinyDiggers.Units
                         if (dx != 0 && dz != 0 && (!Floats(cx + dx, cz) || !Floats(cx, cz + dz)))
                             continue;
                         var next = nz * width + nx;
-                        var cost = _cost[cell] + (dx != 0 && dz != 0 ? 1.41421356f : 1f);
-                        if (_stamp[next] == _search && cost >= _cost[next])
+                        var cost = costs[cell] + (dx != 0 && dz != 0 ? 1.41421356f : 1f);
+                        if (stamps[next] == search && cost >= costs[next])
                             continue;
-                        _stamp[next] = _search;
-                        _cost[next] = cost;
-                        _parent[next] = cell;
+                        stamps[next] = search;
+                        costs[next] = cost;
+                        parents[next] = cell;
                         open.Push(next, cost + Octile(new Vector2Int(nx, nz), to));
                     }
             }
 
-            if (_stamp[goal] != _search)
+            if (stamps[goal] != search)
                 return false;
-            for (var cell = goal; cell >= 0; cell = _parent[cell])
+            for (var cell = goal; cell >= 0; cell = parents[cell])
                 route.Add(new Vector2Int(cell % width, cell / width));
             route.Reverse();
             return true;
