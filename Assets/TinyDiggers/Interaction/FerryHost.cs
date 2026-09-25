@@ -307,8 +307,11 @@ namespace TinyDiggers.Interaction
             _hintedBoard = over;
         }
 
-        /// <summary>Metres above the keel the machines ride: the deck of the well (forge 0.22 m).</summary>
-        const float DeckHeight = 0.31f;
+        /// <summary>
+        /// Metres above the keel the machines ride: the deck of the well (forge 0.235 m, x1.41). It
+        /// was 0.22, flush with the hull box, and the two tops z-fought (2026-09-25).
+        /// </summary>
+        const float DeckHeight = 0.33f;
 
         /// <summary>
         /// Where a unit on the craft is drawn: blended from the ramp foot on the beach to its lane on

@@ -7067,3 +7067,18 @@ package plus an emitter on the boat. Ronan: "go".
     must match `WaterWaves` on the CPU.
 - **Tests:** 3 foam map tests. At rest foam laps the waterline only. A moving hull leaves a wake
   astern and nothing 3.5 m ahead. Foam fades to nothing, and the map then does no work. 704 pass.
+
+## Ferry: refused orders, deck flicker (Ronan, 2026-09-25)
+
+Ronan: "make fixes on these and also see if you can stop the deck of the ferry from flickering".
+
+- **A refused order under way no longer changes course.** `Ferry.SailTo` cleared the live route on
+  "no way over the water from here". A craft already sailing then had nothing ahead of it and ran in
+  on its old landing from wherever it was. The route is now found into a scratch list and only
+  swapped in on success. Test: the craft is sailing, a dam goes across the strait, and a re-order to
+  the far beach is refused while state, route and landing all stay as they were.
+- **Deck flicker was z-fighting, not lighting.** In the forge spec the timber well deck ended exactly
+  at the stone hull box's top (both z 0.22), so the two tops were one plane. The deck now sits 1.5 cm
+  proud (top z 0.235) in machine-forge `specs/boat.json`. It was rebuilt and re-imported through
+  `td_forge_import.py`, and `FerryHost.DeckHeight` is 0.31 → 0.33 (0.235 × 1.41). The play capture
+  under way shows a solid deck.

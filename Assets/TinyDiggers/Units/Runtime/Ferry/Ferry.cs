@@ -61,6 +61,7 @@ namespace TinyDiggers.Units
         readonly TerrainGrid _grid;
         readonly WaterNav _nav;
         readonly List<Vector2Int> _route = new List<Vector2Int>();
+        readonly List<Vector2Int> _routeScratch = new List<Vector2Int>();
         int _routeIndex;
         float _timer;
         Vector2 _backTo;
@@ -235,12 +236,18 @@ namespace TinyDiggers.Units
             var landingDir = Direction(landing.Heading);
             var lineUp = landing.Hull - landingDir * (HalfLength / cell * 1.6f);
             var to = NearestFloating(Cell(lineUp), 6);
-            if (from.x < 0 || to.x < 0 || !_nav.TryFindRoute(from, to, _route))
+            // Found into a scratch list: clearing the live route on a refusal left a craft under way
+            // with nothing ahead of it, and it ran in on its old landing from wherever it was
+            // (2026-09-24).
+            _routeScratch.Clear();
+            if (from.x < 0 || to.x < 0 || !_nav.TryFindRoute(from, to, _routeScratch))
             {
-                _route.Clear();
                 why = "no way over the water from here";
                 return false;
             }
+
+            _route.Clear();
+            _route.AddRange(_routeScratch);
 
             _next = landing;
             Landing = landing;

@@ -101,5 +101,30 @@ namespace TinyDiggers.Units.Tests
             Assert.That(why, Is.EqualTo(LandingFinder.TooSteep));
             Assert.That(ferry.State, Is.EqualTo(FerryState.Beached), "and it stays where it was");
         }
+
+        [Test]
+        public void ARefusedOrderUnderWayLeavesItsCourseAlone()
+        {
+            var ferry = BeachedWest();
+            Assert.That(ferry.SailTo(new Vector2Int(72, 20), out var why), Is.True, why);
+            for (var t = 0f; t < 60f && ferry.State != FerryState.Sailing; t += 0.05f)
+                ferry.Tick(0.05f);
+            Assert.That(ferry.State, Is.EqualTo(FerryState.Sailing), ferry.Status);
+
+            // A dam across the strait ahead of it: the east beach still takes a craft, but there is
+            // no water to it any more.
+            for (var z = 0; z < Depth; z++)
+                for (var x = 44; x < 47; x++)
+                    _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, 2f), new Layer(MaterialTable.Dirt, 9f) });
+            _nav.Refresh();
+
+            var route = new List<Vector2Int>(ferry.Route);
+            var landing = ferry.Landing;
+            Assert.That(ferry.SailTo(new Vector2Int(72, 20), out why), Is.False);
+            Assert.That(why, Is.EqualTo("no way over the water from here"));
+            Assert.That(ferry.State, Is.EqualTo(FerryState.Sailing), "still sailing");
+            Assert.That(ferry.Route, Is.EqualTo(route), "on the course it had");
+            Assert.That(ferry.Landing.Hull, Is.EqualTo(landing.Hull), "for the landing it had");
+        }
     }
 }
