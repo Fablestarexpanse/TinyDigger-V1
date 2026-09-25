@@ -15,6 +15,9 @@
 // - A material can have two variant looks (lush and dry grass, 2026-09-24): the atlas gives their
 //   slices in _MaterialParams z and w, and they are blended over the base in large patches drawn by
 //   two noise fields _VariantScale metres across, the dry one favoured on high ground.
+// - Hollows darken and cool toward _HollowColour, ridges lift a little, from _HollowMap: one byte a
+//   cell of how far it lies below the ground round it (TerrainHollowMap; Ronan's references run deep
+//   green in every fold, 2026-09-24).
 // - The mesh's smooth normal is the base; the detail normal perturbs it.
 // - Lighting is URP's own: main light, additional lights, shadows and ambient, with per-material
 //   smoothness.
@@ -26,6 +29,7 @@ Shader "TinyDiggers/Terrain Triplanar"
         [NoScaleOffset] _CellMap ("Cell materials", 2D) = "black" {}
         [NoScaleOffset] _Albedos ("Material albedos", 2DArray) = "" {}
         [NoScaleOffset] _Normals ("Material normals", 2DArray) = "" {}
+        [NoScaleOffset] _HollowMap ("Hollows (0.5 level)", 2D) = "grey" {}
 
         _Tint ("Tint", Color) = (1, 1, 1, 1)
         _AlbedoRepeat ("Albedo repeat (m)", Range(0.1, 16)) = 0.5
@@ -45,6 +49,11 @@ Shader "TinyDiggers/Terrain Triplanar"
         _VariantAmount ("Variant amount", Range(0, 1)) = 1
         _VariantSoftness ("Variant edge softness", Range(0.02, 0.5)) = 0.14
         _DryHeight ("Dry from / to height (m)", Vector) = (15, 45, 0, 0)
+
+        [Header(Hollows)]
+        _HollowStrength ("Hollow strength", Range(0, 1)) = 0.8
+        _HollowColour ("Hollow colour (multiplier)", Color) = (0.45, 0.62, 0.52, 1)
+        _RidgeLift ("Ridge lift", Range(0, 0.4)) = 0.08
 
         [Header(Slope and contours)]
         _SlopeTint ("Slope tint", Range(0, 0.6)) = 0.2
@@ -84,6 +93,9 @@ Shader "TinyDiggers/Terrain Triplanar"
             half _VariantAmount;
             half _VariantSoftness;
             float4 _DryHeight;
+            half _HollowStrength;
+            half4 _HollowColour;
+            half _RidgeLift;
             half _SlopeTint;
             half4 _SlopeColour;
             half _SlopeFullAt;
@@ -96,6 +108,8 @@ Shader "TinyDiggers/Terrain Triplanar"
 
         TEXTURE2D(_CellMap);
         SAMPLER(sampler_CellMap);
+        TEXTURE2D(_HollowMap);
+        SAMPLER(sampler_HollowMap);
         TEXTURE2D_ARRAY(_Albedos);
         SAMPLER(sampler_Albedos);
         TEXTURE2D_ARRAY(_Normals);
@@ -372,6 +386,14 @@ Shader "TinyDiggers/Terrain Triplanar"
                 float mottle = ValueNoise(positionWS.xz / _MottleRepeat) * 2.0 - 1.0;
                 albedo *= 1.0 + mottle * _MottleStrength;
                 albedo *= _Tint.rgb;
+
+                // Hollows and ridges: the map is 0.5 on level ground, bilinear between cell centres.
+                float2 hollowUV = (positionWS.xz - _TerrainOrigin.xy) * _TerrainOrigin.z * _MapSize.zw;
+                half hollowValue = SAMPLE_TEXTURE2D_LOD(_HollowMap, sampler_HollowMap, hollowUV, 0).r;
+                half hollow = saturate(hollowValue * 2.0 - 1.0);
+                half ridge = saturate(1.0 - hollowValue * 2.0);
+                albedo *= lerp(half3(1, 1, 1), _HollowColour.rgb, hollow * _HollowStrength);
+                albedo *= 1.0 + ridge * _RidgeLift;
                 albedo *= 1.0 - cutBlend * _CutDarken;
 
                 // Slope tint: steep ground cools and darkens a little whatever the light is doing,

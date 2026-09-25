@@ -31,15 +31,20 @@ namespace TinyDiggers.Presentation
         static readonly int VariantScaleId = Shader.PropertyToID("_VariantScale");
         static readonly int VariantAmountId = Shader.PropertyToID("_VariantAmount");
         static readonly int DryHeightId = Shader.PropertyToID("_DryHeight");
+        static readonly int HollowMapId = Shader.PropertyToID("_HollowMap");
+        static readonly int HollowStrengthId = Shader.PropertyToID("_HollowStrength");
+        static readonly int HollowColourId = Shader.PropertyToID("_HollowColour");
+        static readonly int RidgeLiftId = Shader.PropertyToID("_RidgeLift");
 
         readonly TerrainMaterialAtlas _atlas;
         readonly TerrainCellMap _cellMap;
+        readonly TerrainHollowMap _hollows;
         readonly Material _material;
         bool _disposed;
 
         readonly float _cellSize;
 
-        public TerrainDetail(TerrainGrid grid, TerrainTextureSet set, Vector2 originWS)
+        public TerrainDetail(TerrainGrid grid, TerrainTextureSet set, Vector2 originWS, float hollowDepth = 1f)
         {
             if (grid == null)
                 throw new ArgumentNullException(nameof(grid));
@@ -51,8 +56,10 @@ namespace TinyDiggers.Presentation
 
             _atlas = new TerrainMaterialAtlas(grid.Materials, set);
             _cellMap = new TerrainCellMap(grid);
+            _hollows = new TerrainHollowMap(grid, hollowDepth);
             _material = new Material(shader) { name = "Terrain Detail", hideFlags = HideFlags.DontSave };
             _material.SetTexture(CellMapId, _cellMap.Texture);
+            _material.SetTexture(HollowMapId, _hollows.Texture);
             _material.SetTexture(AlbedosId, _atlas.Albedo);
             _material.SetTexture(NormalsId, _atlas.Normal);
             _material.SetVectorArray(MaterialParamsId, _atlas.Parameters);
@@ -89,8 +96,23 @@ namespace TinyDiggers.Presentation
             _material.SetVector(DryHeightId, new Vector4(dryFrom, dryTo, 0f, 0f));
         }
 
+        /// <summary>
+        /// How hollows and ridges show: how far a full hollow goes toward <paramref name="colour"/>
+        /// (a multiplier, so darker and cooler), and how much a ridge is lifted.
+        /// </summary>
+        public void SetHollows(float strength, Color colour, float ridgeLift)
+        {
+            _material.SetFloat(HollowStrengthId, strength);
+            _material.SetColor(HollowColourId, colour);
+            _material.SetFloat(RidgeLiftId, ridgeLift);
+        }
+
         /// <summary>Sends any cells changed since the last frame. Does nothing when nothing changed.</summary>
-        public void Flush() => _cellMap.Flush();
+        public void Flush()
+        {
+            _cellMap.Flush();
+            _hollows.Flush();
+        }
 
         public void Dispose()
         {
@@ -98,6 +120,7 @@ namespace TinyDiggers.Presentation
                 return;
             _disposed = true;
             _cellMap?.Dispose();
+            _hollows?.Dispose();
             _atlas?.Dispose();
             if (_material != null)
             {

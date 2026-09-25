@@ -6907,3 +6907,15 @@ a sunlit lime (0.64, 0.68, 0.15) from the meadow tile, rock (0.36, 0.39, 0.42) a
 0.37, 0.41). In play (`Screenshots/tex-lime.png`): the island reads vivid lime like the references,
 with painted rock and sand. Missing against them: deep green in hollows, and rock outcrops on steep
 grassy ridges.
+
+**Hollows darken (Ronan, 2026-09-24: "do the hollows darkening first").** `TerrainHollowMap`
+(Presentation) keeps one byte a cell — 128 level, above a hollow, below a ridge — worked out on the
+CPU from the grid's heights (whole map once, then only round changed cells) and sampled bilinear by the
+terrain shader, which multiplies a hollow toward `HollowColour` (0.45, 0.62, 0.52: darker and cooler, so
+grass goes deep green) at `HollowStrength` 0.8 and lifts a ridge by `RidgeLift` 0.08. The first version
+held each cell's own height against its 3 m and 12 m averages, and **drew the grid's half-metre height
+steps as dark contour bands**: every terrace edge is a little hollow cell by cell. It now holds the
+ground averaged over 2 m against its 6 m and 15 m averages, full at 1 m below; a test pins that
+half-metre steps read level. In play (`Screenshots/tex-hollows-compare.png`, left before, right after):
+the river valley and gullies run deep green, crests lift a little, the terrace bands are not made
+worse. Gentler than the references; the strength is a TerrainView field.

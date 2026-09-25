@@ -85,6 +85,18 @@ namespace TinyDiggers.Presentation
         /// <summary>World heights (m) over which grass turns dry, lowest to fully favoured.</summary>
         public Vector2 DryHeight = new Vector2(30f, 70f);
 
+        /// <summary>How far a full hollow darkens toward <see cref="HollowColour"/>; 0 is off.</summary>
+        [Range(0f, 1f)] public float HollowStrength = 0.8f;
+
+        /// <summary>What a hollow multiplies the ground by at full strength: darker and cooler.</summary>
+        public Color HollowColour = new Color(0.45f, 0.62f, 0.52f);
+
+        /// <summary>How much a ridge is lifted, as a share of its brightness.</summary>
+        [Range(0f, 0.4f)] public float RidgeLift = 0.08f;
+
+        /// <summary>Metres below the ground round it at which a cell is fully in a hollow. Read when the map is built.</summary>
+        [Min(0.05f)] public float HollowDepth = 1f;
+
         /// <summary>Metres a material boundary is blended across.</summary>
         [Range(0.05f, 4f)] public float BlendWidth = 2f;
 
@@ -205,7 +217,7 @@ namespace TinyDiggers.Presentation
                 var origin = new Vector2(transform.position.x, transform.position.z);
                 try
                 {
-                    _detail = new TerrainDetail(Grid, _textures, origin);
+                    _detail = new TerrainDetail(Grid, _textures, origin, HollowDepth);
                     PushTuning();
                     material = _detail.Material;
                 }
@@ -347,6 +359,7 @@ namespace TinyDiggers.Presentation
                 : DetailRepeat;
             _detail.SetTuning(albedo, detail, DetailStrength, MottleRepeat, MottleStrength, BlendWidth);
             _detail.SetVariants(VariantScale, VariantAmount, DryHeight.x, DryHeight.y);
+            _detail.SetHollows(HollowStrength, HollowColour, RidgeLift);
         }
 
         void OnDestroy()
