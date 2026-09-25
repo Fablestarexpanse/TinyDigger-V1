@@ -31,8 +31,9 @@ namespace TinyDiggers.Interaction
         bool _builtStamp;
 
         // The stamp picker: one button a stamp in the library, made the first time it is shown.
-        RectTransform _stampRow, _godRow;
-        Toggle _god;
+        RectTransform _stampRow, _stampRow2, _godRow, _stampShapeRow, _stampHeightRow;
+        Toggle _god, _stampFlip;
+        InputField _stampSize, _stampTurn, _stampHeight;
         readonly List<(HeightStamp Stamp, Image Background, Text Label)> _stampButtons = new List<(HeightStamp, Image, Text)>();
 
         RectTransform _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow;
@@ -68,6 +69,29 @@ namespace TinyDiggers.Interaction
             _title = UiKit.NewLabel(_panel, "", Pad, 4f, Width - 2 * Pad, 24f, 16);
 
             _stampRow = Row("Stamps");
+            _stampRow2 = Row("Stamps, more");
+            // Where it sits and how: size and turn on one row, height, flip and reset on the next.
+            // Each is a box to type in with a step either side, and the keys and wheel still work.
+            _stampShapeRow = Row("Stamp size and turn");
+            _stampSize = Stepper(_stampShapeRow, "Size", 0f, "m", () => Stamp().ScaleStamp(1f / 1.1f), () => Stamp().ScaleStamp(1.1f),
+                v => Stamp().SetStampSize(v), "Metres across   (Ctrl+wheel, or [ and ])");
+            _stampTurn = Stepper(_stampShapeRow, "Turn", 226f, "°", () => Stamp().TurnStamp(-15f), () => Stamp().TurnStamp(15f),
+                v => Stamp().SetStampTurn(v), "Degrees clockwise   (Alt+wheel, or comma and full stop)");
+
+            _stampHeightRow = Row("Stamp height");
+            _stampHeight = Stepper(_stampHeightRow, "Height", 0f, "m", () => Stamp().RaiseStamp(-0.5f), () => Stamp().RaiseStamp(0.5f),
+                v => Stamp().SetStampHeight(v), "Metres high at its highest, or deep upside down   (PageUp / PageDown)");
+            _stampFlip = UiKit.NewToggle(_stampHeightRow, "Upside down", false, on =>
+            {
+                if (Stamp().Form.Placement.Invert != on)
+                    Stamp().FlipStamp();
+            });
+            UiKit.Place((RectTransform)_stampFlip.transform, 240f, 4f, 130f, RowHeight - 8f);
+            UiKit.AddTooltip(_stampFlip, () => "A mound becomes a hollow the same shape   (I)");
+            var reset = UiKit.NewButton(_stampHeightRow, "Reset", () => Stamp().ResetStamp(), null, 13);
+            UiKit.Place((RectTransform)reset.transform, 380f, 2f, Width - 2 * Pad - 380f, RowHeight - 4f);
+            UiKit.AddTooltip(reset, () => "Back to the stamp as it comes: its own size and height, unturned, right way up");
+
             _godRow = Row("God mode");
             _god = UiKit.NewToggle(_godRow, "God mode: shape the ground now, no crew  (G)", false,
                 on => _tools.Terraform.GodMode = on);
@@ -260,21 +284,52 @@ namespace TinyDiggers.Interaction
             return _quarryStock;
         }
 
+        LandformDraft Stamp() => _tools.Terraform.Draft;
+
+        /// <summary>
+        /// A label, a step down, a box to type a number in, a step up and the unit, from
+        /// <paramref name="x"/> along <paramref name="row"/>: 230 px of it.
+        /// </summary>
+        InputField Stepper(RectTransform row, string label, float x, string unit, System.Action down, System.Action up,
+            System.Action<float> typed, string tooltip)
+        {
+            UiKit.NewLabel(row, label, x, 0f, 52f, RowHeight);
+            var less = UiKit.NewButton(row, "−", down, null, 18);
+            UiKit.Place((RectTransform)less.transform, x + 54f, 2f, 30f, RowHeight - 4f);
+            var field = UiKit.NewNumberField(row, text =>
+            {
+                if (float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+                    || float.TryParse(text, out value))
+                    typed(value);
+            });
+            UiKit.Place((RectTransform)field.transform, x + 88f, 2f, 70f, RowHeight - 4f);
+            var more = UiKit.NewButton(row, "+", up, null, 18);
+            UiKit.Place((RectTransform)more.transform, x + 162f, 2f, 30f, RowHeight - 4f);
+            UiKit.NewLabel(row, unit, x + 196f, 0f, 30f, RowHeight);
+            UiKit.AddTooltip(less, () => tooltip);
+            UiKit.AddTooltip(more, () => tooltip);
+            UiKit.AddTooltip(field, () => tooltip);
+            return field;
+        }
+
         /// <summary>The library's stamps as a row of buttons, the one in hand lit.</summary>
         void BuildStampButtons()
         {
             var host = _tools.Terraform;
             if (host == null || _stampButtons.Count > 0)
                 return;
-            host.NextStamp(0);
-            var count = Mathf.Max(1, host.Stamps.Count);
-            var width = (Width - 2 * Pad - 70f) / count - 3f;
+            // Only reads the library: picking a stamp here would put the one in hand back to its
+            // own size and height every time the panel is first shown.
+            host.LoadStamps();
+            // Six to a line, so the names fit; a second line holds the rest.
+            const int perLine = 6;
+            var width = (Width - 2 * Pad - 70f) / perLine - 3f;
             UiKit.NewLabel(_stampRow, "Stamp", 0f, 0f, 66f, RowHeight);
-            for (var i = 0; i < host.Stamps.Count; i++)
+            for (var i = 0; i < host.Stamps.Count && i < 2 * perLine; i++)
             {
                 var stamp = host.Stamps[i];
-                var button = UiKit.NewButton(_stampRow, stamp.DisplayName, () => host.ChooseStamp(stamp), null, 13);
-                UiKit.Place((RectTransform)button.transform, 70f + i * (width + 3f), 2f, width, RowHeight - 4f);
+                var button = UiKit.NewButton(i < perLine ? _stampRow : _stampRow2, stamp.DisplayName, () => host.ChooseStamp(stamp), null, 13);
+                UiKit.Place((RectTransform)button.transform, 70f + i % perLine * (width + 3f), 2f, width, RowHeight - 4f);
                 UiKit.AddTooltip(button, () => $"{stamp.DisplayName}: {stamp.NativeSize:0} m across, {stamp.NativeHeight:0.#} m high as it comes   (T steps through them)");
                 _stampButtons.Add((stamp, button.GetComponent<Image>(), button.GetComponentInChildren<Text>()));
             }
@@ -289,7 +344,7 @@ namespace TinyDiggers.Interaction
 
         void Show(params RectTransform[] rows)
         {
-            foreach (var row in new[] { _stampRow, _godRow, _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow, _rampRow, _roadGradeRow, _roadBendRow, _roadOptionsRow, _roadShapeRow, _roadNodeRow, _roadHintRow, _quarryRow, _worksiteRow, _worksiteButtons, _worksiteHint })
+            foreach (var row in new[] { _stampRow, _stampRow2, _stampShapeRow, _stampHeightRow, _godRow, _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow, _rampRow, _roadGradeRow, _roadBendRow, _roadOptionsRow, _roadShapeRow, _roadNodeRow, _roadHintRow, _quarryRow, _worksiteRow, _worksiteButtons, _worksiteHint })
                 row.gameObject.SetActive(false);
             _shown.Clear();
             var y = 30f;
@@ -337,7 +392,7 @@ namespace TinyDiggers.Interaction
                         break;
                     case ToolMode.Terraform when stampInHand:
                         BuildStampButtons();
-                        Show(_stampRow, _godRow, _volumeRow);
+                        Show(_stampRow, _stampRow2, _stampShapeRow, _stampHeightRow, _godRow, _volumeRow);
                         break;
                     case ToolMode.Terraform:
                         Show(_heightRow, _followRow, _pickRow, _volumeRow);
@@ -371,6 +426,18 @@ namespace TinyDiggers.Interaction
 
             if (!_panel.gameObject.activeSelf)
                 return;
+
+            if (_stampShapeRow.gameObject.activeSelf)
+            {
+                var placement = Stamp().Form.Placement;
+                if (!_stampSize.isFocused)
+                    _stampSize.SetTextWithoutNotify(placement.Size.ToString("0.#", CultureInfo.InvariantCulture));
+                if (!_stampTurn.isFocused)
+                    _stampTurn.SetTextWithoutNotify(placement.Rotation.ToString("0", CultureInfo.InvariantCulture));
+                if (!_stampHeight.isFocused)
+                    _stampHeight.SetTextWithoutNotify(placement.Height.ToString("0.##", CultureInfo.InvariantCulture));
+                _stampFlip.SetIsOnWithoutNotify(placement.Invert);
+            }
 
             if (_godRow.gameObject.activeSelf)
             {

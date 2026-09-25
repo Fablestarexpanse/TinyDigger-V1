@@ -6790,3 +6790,15 @@ dry (0 of 3,876 wet afterwards). It is a tool's-click operation: it reads the de
 and writing them stills the flow everywhere for a moment. Land raised out of the sea comes up as its
 seabed (sand, then the darker seabed material), not grass. **Still open:** a god stamp over a river
 leaves the cells flagged as river bed, drawn as a grey ribbon over the new hill.
+
+**Stamp controls on the panel (Ronan, 2026-09-24: "make sure we have tools to rotate scale etc").**
+Every stamp setting is now on the tool panel as well as on keys, so nothing needs remembering: Size
+(m) and Turn (°) on one row, Height (m), Upside down and Reset on the next — each a box to type in
+with − and + either side (size ×1.1 a step, turn 15°, height 0.5 m). The wheel works too: **Ctrl+wheel
+sizes, Alt+wheel turns** (plain wheel is still zoom and Shift+wheel the lens, so the tool claims the
+wheel only with those held — checked in play: 80 → 88 m, 0 → 15°, camera unmoved). Reset puts back
+the stamp's own size and height, unturned, right way up. Typed values are held to the same limits as
+the keys (4–400 m, height at least 0.5 m, turns brought into 0–360). The eleven stamp buttons wrap to
+two lines of six so the names fit. A bug found on the way: the panel loaded the library by re-picking
+the stamp in hand, which put its size and height back to native the first time the panel showed; it
+only loads the library now.

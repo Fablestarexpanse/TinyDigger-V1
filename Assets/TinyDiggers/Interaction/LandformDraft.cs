@@ -232,6 +232,40 @@ namespace TinyDiggers.Interaction
             Touch();
         }
 
+        /// <summary>Metres across, typed in; kept between 4 m and 400 m like the scaling keys.</summary>
+        public void SetStampSize(float metres)
+        {
+            Form.Placement.Size = Mathf.Clamp(metres, 4f, 400f);
+            Touch();
+        }
+
+        /// <summary>Degrees clockwise, typed in; any number, brought round into 0–360.</summary>
+        public void SetStampTurn(float degrees)
+        {
+            Form.Placement.Rotation = Mathf.Repeat(degrees, 360f);
+            Touch();
+        }
+
+        /// <summary>Metres high (or deep, upside down), typed in; never under half a metre.</summary>
+        public void SetStampHeight(float metres)
+        {
+            Form.Placement.Height = Mathf.Max(0.5f, metres);
+            Touch();
+        }
+
+        /// <summary>Back to the stamp as it comes: its own size and height, unturned, right way up.</summary>
+        public void ResetStamp()
+        {
+            var stamp = Form.ResolveStamp();
+            if (stamp == null)
+                return;
+            Form.Placement.Size = stamp.NativeSize;
+            Form.Placement.Height = stamp.NativeHeight;
+            Form.Placement.Rotation = 0f;
+            Form.Placement.Invert = false;
+            Touch();
+        }
+
         public void SetCurved(bool curved)
         {
             if (Form.Curved == curved)

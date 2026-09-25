@@ -142,7 +142,8 @@ namespace TinyDiggers.Interaction
             Draft.SetStamp(stamp);
         }
 
-        void LoadStamps()
+        /// <summary>Reads the library once, leaving the stamp in hand alone.</summary>
+        public void LoadStamps()
         {
             if (Stamps.Count > 0)
                 return;
@@ -213,6 +214,21 @@ namespace TinyDiggers.Interaction
             // A stamp rides on the cursor, and a click puts it down and hands it to the crew.
             if (Draft.Form.Kind == LandformKind.Stamp)
             {
+                // Ctrl and the wheel sizes it, Alt and the wheel turns it; the camera keeps the
+                // plain wheel (zoom) and Shift (lens).
+                var keyboard = Keyboard.current;
+                var scroll = mouse.scroll.ReadValue().y;
+                if (keyboard != null && Mathf.Abs(scroll) > 0.01f
+                    && (keyboard.ctrlKey.isPressed || keyboard.altKey.isPressed))
+                {
+                    var notches = Mathf.Sign(scroll) * Mathf.Max(1f, Mathf.Round(Mathf.Abs(scroll) / 120f));
+                    if (keyboard.ctrlKey.isPressed)
+                        Draft.ScaleStamp(Mathf.Pow(1.1f, notches));
+                    else
+                        Draft.TurnStamp(15f * notches);
+                    RtsCamera.ScrollCaptured = true;
+                }
+
                 if (hasHover)
                     Draft.MoveStamp(at, GroundAt);
                 if (mouse.leftButton.wasPressedThisFrame && hasHover && Draft.CanCommit)
@@ -770,7 +786,7 @@ namespace TinyDiggers.Interaction
                 Draft.Form.Kind == LandformKind.Stamp
                     ? (GodMode ? "GOD MODE: click shapes the ground now   •   Ctrl+Z takes it back   •   G for crew orders"
                                 : "Click to place   •   G god mode")
-                      + "   •   T next stamp   •   [ ] size   •   , . turn   •   PgUp/PgDn height   •   I upside down"
+                      + "   •   T next   •   Ctrl+wheel or [ ] size   •   Alt+wheel or , . turn   •   PgUp/PgDn height   •   I flip"
                     : Draft.Form.Kind == LandformKind.Brush
                     ? $"Hold the button and paint   •   B changes what it does ({BrushMode.ToString().ToLowerInvariant()})"
                       + "   •   [ and ] resize it   •   Enter commits"
