@@ -6715,3 +6715,19 @@ commit, the crew building it); generator rules follow. Proposed API: `HeightStam
 heightmap, native size and height, blend Add/Max/Min/Replace, edge falloff, use), `StampLibrary`,
 `StampPlacement` (centre, size, height, rotation, invert) and `StampRaster.Apply`, in the Terrain
 assembly so the generator can reach it.
+
+**Stamp heightmaps from ComfyUI: aerial photo, then depth (2026-09-24).** Asking Krea2 for a
+"greyscale heightmap" gives a *shaded relief*: brightness is light from the top left, not height, so
+the flanks come out one grey and the bowl lit on one side (`crater_00001_.png`, kept as the warning).
+What works is two steps in one workflow, `TinyDiggers_Stamp_Krea2Depth` (saved in ComfyUI): Krea2
+renders a straight-down satellite photo of the feature alone on a flat plain in flat overcast light,
+and Depth Anything V2 (vitl, 1024) reads its depth, which from straight above is height. The depth
+model tilts every photo (the bottom reads nearer), so `Art/Tools/td_stamp_clean.py` fits a plane to
+the border ring and takes it off, sets the plain to zero, centres the raised mass, smooths the 8-bit
+steps, fades the outer tenth and saves a 16-bit PNG. `TinyDiggers/Import Stamps` imports those as
+readable linear R16, makes a `HeightStamp` each and fills `Stamps/Resources/StampLibrary`.
+
+Starter set, seeds 9100 + 100·n, prompts in the workflow and the commit: crater 40 m × 8 m, mesa
+40 × 6, hill 40 × 5, ridge 50 × 6, butte 24 × 8, terraces 40 × 6. All read as their shape
+(`Screenshots/stamps-starter-sheet.png`: photo, stamp, middle profile). The ridge runs corner to
+corner, so the round mask clips its ends; a ridge wants prompting across the middle, not the diagonal.

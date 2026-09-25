@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 63c233b6e331f5e4eb54cfd91ca29520, type: 3}
+  m_Name: StampLibrary
+  m_EditorClassIdentifier: TinyDiggers.Terrain::TinyDiggers.Terrain.StampLibrary
+  Stamps:
+  - {fileID: 11400000, guid: bc684e60031cd7241ab7116e296c0d5a, type: 2}
+  - {fileID: 11400000, guid: 4db6a9faf17b136409baab901f8471b5, type: 2}
+  - {fileID: 11400000, guid: 907cb6fc79996a044a314ad98dc95c4a, type: 2}
+  - {fileID: 11400000, guid: 5942c834adffa8f4b9bf6bef27dba36d, type: 2}
+  - {fileID: 11400000, guid: 8078abd3bab142c4d9e8de2eed945abc, type: 2}
+  - {fileID: 11400000, guid: d73e1f7a729f1f041be1a5319c33df1d, type: 2}
