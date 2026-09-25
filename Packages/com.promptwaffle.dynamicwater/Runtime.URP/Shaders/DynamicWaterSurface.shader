@@ -9,6 +9,9 @@
 // well as its opaque texture. The fragment:
 // - normal from the surface's slope, read from the state texture at the pixel;
 // - colour absorbed with depth, over the refracted scene (URP opaque texture);
+// - surf: bands of foam laid out by distance from the shore (WaterShoreDistance) that roll in,
+//   widen and tear as they break, and come in sets, so a beach has waves washing onto it rather
+//   than a still white rim; only on water open enough for waves to build, so rivers stay calm;
 // - foam carried by the flow: two scrolling noise phases along the velocity, cross-faded, so the
 //   foam moves with the water without stretching; more where the water is fast or shallow;
 // - Fresnel reflection of the environment and a sun highlight;
@@ -30,6 +33,12 @@ Shader "PromptWaffle/Dynamic Water Surface"
         _ShoreFoam ("Foam in thin water at the shore", Range(0, 1)) = 0.45
         _FoamScale ("Foam pattern size (m)", Float) = 2.5
         _FoamSpeedCap ("Most foam from speed alone", Range(0, 1)) = 0.5
+        _Surf ("Surf: breaking waves at the shore", Range(0, 1)) = 0.8
+        _SurfReach ("Surf reaches this far out from the shore (m)", Range(1, 30)) = 9
+        _SurfSpacing ("Metres between surf waves", Range(0.5, 10)) = 3
+        _SurfSpeed ("Surf waves reaching the shore per second", Range(0, 1)) = 0.25
+        _SurfWidth ("Surf foam trail, share of the gap between waves", Range(0.1, 0.9)) = 0.45
+        _SurfFetch ("Open water needed out to sea for surf (m)", Range(2, 30)) = 14
         _CascadeDrop ("Water higher beside a vertex than this is a cascade (m)", Float) = 0.25
         _FlowPeriod ("Flow cycle (s)", Float) = 1.6
         _NormalStrength ("Normal strength", Range(0, 4)) = 1.4
@@ -87,6 +96,12 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 half _ShoreFoam;
                 float _FoamScale;
                 half _FoamSpeedCap;
+                half _Surf;
+                float _SurfReach;
+                float _SurfSpacing;
+                float _SurfSpeed;
+                half _SurfWidth;
+                float _SurfFetch;
                 float _CascadeDrop;
                 float _FlowPeriod;
                 half _NormalStrength;
@@ -102,6 +117,11 @@ Shader "PromptWaffle/Dynamic Water Surface"
             TEXTURE2D(_WaterState); SAMPLER(sampler_WaterState);
             float4 _WaterZone;   // origin x, origin z, size x, size z (m)
             float4 _WaterTexel;  // 1/width, 1/height, cell size, cells per vertex
+
+            // Metres to the nearest dry ground (WaterShoreDistance), set per zone by WaterZoneRenderer.
+            TEXTURE2D(_PWShoreDistance); SAMPLER(sampler_PWShoreDistance);
+            float4 _PWShoreTexel;   // 1/width, 1/height, metres covered across, metres covered down
+            float4 _PWShoreParams;  // reach (m), 1 when the field is there
 
             // The swell, set per zone by WaterZoneRenderer from WaterWaves.Pack.
             #define PW_MAX_WAVES 8
@@ -328,6 +348,49 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 return ValueNoise(p) * 0.6 + ValueNoise(p * 2.7 + 13.0) * 0.4;
             }
 
+            float ShoreDistance(float2 xz)
+            {
+                float2 uv = (xz - _WaterZone.xy) / _PWShoreTexel.zw;
+                return SAMPLE_TEXTURE2D_LOD(_PWShoreDistance, sampler_PWShoreDistance, uv, 0).r;
+            }
+
+            /// How much surf breaks here, 0 to 1.
+            float Surf(float2 xz)
+            {
+                float distance = ShoreDistance(xz);
+                if (distance >= _SurfReach)
+                    return 0;
+                // Open water only: look out to sea, down the field's slope, by the fetch. Across a
+                // river or a pond that lands on the far bank, which is near the shore again.
+                float texel = _PWShoreTexel.z * _PWShoreTexel.x;
+                float2 slope = float2(ShoreDistance(xz + float2(texel, 0)) - ShoreDistance(xz - float2(texel, 0)),
+                                      ShoreDistance(xz + float2(0, texel)) - ShoreDistance(xz - float2(0, texel)));
+                float2 seaward = slope / max(length(slope), 1e-4);
+                float outThere = ShoreDistance(xz + seaward * _SurfFetch);
+                float open = smoothstep(_SurfFetch * 0.45, _SurfFetch * 0.9, outThere);
+                if (open <= 0.001)
+                    return 0;
+
+                float nearShore = 1.0 - distance / _SurfReach;
+                // Three scales of wobble so a front never traces the shore it is heading for.
+                float wobble = FoamPattern(xz * 0.03) * 1.1 + FoamPattern(xz * 0.075 + 5.0) * 0.8 + FoamPattern(xz * 0.2 + 17.0) * 0.12;
+                float band = frac(distance / _SurfSpacing + _Time.y * _SurfSpeed + wobble);
+                float width = lerp(_SurfWidth * 0.45, _SurfWidth, nearShore);
+                float crestLine = smoothstep(0.0, 0.04, band) * (1.0 - smoothstep(0.06, 0.2, band));
+                float trail = smoothstep(0.0, 0.04, band) * (1.0 - smoothstep(0.04, width, band));
+                // Each wave breaks along some of its length at a time, and in sets.
+                float wave = floor(distance / _SurfSpacing + _Time.y * _SurfSpeed + wobble);
+                float along = smoothstep(0.38, 0.6, FoamPattern(xz * 0.09 + wave * 3.7));
+                float sets = smoothstep(0.2, 0.7, FoamPattern(xz * 0.015 + _Time.y * 0.04));
+                // Foam that tears into holes: the crest mostly whole, the trail a lace of patches.
+                float torn = FoamPattern(xz * 0.9 + wave * 1.3) * 0.6 + FoamPattern(xz * 2.6 + 9.0) * 0.4;
+                float crestFoam = crestLine * smoothstep(0.36, 0.48, torn);
+                float trailFoam = sqrt(trail) * smoothstep(0.47, 0.58, torn) * 0.85;
+                // Builds as it comes in: a swell line far out, breaking white near the beach.
+                float build = smoothstep(0.1, 0.75, nearShore);
+                return saturate(max(crestFoam, trailFoam) * build * lerp(0.08, 1.0, along) * (0.5 + 0.5 * sets) * open * 1.3);
+            }
+
             // Slope of a small ripple field at p (metres), drifting with the wind: finite
             // differences of two octaves of noise. It is what breaks the sun into glitter; without
             // it a smooth swell reflects the sun as a few soft blobs.
@@ -429,7 +492,19 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 // Whitecaps: crests above the threshold share of the local swell, in deep rough water.
                 float crest = saturate((input.swell.x - _PWWaveParams.w) / max(0.05, 1.0 - _PWWaveParams.w));
                 foamAmount = saturate(foamAmount + crest * input.swell.y * 0.9);
+                // Surf, laid out by metres from the shore (WaterShoreDistance): a band of constant
+                // distance + time moves inshore, so each wave rolls in and breaks on the beach. Laid
+                // out by depth instead, every wave on a steep beach crowded into a strip a metre wide
+                // and read as contour lines (2026-09-24). Sharp on its shoreward front, trailing off
+                // and tearing into holes behind, wider as it breaks, bent by slow noise so a front does
+                // not trace the shore, and coming in sets so the beach does not pulse in step. Its own
+                // lace, not the flow foam's threshold, which kept only the peaks of a weak band.
+                float surf = 0;
+                if (_Surf > 0.001 && _PWShoreParams.y > 0.5)
+                    surf = Surf(input.positionWS.xz) * _Surf;
+
                 float foam = smoothstep(1.0 - foamAmount, 1.0 - foamAmount + 0.25, pattern) * foamAmount;
+                foam = max(foam, surf);
 
                 // Refraction: the scene under the water, bent by the normal, tinted by depth.
                 float2 bent = screenUV + normal.xz * _Refraction * saturate(edgeDepth);

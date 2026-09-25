@@ -24,6 +24,9 @@ namespace PromptWaffle.DynamicWater.URP
         static readonly int WaveBId = Shader.PropertyToID("_PWWaveB");
         static readonly int WaveCountId = Shader.PropertyToID("_PWWaveCount");
         static readonly int WaveParamsId = Shader.PropertyToID("_PWWaveParams");
+        static readonly int ShoreDistanceId = Shader.PropertyToID("_PWShoreDistance");
+        static readonly int ShoreTexelId = Shader.PropertyToID("_PWShoreTexel");
+        static readonly int ShoreParamsId = Shader.PropertyToID("_PWShoreParams");
 
         readonly Vector4[] _waveA = new Vector4[WaterWaves.MaxWaves];
         readonly Vector4[] _waveB = new Vector4[WaterWaves.MaxWaves];
@@ -40,10 +43,25 @@ namespace PromptWaffle.DynamicWater.URP
 
         [SerializeField] ShadowCastingMode _shadows = ShadowCastingMode.Off;
 
+        [Header("Shore")]
+        [Tooltip("Keep a field of metres to the nearest dry ground, which surf is laid out by. Off, there is no surf.")]
+        [SerializeField] bool _shoreDistance = true;
+
+        [Tooltip("Metres beyond which the shore field reads as far. Surf reach plus fetch must fit inside it.")]
+        [SerializeField, Min(4f)] float _shoreReach = 40f;
+
+        [Tooltip("Simulation cells across one texel of the shore field.")]
+        [SerializeField, Range(1, 8)] int _shoreCellsPerTexel = 2;
+
+        [Tooltip("Seconds between rebuilds of the shore field: the shore moves only as fast as the water.")]
+        [SerializeField, Min(0.05f)] float _shoreRefresh = 1f;
+
         readonly List<MeshRenderer> _chunks = new List<MeshRenderer>();
         WaterZone _zone;
         MaterialPropertyBlock _block;
         WaterSimulation _builtFor;
+        WaterShoreDistance _shore;
+        float _shoreAge;
 
         void OnEnable()
         {
@@ -51,7 +69,11 @@ namespace PromptWaffle.DynamicWater.URP
             _block = new MaterialPropertyBlock();
         }
 
-        void OnDisable() => Clear();
+        void OnDisable()
+        {
+            Clear();
+            DisposeShore();
+        }
 
         void LateUpdate()
         {
@@ -59,6 +81,7 @@ namespace PromptWaffle.DynamicWater.URP
             if (simulation == null || _material == null)
             {
                 Clear();
+                DisposeShore();
                 return;
             }
 
@@ -78,13 +101,47 @@ namespace PromptWaffle.DynamicWater.URP
             _block.SetVector(WaveParamsId, settings != null
                 ? new Vector4(Mathf.Max(1f, settings.GustSize), settings.GustCalm, Mathf.Max(0.01f, settings.DampDepth), settings.Whitecaps)
                 : new Vector4(1f, 1f, 1f, 2f));
+            UpdateShore(simulation);
             foreach (var chunk in _chunks)
                 chunk.SetPropertyBlock(_block);
+        }
+
+        void UpdateShore(WaterSimulation simulation)
+        {
+            if (!_shoreDistance)
+            {
+                DisposeShore();
+                _block.SetVector(ShoreParamsId, Vector4.zero);
+                return;
+            }
+
+            if (_shore == null)
+            {
+                _shore = new WaterShoreDistance(simulation, _shoreReach, _shoreCellsPerTexel);
+                _shoreAge = 0f;
+            }
+            else if ((_shoreAge += Time.deltaTime) >= _shoreRefresh)
+            {
+                _shore.Update();
+                _shoreAge = 0f;
+            }
+
+            var covers = _shore.Covers;
+            _block.SetTexture(ShoreDistanceId, _shore.Distance);
+            _block.SetVector(ShoreTexelId, new Vector4(1f / _shore.Width, 1f / _shore.Height, covers.x, covers.y));
+            _block.SetVector(ShoreParamsId, new Vector4(_shore.Reach, 1f, 0f, 0f));
+        }
+
+        void DisposeShore()
+        {
+            _shore?.Dispose();
+            _shore = null;
         }
 
         void Build(WaterSimulation simulation)
         {
             Clear();
+            DisposeShore();
             _builtFor = simulation;
             var desc = simulation.Desc;
             var step = desc.CellSize * _cellsPerVertex;

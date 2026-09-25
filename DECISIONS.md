@@ -6971,3 +6971,30 @@ bending it.
 Asked what to do, he chose to turn it off, not remove it: the `GPU Grass` object in the sandbox scene
 is inactive, the code, shader and compute pass stay. Slices B (gust waves, wildflowers) and C (units
 bending it) are on hold. Setting the object active brings it back as slice A left it.
+
+## Water effects: shore surf and boats (Ronan, 2026-09-24)
+
+*"Few things we are missing: foam wave against shore and boats"* — then, clarified: *"foam waves effects
+against boats … we already have a boat in game, I just meant water effects surrounding them."* So:
+**surf** (foam waves rolling in and breaking on the shore) and **water effects round the landing craft**
+(foam where the hull meets the water, bow wave and wake when it moves). No new boats.
+
+**Surf by depth fails on this island (measured 2026-09-24).** First cut drew surf as bands of equal water
+depth drifting shoreward. On the east beach the bed drops 0 → 2.5 m in 2.5 m (five cells), so every band
+squeezed into a strip about 1.5 m wide and read as contour lines, whatever the spacing, width or wobble.
+Depth only stands in for distance from the shore on a gentle shelf. Proposed instead: a shore-distance
+field in the water package (metres to the nearest dry cell, rebuilt when the ground changes), and surf laid
+out by distance. Ronan: "ok go".
+
+**Built: shore field and surf by distance (2026-09-24).**
+- `WaterShoreDistance` (package, plain C#): a GPU jump flood over a 1 m grid (2×2 cells a texel) from
+  the simulation's state, water under 5 cm counting as shore, capped at 40 m. `WaterZoneRenderer` owns
+  one and rebuilds it every second (`_shoreRefresh`); the shore moves only as fast as the water.
+- Surf in the water shader: bands of equal distance moving inshore, 3 m apart, reaching 9 m out, about
+  one wave every 4 s. Each wave is a torn crest with a patchy foam trail, broken along its length, bent
+  by three scales of noise so no front traces the shore, and coming in sets.
+- Rivers and ponds stay calm: surf needs open water 14 m out to sea, measured down the field's slope.
+  Across a river that lands on the far bank. Same-frame A/B with surf on and off: 9,221 pixels changed
+  on the east beach, 0 on the central river.
+- Thin, even bands read as contour lines; thick whole ones as piping. Breaks along the crest and holes
+  in the trail are what made them read as breakers.

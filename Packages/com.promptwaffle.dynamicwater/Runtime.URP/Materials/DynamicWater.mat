@@ -39,6 +39,13 @@ Material:
     - _ShoreFoam: 0.45
     - _Smoothness: 0.92
     - _SunGlint: 2.5
+    - _Surf: 0.8
+    - _SurfDepth: 1.6
+    - _SurfFetch: 14
+    - _SurfReach: 9
+    - _SurfSpacing: 3
+    - _SurfSpeed: 0.25
+    - _SurfWidth: 0.45
     - _WindRippleSize: 2.2
     - _WindRipples: 0.35
     m_Colors:

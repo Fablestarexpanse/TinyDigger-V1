@@ -1,0 +1,90 @@
+// PromptWaffle Dynamic Water System: metres from each patch of water to the nearest dry ground.
+// A jump flood over a coarse grid (one texel covers CellsPerTexel² simulation cells):
+//   Seed    marks every texel that holds dry ground or wall with its own coordinates;
+//   Flood   run with steps 32, 16, … 1 and once more at 1, keeps whichever neighbour's seed is
+//           nearest, so each texel ends up knowing (nearly exactly) its nearest dry texel;
+//   Resolve turns that into metres, capped at the reach. Texels no seed reached read the cap.
+
+#pragma kernel Seed
+#pragma kernel Flood
+#pragma kernel Resolve
+
+#define NONE -1
+
+Texture2D<float4> _State;           // the simulation's: surface, depth, velocity x, velocity z
+RWTexture2D<int> _SeedsIn;
+RWTexture2D<int> _SeedsOut;
+RWTexture2D<float> _Distance;
+
+int _CellsWide;
+int _CellsHigh;
+int _TexelsWide;
+int _TexelsHigh;
+int _CellsPerTexel;
+int _Step;
+float _DryBelow;                    // water thinner than this is shore
+float _MetresPerTexel;
+float _Reach;
+
+int Pack(int2 p) { return p.x | (p.y << 16); }
+int2 Unpack(int v) { return int2(v & 0xFFFF, v >> 16); }
+
+[numthreads(8, 8, 1)]
+void Seed(uint3 id : SV_DispatchThreadID)
+{
+    int2 t = int2(id.xy);
+    if (t.x >= _TexelsWide || t.y >= _TexelsHigh)
+        return;
+    bool dry = false;
+    for (int dz = 0; dz < _CellsPerTexel; dz++)
+        for (int dx = 0; dx < _CellsPerTexel; dx++)
+        {
+            int2 cell = min(t * _CellsPerTexel + int2(dx, dz), int2(_CellsWide - 1, _CellsHigh - 1));
+            float4 state = _State.Load(int3(cell, 0));
+            // Walls publish a surface of -5e5.
+            if (state.y < _DryBelow || state.x < -1e5)
+                dry = true;
+        }
+    _SeedsOut[t] = dry ? Pack(t) : NONE;
+}
+
+[numthreads(8, 8, 1)]
+void Flood(uint3 id : SV_DispatchThreadID)
+{
+    int2 t = int2(id.xy);
+    if (t.x >= _TexelsWide || t.y >= _TexelsHigh)
+        return;
+    int best = _SeedsIn[t];
+    float bestDistance = best == NONE ? 1e20 : dot(float2(Unpack(best) - t), float2(Unpack(best) - t));
+    for (int dz = -1; dz <= 1; dz++)
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            if (dx == 0 && dz == 0)
+                continue;
+            int2 n = t + int2(dx, dz) * _Step;
+            if (n.x < 0 || n.y < 0 || n.x >= _TexelsWide || n.y >= _TexelsHigh)
+                continue;
+            int seed = _SeedsIn[n];
+            if (seed == NONE)
+                continue;
+            float2 offset = float2(Unpack(seed) - t);
+            float distance = dot(offset, offset);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = seed;
+            }
+        }
+    _SeedsOut[t] = best;
+}
+
+[numthreads(8, 8, 1)]
+void Resolve(uint3 id : SV_DispatchThreadID)
+{
+    int2 t = int2(id.xy);
+    if (t.x >= _TexelsWide || t.y >= _TexelsHigh)
+        return;
+    int seed = _SeedsIn[t];
+    float metres = seed == NONE ? _Reach : length(float2(Unpack(seed) - t)) * _MetresPerTexel;
+    _Distance[t] = min(metres, _Reach);
+}
