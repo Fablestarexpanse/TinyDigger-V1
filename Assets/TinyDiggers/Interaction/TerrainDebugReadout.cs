@@ -267,7 +267,8 @@ namespace TinyDiggers.Interaction
                 _contentChanged = false;
             }
 
-            GUI.Box(new Rect(10f, 10f, _contentSize.x, _contentSize.y), _content, _style);
+            // Top right, under the menu button: top left is the units menu now.
+            GUI.Box(new Rect(Screen.width - _contentSize.x - 10f, Screen.height * 0.08f, _contentSize.x, _contentSize.y), _content, _style);
         }
     }
 }

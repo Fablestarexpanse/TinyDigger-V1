@@ -10,12 +10,14 @@ using UnityEngine.UI;
 namespace TinyDiggers.Interaction
 {
     /// <summary>
-    /// The toolbar along the bottom of the screen (Slice 17: made for the mouse). Icon buttons in
-    /// groups, left to right: Select | Dig Fill Level | Road | Dump Zone | Clear | Seed, Settings
-    /// (F2), Debug (F3) on the far right. Hovering a button for <see cref="Tooltip.Delay"/> shows
-    /// what it is and its hotkey; the active tool is lit. Above the bar, the active tool's panel
-    /// (<see cref="ToolPanelView"/>) and a status line saying what the last action did; top left,
-    /// the crew (<see cref="CrewPanelView"/>).
+    /// The toolbar along the bottom of the screen. Five slots, left to right (Ronan, 2026-09-24:
+    /// "re-evaluate our UI and menus"): Select | Terrain (Dig, Fill, Level, Terraform) | Zones (Dump
+    /// Zone, Quarry, Worksite) | Road | Clear. A group's button shows the tool last used in it and
+    /// opens a flyout of its tools, each with its name and hotkey; the hotkeys work as before. The
+    /// island's seed, the settings (F2) and the debug readout (F3) moved to a menu top right, since
+    /// they are setup, not play. Above the bar, the active tool's panel (<see cref="ToolPanelView"/>)
+    /// and a status line saying what the last action did; top left, the units menu
+    /// (<see cref="CrewPanelView"/>); bottom left, the selection card (<see cref="SelectionCardView"/>).
     ///
     /// Built in code into one Canvas, so there is nothing to wire up in the scene.
     /// </summary>
@@ -30,6 +32,9 @@ namespace TinyDiggers.Interaction
 
         const float ButtonSize = 58f;
         const float GroupGap = 16f;
+        const float FlyoutWidth = 210f;
+        const float FlyoutRow = 44f;
+        const float MenuButton = 44f;
 
         struct ToolButton
         {
@@ -40,38 +45,63 @@ namespace TinyDiggers.Interaction
             public string Help;
         }
 
-        static readonly ToolButton[][] Groups =
+        /// <summary>A slot on the bar: one tool, or a group whose tools open in a flyout.</summary>
+        struct Slot
         {
-            new[] { new ToolButton { Mode = ToolMode.Select, Icon = ToolIcon.Select, Name = "Select", Key = "1",
-                Help = "click or drag over units; right-click to send them" } },
-            new[]
+            public string Name;
+            public ToolButton[] Tools;
+            public bool Group => Tools.Length > 1;
+        }
+
+        static readonly Slot[] Slots =
+        {
+            new Slot { Name = "Select", Tools = new[] { new ToolButton { Mode = ToolMode.Select, Icon = ToolIcon.Select, Name = "Select",
+                Key = "1", Help = "click or drag over units; right-click to send them" } } },
+            new Slot
             {
-                new ToolButton { Mode = ToolMode.Dig, Icon = ToolIcon.Dig, Name = "Dig", Key = "2", Help = "paint ground to be dug down to H" },
-                new ToolButton { Mode = ToolMode.Fill, Icon = ToolIcon.Fill, Name = "Fill", Key = "3", Help = "paint ground to be filled up to H" },
-                new ToolButton { Mode = ToolMode.Level, Icon = ToolIcon.Level, Name = "Level", Key = "5", Help = "drag a pad to be levelled to H" },
+                Name = "Terrain", Tools = new[]
+                {
+                    new ToolButton { Mode = ToolMode.Dig, Icon = ToolIcon.Dig, Name = "Dig", Key = "2", Help = "paint ground to be dug down to H" },
+                    new ToolButton { Mode = ToolMode.Fill, Icon = ToolIcon.Fill, Name = "Fill", Key = "3", Help = "paint ground to be filled up to H" },
+                    new ToolButton { Mode = ToolMode.Level, Icon = ToolIcon.Level, Name = "Level", Key = "5", Help = "drag a pad to be levelled to H" },
+                    new ToolButton { Mode = ToolMode.Terraform, Icon = ToolIcon.Terraform, Name = "Terraform", Key = "9",
+                        Help = "draw the shape you want the ground to be; the crew build it" },
+                },
             },
-            new[]
+            new Slot
             {
-                new ToolButton { Mode = ToolMode.Road, Icon = ToolIcon.Road, Name = "Road", Key = "6",
-                    Help = "click points, double-click or Enter to lay it" },
-                new ToolButton { Mode = ToolMode.Terraform, Icon = ToolIcon.Terraform, Name = "Terraform", Key = "9",
-                    Help = "draw the shape you want the ground to be; the crew build it" },
+                Name = "Zones", Tools = new[]
+                {
+                    new ToolButton { Mode = ToolMode.DumpZone, Icon = ToolIcon.DumpZone, Name = "Dump Zone", Key = "4",
+                        Help = "drag where spoil may be tipped" },
+                    new ToolButton { Mode = ToolMode.Quarry, Icon = ToolIcon.Quarry, Name = "Quarry", Key = "8",
+                        Help = "drag where the crew may dig for material to fill with" },
+                    // The digger's glyph until the worksite building has an icon of its own.
+                    new ToolButton { Mode = ToolMode.Worksite, Icon = ToolIcon.Digger, Name = "Worksite", Key = "0",
+                        Help = "click round a work area (any shape) or drag a rectangle; assign units to it from the selection card" },
+                },
             },
-            new[]
-            {
-                new ToolButton { Mode = ToolMode.DumpZone, Icon = ToolIcon.DumpZone, Name = "Dump Zone", Key = "4",
-                    Help = "drag where spoil may be tipped" },
-                new ToolButton { Mode = ToolMode.Quarry, Icon = ToolIcon.Quarry, Name = "Quarry", Key = "8",
-                    Help = "drag where the crew may dig for material to fill with" },
-            },
-            new[] { new ToolButton { Mode = ToolMode.Clear, Icon = ToolIcon.Clear, Name = "Clear", Key = "7",
-                Help = "drag to take designations off" } },
-            // The digger's glyph until the worksite building has an icon of its own.
-            new[] { new ToolButton { Mode = ToolMode.Worksite, Icon = ToolIcon.Digger, Name = "Worksite", Key = "0",
-                Help = "click round a work area (any shape) or drag a rectangle; right-click it with units selected to assign them" } },
+            new Slot { Name = "Road", Tools = new[] { new ToolButton { Mode = ToolMode.Road, Icon = ToolIcon.Road, Name = "Road", Key = "6",
+                Help = "click points, double-click or Enter to lay it" } } },
+            new Slot { Name = "Clear", Tools = new[] { new ToolButton { Mode = ToolMode.Clear, Icon = ToolIcon.Clear, Name = "Clear", Key = "7",
+                Help = "drag to take designations off" } } },
         };
 
-        readonly List<(ToolMode Mode, Image Image, Image Icon)> _toolImages = new List<(ToolMode, Image, Image)>();
+        sealed class SlotView
+        {
+            public Slot Slot;
+            public int Current;
+            public RectTransform Rect;
+            public Image Background;
+            public Image Icon;
+            public RectTransform Flyout;
+            public readonly List<(ToolMode Mode, Image Background, Image Icon, Text Label)> Rows = new List<(ToolMode, Image, Image, Text)>();
+        }
+
+        readonly List<SlotView> _slots = new List<SlotView>();
+        RectTransform _menuButton;
+        RectTransform _menu;
+        Text _newIslandText;
         readonly StringBuilder _text = new StringBuilder(256);
 
         Canvas _canvas;
@@ -80,7 +110,6 @@ namespace TinyDiggers.Interaction
         int _dugVersion = -1;
         string _dug = string.Empty;
         float _seedArmedUntil;
-        Text _seedLabel;
         TerrainDebugReadout _debug;
 
         RectTransform _settingsPanel;
@@ -96,50 +125,41 @@ namespace TinyDiggers.Interaction
             _canvas = UiKit.NewCanvas(transform, "Toolbar Canvas", 100);
             _debug = FindAnyObjectByType<TerrainDebugReadout>();
 
-            // Work out the bar's width: the buttons, the gaps between groups, and the right-hand group.
-            var toolCount = 0;
-            foreach (var group in Groups)
-                toolCount += group.Length;
-            var width = 12f + toolCount * (ButtonSize + 4f) + Groups.Length * GroupGap + GroupGap * 2f + 3 * (ButtonSize + 4f);
+            // The bar: five slots, a gap between each.
+            var width = 16f + Slots.Length * (ButtonSize + GroupGap) - GroupGap;
             var bar = UiKit.NewPanel(_canvas.transform, "Bar", new Vector2(0.5f, 0f), new Vector2(0f, 10f), new Vector2(width, ButtonSize + 12f));
-
             var x = 8f;
-            foreach (var group in Groups)
+            foreach (var slot in Slots)
             {
-                foreach (var tool in group)
+                var view = new SlotView { Slot = slot };
+                var button = UiKit.NewButton(bar, "", () => SlotClicked(view), ToolIcons.Get(slot.Tools[0].Icon));
+                view.Rect = (RectTransform)button.transform;
+                UiKit.Place(view.Rect, x, 6f, ButtonSize, ButtonSize);
+                view.Background = button.GetComponent<Image>();
+                view.Icon = button.transform.Find("Icon").GetComponent<Image>();
+                if (slot.Group)
                 {
-                    var captured = tool;
-                    var button = UiKit.NewButton(bar, "", () => _tools.SetMode(captured.Mode), ToolIcons.Get(tool.Icon));
-                    UiKit.Place((RectTransform)button.transform, x, 6f, ButtonSize, ButtonSize);
-                    UiKit.AddTooltip(button, () => $"{captured.Name}  ({captured.Key}): {captured.Help}");
-                    _toolImages.Add((tool.Mode, button.GetComponent<Image>(), button.transform.Find("Icon").GetComponent<Image>()));
-                    x += ButtonSize + 4f;
+                    // A corner mark says there is more in it.
+                    var mark = UiKit.NewText(button.transform, "▴", 11, TextAnchor.UpperRight);
+                    mark.rectTransform.offsetMax = new Vector2(-3f, -1f);
+                    mark.raycastTarget = false;
+                    var captured = slot;
+                    UiKit.AddTooltip(button, () => $"{captured.Name}: {Names(captured)}");
+                }
+                else
+                {
+                    var tool = slot.Tools[0];
+                    UiKit.AddTooltip(button, () => $"{tool.Name}  ({tool.Key}): {tool.Help}");
                 }
 
-                x += GroupGap;
+                _slots.Add(view);
+                x += ButtonSize + GroupGap;
             }
 
-            // The spacer, then the island and the debug readout, pinned to the right.
-            x = width - 8f - 3 * (ButtonSize + 4f);
-            var seed = UiKit.NewButton(bar, "", ArmOrRegenerate, ToolIcons.Get(ToolIcon.Seed));
-            UiKit.Place((RectTransform)seed.transform, x, 6f, ButtonSize, ButtonSize);
-            UiKit.AddTooltip(seed, () => Time.unscaledTime < _seedArmedUntil
-                ? "Click again to make a new island (the one you have is lost)"
-                : $"New island: seed {(_terrain != null ? _terrain.Seed + 1 : 0)} (click twice)");
-            _seedLabel = UiKit.NewText(seed.transform, "", 12, TextAnchor.LowerCenter, UiKit.Warning);
-            x += ButtonSize + 4f;
-
-            var settings = UiKit.NewButton(bar, "", ToggleSettings, ToolIcons.Get(ToolIcon.Settings));
-            UiKit.Place((RectTransform)settings.transform, x, 6f, ButtonSize, ButtonSize);
-            UiKit.AddTooltip(settings, () => "Settings  (F2): the island's seed and Regenerate");
-            x += ButtonSize + 4f;
-
-            var debug = UiKit.NewButton(bar, "", ToggleDebug, ToolIcons.Get(ToolIcon.Debug));
-            UiKit.Place((RectTransform)debug.transform, x, 6f, ButtonSize, ButtonSize);
-            UiKit.AddTooltip(debug, () => "Debug  (F3): the terrain and crew readout");
+            BuildMenu(_canvas.transform);
 
             var status = UiKit.NewPanel(_canvas.transform, "Status", new Vector2(0.5f, 0f), new Vector2(0f, ButtonSize + 28f),
-                new Vector2(width, 26f), new Color(0.08f, 0.09f, 0.1f, 0.55f));
+                new Vector2(Mathf.Max(width, 760f), 26f), new Color(0.08f, 0.09f, 0.1f, 0.55f));
             _status = UiKit.NewText(status, "", 15, TextAnchor.MiddleCenter);
 
             BuildSettingsPanel(_canvas.transform);
@@ -150,7 +170,147 @@ namespace TinyDiggers.Interaction
             crewPanel.Build(_canvas, _crew, FindAnyObjectByType<RtsCamera>());
             gameObject.AddComponent<SelectionCardView>().Build(_canvas, _tools, _crew);
 
+            // The flyouts go on last, so they open over the tool panel and the status line.
+            foreach (var view in _slots)
+                if (view.Slot.Group)
+                    BuildFlyout(view);
+
             Tooltip.Create(_canvas);
+        }
+
+        static string Names(Slot slot)
+        {
+            var names = new List<string>();
+            foreach (var tool in slot.Tools)
+                names.Add($"{tool.Name} ({tool.Key})");
+            return string.Join(", ", names);
+        }
+
+        void SlotClicked(SlotView view)
+        {
+            if (!view.Slot.Group)
+            {
+                CloseFlyouts();
+                _menu.gameObject.SetActive(false);
+                _tools.SetMode(view.Slot.Tools[0].Mode);
+                return;
+            }
+
+            var open = !view.Flyout.gameObject.activeSelf;
+            CloseFlyouts();
+            _menu.gameObject.SetActive(false);
+            view.Flyout.gameObject.SetActive(open);
+        }
+
+        /// <summary>A group's tools in a column above its button: icon, name and hotkey each.</summary>
+        void BuildFlyout(SlotView view)
+        {
+            var tools = view.Slot.Tools;
+            var height = tools.Length * (FlyoutRow + 2f) + 6f;
+            // Over its button, left edges lined up.
+            var bar = (RectTransform)view.Rect.parent;
+            var left = -bar.sizeDelta.x * 0.5f + view.Rect.anchoredPosition.x;
+            view.Flyout = UiKit.NewPanel(_canvas.transform, view.Slot.Name + " Tools", new Vector2(0.5f, 0f),
+                new Vector2(left, 10f + ButtonSize + 16f), new Vector2(FlyoutWidth, height));
+            view.Flyout.pivot = Vector2.zero;
+
+            for (var i = 0; i < tools.Length; i++)
+            {
+                var tool = tools[i];
+                var index = i;
+                var button = UiKit.NewButton(view.Flyout, "", () =>
+                {
+                    view.Current = index;
+                    _tools.SetMode(tool.Mode);
+                    view.Flyout.gameObject.SetActive(false);
+                });
+                var rect = (RectTransform)button.transform;
+                UiKit.Place(rect, 3f, 3f + i * (FlyoutRow + 2f), FlyoutWidth - 6f, FlyoutRow);
+                var icon = UiKit.Place(UiKit.NewRect(rect, "Icon"), 6f, 5f, FlyoutRow - 10f, FlyoutRow - 10f).gameObject.AddComponent<Image>();
+                icon.sprite = ToolIcons.Get(tool.Icon);
+                icon.raycastTarget = false;
+                var label = UiKit.NewLabel(rect, tool.Name, FlyoutRow + 2f, 0f, 120f, FlyoutRow, 15);
+                var key = UiKit.NewLabel(rect, tool.Key, FlyoutWidth - 40f, 0f, 28f, FlyoutRow, 13);
+                key.alignment = TextAnchor.MiddleRight;
+                key.color = new Color(0.7f, 0.72f, 0.75f);
+                UiKit.AddTooltip(button, () => $"{tool.Name}  ({tool.Key}): {tool.Help}");
+                view.Rows.Add((tool.Mode, button.GetComponent<Image>(), icon, label));
+            }
+
+            view.Flyout.gameObject.SetActive(false);
+        }
+
+        void CloseFlyouts()
+        {
+            foreach (var view in _slots)
+                if (view.Flyout != null)
+                    view.Flyout.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// The menu top right: a new island (click twice), the island settings (F2) and the debug
+        /// readout (F3). Setup, not play, so off the bar.
+        /// </summary>
+        void BuildMenu(Transform parent)
+        {
+            var button = UiKit.NewButton((RectTransform)parent, "", () =>
+            {
+                CloseFlyouts();
+                _menu.gameObject.SetActive(!_menu.gameObject.activeSelf);
+            }, ToolIcons.Get(ToolIcon.Settings));
+            _menuButton = (RectTransform)button.transform;
+            _menuButton.anchorMin = _menuButton.anchorMax = _menuButton.pivot = new Vector2(1f, 1f);
+            _menuButton.anchoredPosition = new Vector2(-12f, -12f);
+            _menuButton.sizeDelta = new Vector2(MenuButton, MenuButton);
+            UiKit.AddTooltip(button, () => "Menu: new island, island settings (F2), debug readout (F3)");
+
+            const float rowWidth = 240f;
+            _menu = UiKit.NewPanel(parent, "Menu", new Vector2(1f, 1f), new Vector2(-12f, -12f - MenuButton - 4f),
+                new Vector2(rowWidth, 3 * (FlyoutRow + 2f) + 4f));
+            _newIslandText = MenuRow(0, rowWidth, ToolIcon.Seed, "New island", ArmOrRegenerate,
+                () => Time.unscaledTime < _seedArmedUntil
+                    ? "Click again to make a new island (the one you have is lost)"
+                    : $"New island: seed {(_terrain != null ? _terrain.Seed + 1 : 0)} (click twice)");
+            MenuRow(1, rowWidth, ToolIcon.Settings, "Island settings   F2", () =>
+            {
+                _menu.gameObject.SetActive(false);
+                ToggleSettings();
+            }, () => "The island's seed, Regenerate, and the map markers");
+            MenuRow(2, rowWidth, ToolIcon.Debug, "Debug readout   F3", () =>
+            {
+                _menu.gameObject.SetActive(false);
+                ToggleDebug();
+            }, () => "The terrain and crew readout");
+            _menu.gameObject.SetActive(false);
+        }
+
+        Text MenuRow(int index, float width, ToolIcon glyph, string label, Action onClick, Func<string> tooltip)
+        {
+            var button = UiKit.NewButton(_menu, "", onClick);
+            var rect = (RectTransform)button.transform;
+            UiKit.Place(rect, 3f, 3f + index * (FlyoutRow + 2f), width - 6f, FlyoutRow);
+            var icon = UiKit.Place(UiKit.NewRect(rect, "Icon"), 6f, 5f, FlyoutRow - 10f, FlyoutRow - 10f).gameObject.AddComponent<Image>();
+            icon.sprite = ToolIcons.Get(glyph);
+            icon.raycastTarget = false;
+            var text = UiKit.NewLabel(rect, label, FlyoutRow + 2f, 0f, width - FlyoutRow - 10f, FlyoutRow, 15);
+            UiKit.AddTooltip(button, tooltip);
+            return text;
+        }
+
+        /// <summary>A click anywhere but on an open flyout, the menu or their buttons closes them.</summary>
+        void CloseOnClickElsewhere()
+        {
+            var mouse = Mouse.current;
+            if (mouse == null || !(mouse.leftButton.wasPressedThisFrame || mouse.rightButton.wasPressedThisFrame))
+                return;
+            var at = mouse.position.ReadValue();
+            bool Over(RectTransform rect) => rect != null && rect.gameObject.activeInHierarchy
+                                             && RectTransformUtility.RectangleContainsScreenPoint(rect, at, null);
+            foreach (var view in _slots)
+                if (view.Flyout != null && view.Flyout.gameObject.activeSelf && !Over(view.Flyout) && !Over(view.Rect))
+                    view.Flyout.gameObject.SetActive(false);
+            if (_menu.gameObject.activeSelf && !Over(_menu) && !Over(_menuButton))
+                _menu.gameObject.SetActive(false);
         }
 
         void ArmOrRegenerate()
@@ -187,7 +347,8 @@ namespace TinyDiggers.Interaction
         /// </summary>
         void BuildSettingsPanel(Transform parent)
         {
-            _settingsPanel = UiKit.NewPanel(parent, "Settings", new Vector2(1f, 1f), new Vector2(-12f, -12f), new Vector2(320f, 162f));
+            // Under the menu button, which has the corner now.
+            _settingsPanel = UiKit.NewPanel(parent, "Settings", new Vector2(1f, 1f), new Vector2(-12f, -12f - MenuButton - 4f), new Vector2(320f, 162f));
             var title = UiKit.NewText(_settingsPanel, "Island  (F2)", 16, TextAnchor.UpperLeft);
             title.rectTransform.offsetMax = new Vector2(-6f, -6f);
 
@@ -247,14 +408,38 @@ namespace TinyDiggers.Interaction
             if (_markers != null)
                 _markers.SetIsOnWithoutNotify(_tools.ShowMarkers);
 
-            foreach (var (mode, image, icon) in _toolImages)
+            CloseOnClickElsewhere();
+            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
             {
-                var active = mode == _tools.Mode;
-                image.color = active ? UiKit.Accent : UiKit.ButtonColor;
-                // A dark glyph on the lit button: white on amber barely shows.
-                icon.color = active ? new Color(0.1f, 0.1f, 0.12f) : Color.white;
+                CloseFlyouts();
+                _menu.gameObject.SetActive(false);
             }
-            _seedLabel.text = Time.unscaledTime < _seedArmedUntil ? "again?" : "";
+
+            // A dark glyph on the lit button: white on amber barely shows.
+            var dark = new Color(0.1f, 0.1f, 0.12f);
+            foreach (var view in _slots)
+            {
+                var active = false;
+                for (var i = 0; i < view.Slot.Tools.Length; i++)
+                    if (view.Slot.Tools[i].Mode == _tools.Mode)
+                    {
+                        // A hotkey picks from the group too, so the button follows it.
+                        view.Current = i;
+                        active = true;
+                    }
+
+                view.Icon.sprite = ToolIcons.Get(view.Slot.Tools[view.Current].Icon);
+                view.Background.color = active ? UiKit.Accent : UiKit.ButtonColor;
+                view.Icon.color = active ? dark : Color.white;
+                foreach (var (mode, background, icon, label) in view.Rows)
+                {
+                    background.color = mode == _tools.Mode ? UiKit.Accent : UiKit.ButtonColor;
+                    icon.color = label.color = mode == _tools.Mode ? dark : Color.white;
+                }
+            }
+
+            _newIslandText.text = Time.unscaledTime < _seedArmedUntil ? "Click again: new island" : "New island";
+            _newIslandText.color = Time.unscaledTime < _seedArmedUntil ? UiKit.Warning : Color.white;
 
             var map = _tools.Map;
             _text.Clear();

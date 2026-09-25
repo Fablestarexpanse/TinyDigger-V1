@@ -6695,3 +6695,14 @@ is a craft, greyed with the reason in its tooltip when the ramp is not down or i
 Release, and Dismiss, which needs a second click within 2.5 s as the seed button does. The × on the
 units menu rows is gone: dismissing lives on the card. `CrewUnit.OrderHold` holds a unit on its own
 cell and refuses on the landing craft, where the craft is doing the driving.
+
+**Toolbar grouped (2026-09-24).** The bottom bar went from eleven tools plus three system buttons to
+five slots: Select | Terrain (Dig, Fill, Level, Terraform) | Zones (Dump Zone, Quarry, Worksite) | Road
+| Clear. A group's button carries a small corner mark, shows the icon of the tool last used in it
+(a hotkey counts, so pressing 8 turns the Zones button into Quarry), lights when any of its tools is
+active, and opens a flyout above it: one row a tool, icon, name and hotkey, the active one lit with a
+dark label. A click elsewhere or Escape closes it. Every hotkey works as before. Seed, settings and
+debug went to a menu button top right: New island (click twice), Island settings F2, Debug readout
+F3; the F2 panel opens under that button now, and the F3 readout moved from top left (under the units
+menu) to top right. Stamps join the Terrain flyout when they land. Screens:
+`Screenshots/toolbar-flyout.png`, `Screenshots/toolbar-menu.png`.
