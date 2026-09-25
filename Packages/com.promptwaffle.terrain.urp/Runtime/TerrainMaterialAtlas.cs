@@ -2,7 +2,7 @@ using System;
 using PromptWaffle.Terrain;
 using UnityEngine;
 
-namespace TinyDiggers.Presentation
+namespace PromptWaffle.Terrain.Rendering
 {
     /// <summary>
     /// The material set as the shader wants it: one <see cref="Texture2DArray"/> of albedos and
@@ -32,7 +32,7 @@ namespace TinyDiggers.Presentation
 
             var reference = FindReference(set);
             if (reference == null)
-                throw new InvalidOperationException("The terrain texture set has no albedo textures. Run TinyDiggers > Generate Terrain Textures.");
+                throw new InvalidOperationException("The terrain texture set has no albedo textures: fill its entries with tiles first.");
 
             Size = reference.width;
             var slices = table.MaxId + 1;

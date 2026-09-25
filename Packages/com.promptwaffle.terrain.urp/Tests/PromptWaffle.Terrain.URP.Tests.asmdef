@@ -1,16 +1,11 @@
 {
-    "name": "TinyDiggers.Presentation.Tests",
-    "rootNamespace": "TinyDiggers.Presentation.Tests",
+    "name": "PromptWaffle.Terrain.URP.Tests",
+    "rootNamespace": "PromptWaffle.Terrain.Rendering.Tests",
     "references": [
         "PromptWaffle.Terrain",
-        "PromptWaffle.Terrain.Generation",
-        "TinyDiggers.Presentation",
-        "TinyDiggers.Units",
-        "PromptWaffle.DynamicWater",
+        "PromptWaffle.Terrain.URP",
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner",
-        "TinyDiggers.Materials",
-        "PromptWaffle.Terrain.URP"
+        "UnityEditor.TestRunner"
     ],
     "includePlatforms": [
         "Editor"

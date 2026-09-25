@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using TinyDiggers.Presentation;
 using PromptWaffle.Terrain;
+using PromptWaffle.Terrain.Rendering;
 using UnityEditor;
 using UnityEngine;
 using static TinyDiggers.EditorTools.TileableNoise;

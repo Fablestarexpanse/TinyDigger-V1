@@ -9,7 +9,8 @@
         "PromptWaffle.DynamicWater",
         "Unity.InputSystem",
         "UnityEngine.UI",
-        "TinyDiggers.Materials"
+        "TinyDiggers.Materials",
+        "PromptWaffle.Terrain.URP"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

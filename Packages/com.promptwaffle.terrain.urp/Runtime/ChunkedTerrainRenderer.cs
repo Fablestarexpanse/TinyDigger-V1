@@ -7,7 +7,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 
-namespace TinyDiggers.Presentation
+namespace PromptWaffle.Terrain.Rendering
 {
     /// <summary>
     /// Shared plumbing for renderers that draw a <see cref="TerrainGrid"/> as one mesh per square
@@ -245,8 +245,8 @@ namespace TinyDiggers.Presentation
         /// <summary>Chunks rebuilt by the last <see cref="Rebuild"/>. For perf reporting.</summary>
         public int LastRebuiltChunkCount { get; private set; }
 
-        static readonly ProfilerMarker BuildMarker = new ProfilerMarker("TinyDiggers.ChunkBuild");
-        static readonly ProfilerMarker UploadMarker = new ProfilerMarker("TinyDiggers.ChunkUpload");
+        static readonly ProfilerMarker BuildMarker = new ProfilerMarker("PromptWaffle.Terrain.ChunkBuild");
+        static readonly ProfilerMarker UploadMarker = new ProfilerMarker("PromptWaffle.Terrain.ChunkUpload");
 
         /// <summary>Chunks in one rebuild at or above which their geometry is built on worker threads.</summary>
         public const int ParallelFrom = 64;

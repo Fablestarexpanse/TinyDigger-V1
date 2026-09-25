@@ -2,7 +2,7 @@ using System;
 using PromptWaffle.Terrain;
 using UnityEngine;
 
-namespace TinyDiggers.Presentation
+namespace PromptWaffle.Terrain.Rendering
 {
     /// <summary>
     /// How far each cell lies in a hollow or on a ridge, for the terrain shader (Ronan, 2026-09-24:

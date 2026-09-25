@@ -9,7 +9,7 @@
 // - Lighting: main light N.L plus spherical-harmonic ambient on the interpolated, smooth normal.
 //   Faces darker than flat ground have _CreaseSoftening of the difference given back, so terrace
 //   risers read as gentle creases. No shadows. Placeholder lighting, not final art.
-Shader "TinyDiggers/Terrain Vertex Color"
+Shader "PromptWaffle/Terrain Vertex Color"
 {
     Properties
     {

@@ -10,7 +10,8 @@
         "UnityEditor.TestRunner",
         "UnityEngine.TestRunner",
         "PromptWaffle.DynamicWater",
-        "TinyDiggers.Materials"
+        "TinyDiggers.Materials",
+        "PromptWaffle.Terrain.URP"
     ],
     "includePlatforms": [
         "Editor"

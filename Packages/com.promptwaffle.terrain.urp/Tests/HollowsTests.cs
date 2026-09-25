@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using UnityEngine;
 
-namespace TinyDiggers.Presentation.Tests
+namespace PromptWaffle.Terrain.Rendering.Tests
 {
     /// <summary>
     /// The hollow map (Ronan, 2026-09-24: darken the hollows like the references): level ground reads

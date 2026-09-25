@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using PromptWaffle.Terrain;
 using UnityEngine;
 
-namespace TinyDiggers.Presentation
+namespace PromptWaffle.Terrain.Rendering
 {
     /// <summary>
     /// The default terrain look, after Captain of Industry: a displaced heightfield rather than

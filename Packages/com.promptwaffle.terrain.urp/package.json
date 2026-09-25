@@ -1,0 +1,14 @@
+{
+  "name": "com.promptwaffle.terrain.urp",
+  "version": "0.1.0",
+  "displayName": "PromptWaffle Terrain URP",
+  "description": "Draws PromptWaffle Terrain in URP: a smoothed heightfield renderer in culled chunks with levels of detail (or a stepped 'walled' one), ground that eases into place as it is dug, and a triplanar shader that blends painted tiles by height, mixes scales against tiling, and darkens hollows.",
+  "unity": "6000.0",
+  "author": {
+    "name": "PromptWaffle"
+  },
+  "dependencies": {
+    "com.promptwaffle.terrain": "0.1.0",
+    "com.unity.render-pipelines.universal": "17.0.0"
+  }
+}

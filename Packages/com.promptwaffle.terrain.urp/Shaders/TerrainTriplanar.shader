@@ -21,7 +21,7 @@
 // - The mesh's smooth normal is the base; the detail normal perturbs it.
 // - Lighting is URP's own: main light, additional lights, shadows and ambient, with per-material
 //   smoothness.
-Shader "TinyDiggers/Terrain Triplanar"
+Shader "PromptWaffle/Terrain Triplanar"
 {
     Properties
     {

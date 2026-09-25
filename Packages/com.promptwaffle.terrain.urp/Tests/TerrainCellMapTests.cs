@@ -2,7 +2,7 @@ using NUnit.Framework;
 using PromptWaffle.Terrain;
 using UnityEngine;
 
-namespace TinyDiggers.Presentation.Tests
+namespace PromptWaffle.Terrain.Rendering.Tests
 {
     public class TerrainCellMapTests
     {
@@ -12,7 +12,7 @@ namespace TinyDiggers.Presentation.Tests
         [SetUp]
         public void SetUp()
         {
-            _grid = new TerrainGrid(8, 6, TinyDiggersMaterials.CreateTable());
+            _grid = new TerrainGrid(8, 6, MaterialTable.CreateBasic());
             for (var z = 0; z < _grid.Height; z++)
                 for (var x = 0; x < _grid.Width; x++)
                     _grid.SetColumn(x, z, new[]

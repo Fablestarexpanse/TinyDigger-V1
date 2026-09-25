@@ -2,7 +2,7 @@ using System;
 using PromptWaffle.Terrain;
 using UnityEngine;
 
-namespace TinyDiggers.Presentation
+namespace PromptWaffle.Terrain.Rendering
 {
     /// <summary>
     /// The material the terrain chunks are drawn with when a texture set is supplied: the texture
@@ -14,7 +14,7 @@ namespace TinyDiggers.Presentation
     /// </summary>
     public sealed class TerrainDetail : IDisposable
     {
-        public const string ShaderName = "TinyDiggers/Terrain Triplanar";
+        public const string ShaderName = "PromptWaffle/Terrain Triplanar";
 
         static readonly int CellMapId = Shader.PropertyToID("_CellMap");
         static readonly int AlbedosId = Shader.PropertyToID("_Albedos");

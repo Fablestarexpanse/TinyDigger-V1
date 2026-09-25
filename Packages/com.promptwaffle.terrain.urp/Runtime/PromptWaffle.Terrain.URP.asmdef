@@ -1,15 +1,10 @@
 {
-    "name": "TinyDiggers.Presentation",
-    "rootNamespace": "TinyDiggers.Presentation",
+    "name": "PromptWaffle.Terrain.URP",
+    "rootNamespace": "PromptWaffle.Terrain.Rendering",
     "references": [
         "PromptWaffle.Terrain",
-        "PromptWaffle.Terrain.Generation",
-        "Unity.InputSystem",
         "Unity.RenderPipelines.Universal.Runtime",
-        "Unity.RenderPipelines.Core.Runtime",
-        "PromptWaffle.DynamicWater",
-        "TinyDiggers.Materials",
-        "PromptWaffle.Terrain.URP"
+        "Unity.RenderPipelines.Core.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

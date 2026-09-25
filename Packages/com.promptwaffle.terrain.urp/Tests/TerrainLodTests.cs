@@ -3,7 +3,7 @@ using NUnit.Framework;
 using PromptWaffle.Terrain;
 using UnityEngine;
 
-namespace TinyDiggers.Presentation.Tests
+namespace PromptWaffle.Terrain.Rendering.Tests
 {
     /// <summary>
     /// Levels of detail for the smoothed terrain:
@@ -27,7 +27,7 @@ namespace TinyDiggers.Presentation.Tests
         public void SetUp()
         {
             _root = new GameObject("LOD Test Root");
-            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), 1f);
+            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateBasic(), 1f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Dirt, 2f + (x + z) / 64) });

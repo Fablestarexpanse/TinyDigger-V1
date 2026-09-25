@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using PromptWaffle.Terrain;
+using PromptWaffle.Terrain.Rendering;
 using PromptWaffle.Terrain.Generation;
 using Unity.Profiling;
 using UnityEngine;

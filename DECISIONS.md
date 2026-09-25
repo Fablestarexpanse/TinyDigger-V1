@@ -7177,3 +7177,18 @@ both. Play is unchanged: a 3,104² island, the same 31.4 m³ settle and the same
   `FormerlySerializedAs`. `IslandSettings.asset` reads the same values back (checked field by field).
   The generation tests bring their own four test ores.
 - **Result:** play is unchanged (3,104² island, the same settle, the same moorings). 712 tests pass.
+
+**Step 3 done: the look moved (2026-09-25).** The three renderers, mesh builder, cell map, detail,
+height lag, hollow map, texture set and atlas, the `Terrain Triplanar` and `Terrain Vertex Color`
+shaders, and their 5 test files are now `Packages/com.promptwaffle.terrain.urp`
+(`PromptWaffle.Terrain.URP`, namespace `PromptWaffle.Terrain.Rendering`). The shaders are renamed
+`PromptWaffle/...`, and materials follow by GUID.
+- **Proof it is unchanged:** a line diff of every moved file against HEAD shows only the namespace,
+  names (shader, menu, profiler markers, one error message), and `TerrainCellMap` asking the grid's
+  table whether a material is stone rather than the game's static (the same table, the same
+  answer). In play the live material runs `PromptWaffle/Terrain Triplanar` with hollows, height
+  blend and anti-tiling set and the hollow map filled.
+- **A trap:** a capture compared with one taken hours earlier differed (camera FOV and light), so
+  a visual diff across sessions cannot prove a refactor. The code diff can.
+- **Still in the game:** grass (it reads `TerrainView`), `GroundPose`, `GroundEffects` (vehicle and
+  dust) and `TerrainView` itself. 712 tests pass.

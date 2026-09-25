@@ -2,7 +2,7 @@ using System;
 using PromptWaffle.Terrain;
 using UnityEngine;
 
-namespace TinyDiggers.Presentation
+namespace PromptWaffle.Terrain.Rendering
 {
     /// <summary>
     /// Alternative, not the default: draws every column exactly as stored, a flat top at its

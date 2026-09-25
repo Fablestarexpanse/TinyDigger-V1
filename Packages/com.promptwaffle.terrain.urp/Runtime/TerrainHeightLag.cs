@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using PromptWaffle.Terrain;
 using UnityEngine;
 
-namespace TinyDiggers.Presentation
+namespace PromptWaffle.Terrain.Rendering
 {
     /// <summary>
     /// The height the ground is *drawn* at, easing toward the height the simulation says it is

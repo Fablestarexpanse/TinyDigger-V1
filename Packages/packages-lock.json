@@ -20,6 +20,15 @@
         "com.promptwaffle.terrain": "0.1.0"
       }
     },
+    "com.promptwaffle.terrain.urp": {
+      "version": "file:com.promptwaffle.terrain.urp",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.promptwaffle.terrain": "0.1.0",
+        "com.unity.render-pipelines.universal": "17.0.0"
+      }
+    },
     "com.unity.2d.sprite": {
       "version": "1.0.0",
       "depth": 1,
