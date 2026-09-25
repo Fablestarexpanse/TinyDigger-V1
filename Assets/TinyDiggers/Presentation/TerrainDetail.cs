@@ -71,6 +71,8 @@ namespace TinyDiggers.Presentation
 
         public TerrainCellMap CellMap => _cellMap;
 
+        public TerrainHollowMap Hollows => _hollows;
+
         public TerrainMaterialAtlas Atlas => _atlas;
 
         /// <summary>Metres one tile of the albedo covers.</summary>

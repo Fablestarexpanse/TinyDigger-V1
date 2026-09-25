@@ -190,6 +190,9 @@ namespace TinyDiggers.Presentation
         /// <summary>The terrain's material, for anything that tunes how it is shaded. May be null.</summary>
         public Material DetailMaterial => _detail?.Material;
 
+        /// <summary>The textured terrain's maps (cells, hollows), or null when drawn flat. Read by the GPU grass.</summary>
+        public TerrainDetail Detail => _detail;
+
         /// <summary>Triangles across all chunks as last built.</summary>
         public long TriangleCount => _terrainRenderer?.TriangleCount ?? 0;
 

@@ -6932,3 +6932,37 @@ also sampled at 3.3× its tile, offset, and mixed in at 0.45 (`_MacroRatio`, `_M
 the grid for every material, grass included. On a 10 m sea cliff (`Screenshots/stone-cliff.png`): blue-
 grey fractured rock with crevices and lichen and no visible repeat. Seen on the way: the grass top reads
 very saturated at a low angle, and the rock/sand line at the cliff foot draws pale spikes (mesh, old).
+
+## Grass, the Advanced Terrain Grass way — rulings (Ronan, 2026-09-24)
+
+*"Time to try and make some really nice grass with effects and small for our world that doesn't bog
+the system down"*, with Advanced Terrain Grass (Unity Asset Store) as the example. What is there now
+(2026-09-21): 3-card tufts 1 × 0.8 m (taller than the robot), ~6 per m², a CPU matrix list per 32-cell
+chunk through `RenderMeshInstanced`, drawn to 220 m, all casting shadows. Rulings:
+
+- **Short turf, 10–25 cm.**
+- **First version includes**: units bend the grass, wildflowers, gust waves, and dug ground clears it
+  (as today).
+- Approach agreed: GPU-generated clumps of thin blades near the camera from the cell map and a height
+  texture, density thinning out with distance, coloured from the ground under each blade, one indirect
+  draw; receive shadows, cast little or none; budget ~1.5 ms GPU at 1440p, measured. `GrassView` stays
+  until the new grass beats it.
+
+**GPU grass, slice A (2026-09-24).** `GpuGrass` (Presentation/Grass) draws short turf generated on the
+GPU each frame: `Resources/GrassSpawn.compute` walks a jittered grid round the camera (snapped to the
+spacing, every choice from a hash of the spot, so nothing swims), keeps spots whose cell's top is
+grass (the terrain cell map — a dig or a tip clears it at once), not steeper than 38°, in the frustum,
+and surviving a stable hash against distance (full to 35 m, none past 90 m, shrinking to nothing at the
+edge so it does not pop); colours each from the ground (the same lush/dry patch noise and hollow map as
+the terrain shader); appends it; then one `RenderMeshIndirect` of a 7-blade clump (`GrassClumpMesh`,
+35 triangles) with `TinyDiggers/Grass Blades` — instance from the buffer, the trees' wind, darker root
+to lighter tip, URP main light with received shadows, no casting. Heights come from
+`TerrainHeightTexture`: one RFloat texel per grid corner, the drawn surface's corner averages, so the
+grass stands on what the player sees. 10–25 cm clumps every 0.2 m. The old `GrassView` tufts were not in
+the sandbox scene.
+
+**Measured cost** (FrameTimingManager, 2560×1440, grass toggled every 60 frames, 196 frames each): first
+cut at 0.33 m spacing and 5 blades 4.35 vs 4.26 ms GPU (**0.09 ms**) — visibly sparse; the carpet at
+0.2 m and 7 blades **4.52 vs 4.16 ms (0.36 ms)**, a quarter of the 1.5 ms budget. Look:
+`Screenshots/grass-v3.png` (low, and at play height). Next: gust waves and wildflowers, then units
+bending it.
