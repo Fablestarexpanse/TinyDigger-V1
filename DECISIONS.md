@@ -6706,3 +6706,12 @@ debug went to a menu button top right: New island (click twice), Island settings
 F3; the F2 panel opens under that button now, and the F3 readout moved from top left (under the units
 menu) to top right. Stamps join the Terrain flyout when they land. Screens:
 `Screenshots/toolbar-flyout.png`, `Screenshots/toolbar-menu.png`.
+
+**Stamps: rulings (Ronan, 2026-09-24).** Heightmap stamps come from **ComfyUI**: greyscale heightmaps
+generated through the local ComfyUI instance, then cleaned up (edge to black, levels normalised,
+16-bit) before they become `HeightStamp` assets. **The game tool comes first** (slices A and B:
+the stamp asset and raster, then `LandformKind.Stamp` in Terrain ▸ Stamp with ghost, tally and
+commit, the crew building it); generator rules follow. Proposed API: `HeightStamp` (ScriptableObject:
+heightmap, native size and height, blend Add/Max/Min/Replace, edge falloff, use), `StampLibrary`,
+`StampPlacement` (centre, size, height, rotation, invert) and `StampRaster.Apply`, in the Terrain
+assembly so the generator can reach it.
