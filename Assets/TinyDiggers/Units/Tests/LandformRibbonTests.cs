@@ -21,7 +21,7 @@ namespace TinyDiggers.Units.Tests
         [SetUp]
         public void SetUp()
         {
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep: 0.5f, cellSize: 0.5f);
+            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), heightStep: 0.5f, cellSize: 0.5f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     _grid.SetColumn(x, z, new[]
@@ -110,7 +110,7 @@ namespace TinyDiggers.Units.Tests
             Assert.That(_map.GetKind(25, 30), Is.EqualTo(DesignationKind.Dig));
             for (var z = 28; z < 33; z++)
                 for (var x = 10; x < 41; x++)
-                    Assert.That(_grid.GetTopMaterial(x, z), Is.Not.EqualTo(MaterialTable.Road),
+                    Assert.That(_grid.GetTopMaterial(x, z), Is.Not.EqualTo(TinyDiggersMaterials.Road),
                         $"({x}, {z}) should be ground, not road");
         }
 

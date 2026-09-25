@@ -21,7 +21,7 @@ namespace TinyDiggers.Presentation.Tests
 
         static TerrainGrid Flat(float height = Base)
         {
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep: 0.5f, cellSize: CellSize);
+            var grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), heightStep: 0.5f, cellSize: CellSize);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     grid.SetColumn(x, z, new[]
@@ -34,7 +34,7 @@ namespace TinyDiggers.Presentation.Tests
         /// <summary>Ground rising towards +z at <paramref name="grade"/> metres per metre.</summary>
         static TerrainGrid Slope(float grade)
         {
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep: 0.5f, cellSize: CellSize);
+            var grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), heightStep: 0.5f, cellSize: CellSize);
             for (var z = 0; z < Size; z++)
             {
                 var height = Base + grade * (z + 0.5f) * CellSize;

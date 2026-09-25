@@ -22,7 +22,7 @@ namespace TinyDiggers.Presentation.Tests
         [Test]
         public void ARiverRunsTooDeepToWadeAndACreekDoesNot()
         {
-            var wade = new TerrainGrid(4, 4, MaterialTable.CreateDefault()).DeepWater;
+            var wade = new TerrainGrid(4, 4, TinyDiggersMaterials.CreateTable()).DeepWater;
             var river = new Channel { Kind = ChannelKind.River, Depth = 1f };
             var creek = new Channel { Kind = ChannelKind.Creek, Depth = 0.5f };
 

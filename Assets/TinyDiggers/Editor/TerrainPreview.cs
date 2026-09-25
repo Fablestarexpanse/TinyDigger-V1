@@ -60,9 +60,9 @@ namespace TinyDiggers.EditorTools
                 var copy = Object.Instantiate(settings);
                 copy.Seed = seeds[i];
                 var started = Time.realtimeSinceStartupAsDouble;
-                var grid = new TerrainGrid(width, height, MaterialTable.CreateDefault(), step, copy.Datum, cellSize);
+                var grid = new TerrainGrid(width, height, TinyDiggersMaterials.CreateTable(), step, copy.Datum, cellSize);
                 var slump = new AngleOfReposeSimulator(grid);
-                var island = IslandGenerator.Generate(grid, copy);
+                var island = IslandGenerator.Generate(grid, copy, TinyDiggersMaterials.Ores);
                 slump.RunUntilStable();
                 slump.Dispose();
                 var seconds = Time.realtimeSinceStartupAsDouble - started;

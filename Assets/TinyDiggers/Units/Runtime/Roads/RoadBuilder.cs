@@ -178,7 +178,7 @@ namespace TinyDiggers.Units
                     continue;
                 _bedOwners.TryGetValue(cell, out var owners);
                 _bedOwners[cell] = owners + 1;
-                if (_grid.GetTopMaterial(cell % width, cell / width) != MaterialTable.Road)
+                if (_grid.GetTopMaterial(cell % width, cell / width) != TinyDiggersMaterials.Road)
                     _waiting.Add(cell);
             }
 
@@ -405,7 +405,7 @@ namespace TinyDiggers.Units
         /// </summary>
         public static bool Pave(TerrainGrid grid, int x, int z)
         {
-            if (!grid.IsGround(x, z) || grid.GetTopMaterial(x, z) == MaterialTable.Road)
+            if (!grid.IsGround(x, z) || grid.GetTopMaterial(x, z) == TinyDiggersMaterials.Road)
                 return false;
             Span<Layer> layers = stackalloc Layer[TerrainGrid.MaxLayersPerCell];
             // CopyLayers gives the top first; SetColumn takes the bottom first.
@@ -435,7 +435,7 @@ namespace TinyDiggers.Units
 
             if (count >= TerrainGrid.MaxLayersPerCell)
                 count = TerrainGrid.MaxLayersPerCell - 1;
-            layers[count++] = new Layer(MaterialTable.Road, Thickness);
+            layers[count++] = new Layer(TinyDiggersMaterials.Road, Thickness);
             grid.SetColumn(x, z, layers.Slice(0, count));
             return true;
         }
@@ -451,7 +451,7 @@ namespace TinyDiggers.Units
             var changed = false;
             for (var i = 0; i < count; i++)
             {
-                if (layers[i].Material != MaterialTable.Road)
+                if (layers[i].Material != TinyDiggersMaterials.Road)
                     continue;
                 layers[i] = new Layer(MaterialTable.Dirt, layers[i].Thickness);
                 changed = true;

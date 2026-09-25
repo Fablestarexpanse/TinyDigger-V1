@@ -7160,3 +7160,20 @@ generator and the scorecard, with their 15 test files, are now
 core). Erosion stays in the core: the game's water pathfinding uses its distance transform. The
 core uses no generation type, so a game can leave generation out. The game's assemblies reference
 both. Play is unchanged: a 3,104² island, the same 31.4 m³ settle and the same moorings. 712 tests pass.
+
+**Step 2b done: materials are the game's (2026-09-25).**
+- **Core:** `MaterialDefinition` gains `IsStone`, `IsOre` and `IsRoad` flags, and the table answers
+  from them (`table.IsStone(id)` and the rest). The hard-coded id lists are gone. The core ships the
+  basic nine (bedrock to loose dirt, ids 1–9, `MaterialTable.CreateBasic(extra...)`), and a game's
+  own start at id 10. `TerrainGrid` counts road cells by the flag.
+- **Game:** `TinyDiggersMaterials` (new `TinyDiggers.Materials` assembly) holds coal, iron, copper,
+  limestone, their loose forms and the road, with the ids they always had, so texture sets and saved
+  data still agree.
+- **Generation:** ores are laid by habit: seam, lowland beds, lenses, ridge bodies. The caller says
+  which material fills each (`OreMaterials`), and the default lays none. TinyDiggers passes coal,
+  limestone, iron and copper. The noise fields are still drawn in the same order, so the rest of the
+  island is the same with ores or without.
+- **Settings:** the ore fields are renamed by habit (`SeamOre`, `LensOre`, …), with
+  `FormerlySerializedAs`. `IslandSettings.asset` reads the same values back (checked field by field).
+  The generation tests bring their own four test ores.
+- **Result:** play is unchanged (3,104² island, the same settle, the same moorings). 712 tests pass.

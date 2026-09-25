@@ -45,6 +45,18 @@ namespace PromptWaffle.Terrain
         /// </summary>
         public bool IsLoose { get; }
 
+        /// <summary>
+        /// Stands up rather than slumping, like rock: a step taller than one height step is only
+        /// allowed between two of these, which is what a cliff is. Ore in a rock face is stone.
+        /// </summary>
+        public bool IsStone { get; }
+
+        /// <summary>A resource the game mines: in place or dug. The terrain treats it like any other material.</summary>
+        public bool IsOre { get; }
+
+        /// <summary>A built road surface. The grid counts road cells as they change, for pathfinders that ask.</summary>
+        public bool IsRoad { get; }
+
         public MaterialDefinition(
             MaterialId id,
             string displayName,
@@ -54,7 +66,10 @@ namespace PromptWaffle.Terrain
             bool isDiggable = true,
             MaterialId disturbed = default,
             float bulkingFactor = 1f,
-            bool isLoose = false)
+            bool isLoose = false,
+            bool isStone = false,
+            bool isOre = false,
+            bool isRoad = false)
         {
             if (!(bulkingFactor >= 1f))
                 throw new System.ArgumentOutOfRangeException(nameof(bulkingFactor), "Digging never shrinks material.");
@@ -68,6 +83,9 @@ namespace PromptWaffle.Terrain
             Disturbed = disturbed;
             BulkingFactor = bulkingFactor;
             IsLoose = isLoose;
+            IsStone = isStone;
+            IsOre = isOre;
+            IsRoad = isRoad;
         }
 
         public override string ToString() => DisplayName;

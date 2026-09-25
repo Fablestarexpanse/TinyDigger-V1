@@ -101,8 +101,8 @@ namespace PromptWaffle.Terrain.Generation.Tests
             for (var seed = 1; seed <= 3; seed++)
             {
                 _settings.Seed = seed;
-                var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f, _settings.Datum);
-                var map = IslandGenerator.Generate(grid, _settings);
+                var grid = new TerrainGrid(Size, Size, TestOres.CreateTable(), 1f, _settings.Datum);
+                var map = IslandGenerator.Generate(grid, _settings, TestOres.Ores);
                 foreach (var channel in map.Channels)
                 {
                     var path = channel.Path;

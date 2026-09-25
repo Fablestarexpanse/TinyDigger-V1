@@ -489,7 +489,7 @@ namespace TinyDiggers.EditorTools
                 // --- ores (slice 10): each in place, then as dug rubble -----------------------
                 new Recipe
                 {
-                    Id = MaterialTable.Coal, Name = "Coal", Smoothness = 0.35f,
+                    Id = TinyDiggersMaterials.Coal, Name = "Coal", Smoothness = 0.35f,
                     // Black and bedded, with bright glints where a face catches the light.
                     Main = new Pattern
                     {
@@ -504,7 +504,7 @@ namespace TinyDiggers.EditorTools
                 },
                 new Recipe
                 {
-                    Id = MaterialTable.CoalLoose, Name = "CoalLoose", Smoothness = 0.06f,
+                    Id = TinyDiggersMaterials.CoalLoose, Name = "CoalLoose", Smoothness = 0.06f,
                     // Dug ore: the same fist-sized rubble as loose rock, in the ore's colour.
                     Main = new Pattern
                     {
@@ -520,7 +520,7 @@ namespace TinyDiggers.EditorTools
                 },
                 new Recipe
                 {
-                    Id = MaterialTable.IronOre, Name = "IronOre", Smoothness = 0.1f,
+                    Id = TinyDiggersMaterials.IronOre, Name = "IronOre", Smoothness = 0.1f,
                     // Rust red-brown, blotched darker where the ore is rich.
                     Main = new Pattern
                     {
@@ -536,7 +536,7 @@ namespace TinyDiggers.EditorTools
                 },
                 new Recipe
                 {
-                    Id = MaterialTable.IronOreLoose, Name = "IronOreLoose", Smoothness = 0.06f,
+                    Id = TinyDiggersMaterials.IronOreLoose, Name = "IronOreLoose", Smoothness = 0.06f,
                     // Dug ore: the same fist-sized rubble as loose rock, in the ore's colour.
                     Main = new Pattern
                     {
@@ -552,7 +552,7 @@ namespace TinyDiggers.EditorTools
                 },
                 new Recipe
                 {
-                    Id = MaterialTable.CopperOre, Name = "CopperOre", Smoothness = 0.1f,
+                    Id = TinyDiggersMaterials.CopperOre, Name = "CopperOre", Smoothness = 0.1f,
                     // Grey rock streaked with malachite green-teal.
                     Main = new Pattern
                     {
@@ -568,7 +568,7 @@ namespace TinyDiggers.EditorTools
                 },
                 new Recipe
                 {
-                    Id = MaterialTable.CopperOreLoose, Name = "CopperOreLoose", Smoothness = 0.06f,
+                    Id = TinyDiggersMaterials.CopperOreLoose, Name = "CopperOreLoose", Smoothness = 0.06f,
                     // Dug ore: the same fist-sized rubble as loose rock, in the ore's colour.
                     Main = new Pattern
                     {
@@ -584,7 +584,7 @@ namespace TinyDiggers.EditorTools
                 },
                 new Recipe
                 {
-                    Id = MaterialTable.Limestone, Name = "Limestone", Smoothness = 0.08f,
+                    Id = TinyDiggersMaterials.Limestone, Name = "Limestone", Smoothness = 0.08f,
                     // Pale warm grey in beds, speckled with small fossils.
                     Main = new Pattern
                     {
@@ -599,7 +599,7 @@ namespace TinyDiggers.EditorTools
                 },
                 new Recipe
                 {
-                    Id = MaterialTable.LimestoneLoose, Name = "LimestoneLoose", Smoothness = 0.06f,
+                    Id = TinyDiggersMaterials.LimestoneLoose, Name = "LimestoneLoose", Smoothness = 0.06f,
                     // Dug ore: the same fist-sized rubble as loose rock, in the ore's colour.
                     Main = new Pattern
                     {
@@ -615,7 +615,7 @@ namespace TinyDiggers.EditorTools
                 },
                 new Recipe
                 {
-                    Id = MaterialTable.Road, Name = "Road", Smoothness = 0.1f,
+                    Id = TinyDiggersMaterials.Road, Name = "Road", Smoothness = 0.1f,
                     // Packed gravel (Slice 17 Part B): stones a thumb across, rolled flat, so fine
                     // grain and little relief; a warm grey with darker grit between the stones and
                     // faint wheel-worn streaks, so it reads as made ground next to the loose rubble.

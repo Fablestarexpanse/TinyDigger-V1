@@ -22,7 +22,7 @@ namespace TinyDiggers.Presentation.Tests
         /// <summary>Land for x &lt; <paramref name="shoreX"/>, then sea sloping down one metre per cell.</summary>
         static TerrainGrid HalfIsland(int size, int shoreX)
         {
-            var grid = new TerrainGrid(size, size, MaterialTable.CreateDefault(), 1f, -20f);
+            var grid = new TerrainGrid(size, size, TinyDiggersMaterials.CreateTable(), 1f, -20f);
             for (var z = 0; z < size; z++)
             {
                 for (var x = 0; x < size; x++)

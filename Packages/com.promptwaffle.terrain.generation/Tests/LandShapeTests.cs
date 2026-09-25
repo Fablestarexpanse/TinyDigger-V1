@@ -34,9 +34,9 @@ namespace PromptWaffle.Terrain.Generation.Tests
         [TearDown]
         public void TearDown() => Object.DestroyImmediate(_settings);
 
-        TerrainGrid NewGrid() => new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f, _settings.Datum);
+        TerrainGrid NewGrid() => new TerrainGrid(Size, Size, TestOres.CreateTable(), 1f, _settings.Datum);
 
-        IslandMap Generate(TerrainGrid grid) => IslandGenerator.Generate(grid, _settings);
+        IslandMap Generate(TerrainGrid grid) => IslandGenerator.Generate(grid, _settings, TestOres.Ores);
 
         /// <summary>Land as the sim means it: on the map, and dry enough to stand on.</summary>
         static bool IsLand(TerrainGrid grid, int x, int z) =>
@@ -241,8 +241,8 @@ namespace PromptWaffle.Terrain.Generation.Tests
                 var best = double.MaxValue;
                 for (var run = 0; run < 3; run++)
                 {
-                    var grid = new TerrainGrid(512, 512, MaterialTable.CreateDefault(), 1f, settings.Datum);
-                    best = System.Math.Min(best, IslandGenerator.Generate(grid, settings).Milliseconds);
+                    var grid = new TerrainGrid(512, 512, TestOres.CreateTable(), 1f, settings.Datum);
+                    best = System.Math.Min(best, IslandGenerator.Generate(grid, settings, TestOres.Ores).Milliseconds);
                 }
 
                 Assert.That(best, Is.LessThan(650d), $"512² took {best:0} ms at best of three");

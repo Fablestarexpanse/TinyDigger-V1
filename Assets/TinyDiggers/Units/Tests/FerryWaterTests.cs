@@ -29,7 +29,7 @@ namespace TinyDiggers.Units.Tests
         [SetUp]
         public void SetUp()
         {
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep: 0.5f, datum: -10f,
+            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), heightStep: 0.5f, datum: -10f,
                 cellSize: Cell);
             Fill((x, z) => -2f);
         }

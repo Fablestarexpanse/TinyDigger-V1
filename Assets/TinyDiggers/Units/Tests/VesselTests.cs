@@ -22,7 +22,7 @@ namespace TinyDiggers.Units.Tests
         {
             // A strait running north-south, two metres deep, 26 m across. Fine height steps, so a
             // shelf can sit between the tug's draft and the scow's.
-            _grid = new TerrainGrid(Width, Depth, MaterialTable.CreateDefault(), heightStep: 0.05f, datum: -10f, cellSize: Cell);
+            _grid = new TerrainGrid(Width, Depth, TinyDiggersMaterials.CreateTable(), heightStep: 0.05f, datum: -10f, cellSize: Cell);
             Fill(x => x < 14 ? 1f : x < 66 ? -2f : 1f);
         }
 

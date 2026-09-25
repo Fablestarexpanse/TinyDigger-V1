@@ -542,16 +542,24 @@ namespace PromptWaffle.Terrain.Generation
         [Tooltip("Lay ore into the rock at all. Off gives exactly the land and strata without it.")]
         public bool Ores = true;
 
-        [Tooltip("Metres above sea level the coal seam's top runs at, give or take 3 m.")]
-        public float CoalSeamHeight = -6f;
+        // Named by habit, not by ore (2026-09-25): which material fills each is the game's
+        // (OreMaterials). The saved values carry over from the ore names they had.
+        [Tooltip("Metres above sea level the seam's top runs at, give or take 3 m.")]
+        [UnityEngine.Serialization.FormerlySerializedAs("CoalSeamHeight")]
+        public float SeamHeight = -6f;
 
-        [Tooltip("Limestone thins out above this height, so it lies under the lowlands.")]
-        [Min(1f)] public float LimestoneBelowHeight = 14f;
+        [Tooltip("Lowland beds thin out above this height, so they lie under the lowlands.")]
+        [UnityEngine.Serialization.FormerlySerializedAs("LimestoneBelowHeight")]
+        [Min(1f)] public float LowlandBelowHeight = 14f;
 
-        public OreSpec CoalOre = new OreSpec(abundance: 0.45f, patchSize: 90f, depthMin: 3f, depthMax: 3f, maxThickness: 2.5f);
-        public OreSpec IronOre = new OreSpec(abundance: 0.32f, patchSize: 45f, depthMin: 4f, depthMax: 15f, maxThickness: 4f);
-        public OreSpec CopperOre = new OreSpec(abundance: 0.4f, patchSize: 32f, depthMin: 3f, depthMax: 12f, maxThickness: 3f);
-        public OreSpec LimestoneOre = new OreSpec(abundance: 0.4f, patchSize: 110f, depthMin: 1.5f, depthMax: 5f, maxThickness: 6f);
+        [UnityEngine.Serialization.FormerlySerializedAs("CoalOre")]
+        public OreSpec SeamOre = new OreSpec(abundance: 0.45f, patchSize: 90f, depthMin: 3f, depthMax: 3f, maxThickness: 2.5f);
+        [UnityEngine.Serialization.FormerlySerializedAs("IronOre")]
+        public OreSpec LensOre = new OreSpec(abundance: 0.32f, patchSize: 45f, depthMin: 4f, depthMax: 15f, maxThickness: 4f);
+        [UnityEngine.Serialization.FormerlySerializedAs("CopperOre")]
+        public OreSpec RidgeOre = new OreSpec(abundance: 0.4f, patchSize: 32f, depthMin: 3f, depthMax: 12f, maxThickness: 3f);
+        [UnityEngine.Serialization.FormerlySerializedAs("LimestoneOre")]
+        public OreSpec LowlandOre = new OreSpec(abundance: 0.4f, patchSize: 110f, depthMin: 1.5f, depthMax: 5f, maxThickness: 6f);
 
         /// <summary>
         /// The cell size a scaled copy was made for (<see cref="ScaledForCells"/>); 1 on an asset.
@@ -601,8 +609,8 @@ namespace PromptWaffle.Terrain.Generation
 
             s.BeachMaxSlope *= cellSize; s.MaxCliffStep *= cellSize;
 
-            s.CoalOre = Scaled(CoalOre, k); s.IronOre = Scaled(IronOre, k);
-            s.CopperOre = Scaled(CopperOre, k); s.LimestoneOre = Scaled(LimestoneOre, k);
+            s.SeamOre = Scaled(SeamOre, k); s.LensOre = Scaled(LensOre, k);
+            s.RidgeOre = Scaled(RidgeOre, k); s.LowlandOre = Scaled(LowlandOre, k);
             return s;
         }
 

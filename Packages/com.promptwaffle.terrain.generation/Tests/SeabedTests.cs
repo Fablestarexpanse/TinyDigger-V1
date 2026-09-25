@@ -49,8 +49,8 @@ namespace PromptWaffle.Terrain.Generation.Tests
         TerrainGrid Generate(bool openSeaFloor)
         {
             _settings.OpenSeaFloor = openSeaFloor;
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f, _settings.Datum);
-            IslandGenerator.Generate(grid, _settings);
+            var grid = new TerrainGrid(Size, Size, TestOres.CreateTable(), 1f, _settings.Datum);
+            IslandGenerator.Generate(grid, _settings, TestOres.Ores);
             return grid;
         }
 

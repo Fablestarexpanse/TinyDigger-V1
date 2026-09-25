@@ -614,7 +614,7 @@ namespace TinyDiggers.Units
                 // than within a climbable step. Holding it to a step is what deadlocks a cliffed
                 // hill — the face cannot come down until its neighbour does, and the neighbour
                 // cannot be reached until the face comes down.
-                var depth = MaterialTable.IsStone(_grid.GetTopMaterial(nx, nz))
+                var depth = TinyDiggersMaterials.IsStone(_grid.GetTopMaterial(nx, nz))
                     ? CliffWorkDepth
                     : Math.Max(climb, BenchDepth);
                 floor = Math.Max(floor, _grid.GetSurfaceHeight(nx, nz) - depth);
@@ -746,7 +746,7 @@ namespace TinyDiggers.Units
                     return Blocked($"ramp would cut into designated ({high.x}, {high.y})");
                 var standHeight = _grid.GetSurfaceHeight(stand.x, stand.y);
                 var highHeight = _grid.GetSurfaceHeight(high.x, high.y);
-                if (!unit.WithinReach(standHeight, highHeight) && !MaterialTable.IsStone(_grid.GetTopMaterial(high.x, high.y)))
+                if (!unit.WithinReach(standHeight, highHeight) && !TinyDiggersMaterials.IsStone(_grid.GetTopMaterial(high.x, high.y)))
                     return Blocked($"{highHeight - standHeight:0.#} m cliff at ({high.x}, {high.y}) is out of reach");
 
                 _designations.Designate(high.x, high.y, DesignationKind.Dig, lowHeight + step, auto: true);

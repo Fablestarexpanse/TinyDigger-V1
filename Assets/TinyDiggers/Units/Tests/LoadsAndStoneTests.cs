@@ -26,7 +26,7 @@ namespace TinyDiggers.Units.Tests
         {
             // The sandbox's own half-metre cells and steps: one cut is 0.125 m³ there, which fits
             // in a barrow. At a metre a single cut is 1 m³ and no unit in the game could lift it.
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep: 0.5f,
+            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), heightStep: 0.5f,
                 cellSize: 0.5f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)

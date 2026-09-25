@@ -22,7 +22,7 @@ namespace TinyDiggers.Interaction.Tests
         [SetUp]
         public void SetUp()
         {
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 0.5f, 0f, 0.5f);
+            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), 0.5f, 0f, 0.5f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Dirt, Ground) });

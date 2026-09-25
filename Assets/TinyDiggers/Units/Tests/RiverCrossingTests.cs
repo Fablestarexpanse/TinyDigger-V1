@@ -32,7 +32,7 @@ namespace TinyDiggers.Units.Tests
         [SetUp]
         public void SetUp()
         {
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), Half, 0f, Half);
+            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), Half, 0f, Half);
             var riverBeds = new bool[Size * Size];
             var surfaces = new float[Size * Size];
             for (var z = 0; z < Size; z++)

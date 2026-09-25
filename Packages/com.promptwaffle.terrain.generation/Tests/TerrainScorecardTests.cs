@@ -12,7 +12,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         /// <summary>Half-metre cells and steps, like the game, with every column's surface from <paramref name="height"/>.</summary>
         static TerrainGrid Field(int size, System.Func<int, int, float> height)
         {
-            var grid = new TerrainGrid(size, size, MaterialTable.CreateDefault(), Half, -10f, Half);
+            var grid = new TerrainGrid(size, size, TestOres.CreateTable(), Half, -10f, Half);
             for (var z = 0; z < size; z++)
                 for (var x = 0; x < size; x++)
                     grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Dirt, height(x, z) + 10f) });

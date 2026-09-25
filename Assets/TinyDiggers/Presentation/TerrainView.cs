@@ -207,7 +207,7 @@ namespace TinyDiggers.Presentation
         {
             var stopwatch = Stopwatch.StartNew();
             var datum = UsingIsland ? _settings.Datum : 0f;
-            Grid = new TerrainGrid(_width, _height, MaterialTable.CreateDefault(), HeightStep, datum, _cellSize);
+            Grid = new TerrainGrid(_width, _height, TinyDiggersMaterials.CreateTable(), HeightStep, datum, _cellSize);
             // The simulator is built before the land so that generation queues every cell it
             // touches, and one settle at the end leaves nothing standing steeper than it should.
             _slump = new AngleOfReposeSimulator(Grid);
@@ -281,7 +281,7 @@ namespace TinyDiggers.Presentation
         void Fill()
         {
             if (UsingIsland)
-                Island = IslandGenerator.Generate(Grid, _settings);
+                Island = IslandGenerator.Generate(Grid, _settings, TinyDiggersMaterials.Ores);
             else
                 TerrainGenerator.Generate(Grid, _seed);
             // One settle, so nothing the generator left standing too steep is a surprise later.

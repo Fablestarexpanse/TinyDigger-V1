@@ -33,7 +33,7 @@ namespace TinyDiggers.Presentation.Tests
         [Test]
         public void TheHeightTextureHoldsTheDrawnCornersAndFollowsADig()
         {
-            var grid = new TerrainGrid(8, 8, MaterialTable.CreateDefault(), heightStep: 0.25f);
+            var grid = new TerrainGrid(8, 8, TinyDiggersMaterials.CreateTable(), heightStep: 0.25f);
             for (var z = 0; z < 8; z++)
                 for (var x = 0; x < 8; x++)
                     grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, 1f), new Layer(MaterialTable.Dirt, 2f + x * 0.25f) });

@@ -16,7 +16,7 @@ namespace TinyDiggers.Units.Tests
 
         static TerrainGrid DirtField(int size = 9)
         {
-            var grid = new TerrainGrid(size, size, MaterialTable.CreateDefault(), Half, 0f, Half);
+            var grid = new TerrainGrid(size, size, TinyDiggersMaterials.CreateTable(), Half, 0f, Half);
             for (var z = 0; z < size; z++)
                 for (var x = 0; x < size; x++)
                     grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, 2f), new Layer(MaterialTable.Dirt, 4f) });

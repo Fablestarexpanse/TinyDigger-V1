@@ -41,8 +41,8 @@ namespace PromptWaffle.Terrain.Generation.Tests
         (TerrainGrid grid, IslandMap map) Generate(int seed)
         {
             _settings.Seed = seed;
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f, _settings.Datum);
-            return (grid, IslandGenerator.Generate(grid, _settings));
+            var grid = new TerrainGrid(Size, Size, TestOres.CreateTable(), 1f, _settings.Datum);
+            return (grid, IslandGenerator.Generate(grid, _settings, TestOres.Ores));
         }
 
         static List<Channel> Of(IslandMap map, ChannelKind kind) => map.Channels.FindAll(c => c.Kind == kind);
@@ -165,7 +165,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
                     var top = grid.GetTopMaterial(x, z);
                     if (top == MaterialTable.RockLoose)
                         gravel++;
-                    else if (IslandGenerator.IsStone(top))
+                    else if (TestOres.Table.IsStone(top))
                         stone++;
                 }
             }

@@ -14,7 +14,7 @@ namespace PromptWaffle.Terrain.Tests
         [SetUp]
         public void SetUp()
         {
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep: 1f);
+            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateBasic(), heightStep: 1f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, 2f) });
@@ -331,7 +331,7 @@ namespace PromptWaffle.Terrain.Tests
 
         static TerrainGrid Settled()
         {
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep: 1f);
+            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateBasic(), heightStep: 1f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, 2f) });

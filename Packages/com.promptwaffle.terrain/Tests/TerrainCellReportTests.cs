@@ -7,7 +7,7 @@ namespace PromptWaffle.Terrain.Tests
         [Test]
         public void ListsCoordinatesHeightAndLayersTopFirst()
         {
-            var grid = new TerrainGrid(4, 4, MaterialTable.CreateDefault());
+            var grid = new TerrainGrid(4, 4, MaterialTable.CreateBasic());
             grid.SetColumn(2, 3, new[]
             {
                 new Layer(MaterialTable.Bedrock, 10f),
@@ -31,7 +31,7 @@ namespace PromptWaffle.Terrain.Tests
         [Test]
         public void SaysSoWhenThereIsNoCell()
         {
-            var grid = new TerrainGrid(4, 4, MaterialTable.CreateDefault());
+            var grid = new TerrainGrid(4, 4, MaterialTable.CreateBasic());
 
             Assert.That(new TerrainCellReport().Describe(grid, -1, -1), Is.EqualTo("No cell under the cursor"));
         }
@@ -39,7 +39,7 @@ namespace PromptWaffle.Terrain.Tests
         [Test]
         public void ReusingTheReportDoesNotCarryOverThePreviousCell()
         {
-            var grid = new TerrainGrid(4, 4, MaterialTable.CreateDefault());
+            var grid = new TerrainGrid(4, 4, MaterialTable.CreateBasic());
             grid.Add(0, 0, MaterialTable.Sand, 1f);
             grid.Add(1, 0, MaterialTable.Clay, 1f);
             var report = new TerrainCellReport();

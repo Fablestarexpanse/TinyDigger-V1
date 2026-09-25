@@ -22,7 +22,7 @@ namespace TinyDiggers.Units.Tests
         public void SetUp()
         {
             // A strait running north-south: a beach on each side of two metres of water.
-            _grid = new TerrainGrid(Width, Depth, MaterialTable.CreateDefault(), heightStep: 0.5f, datum: -10f,
+            _grid = new TerrainGrid(Width, Depth, TinyDiggersMaterials.CreateTable(), heightStep: 0.5f, datum: -10f,
                 cellSize: Cell);
             Fill(x =>
             {

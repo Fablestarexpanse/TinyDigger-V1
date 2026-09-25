@@ -10,7 +10,7 @@ namespace TinyDiggers.Interaction.Tests
     {
         static TerrainGrid Flat(int size, float height, float cellSize)
         {
-            var grid = new TerrainGrid(size, size, MaterialTable.CreateDefault(), 0.5f, 0f, cellSize);
+            var grid = new TerrainGrid(size, size, TinyDiggersMaterials.CreateTable(), 0.5f, 0f, cellSize);
             for (var z = 0; z < size; z++)
                 for (var x = 0; x < size; x++)
                     grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Dirt, height) });

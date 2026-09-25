@@ -21,7 +21,7 @@ namespace TinyDiggers.Units.Tests
         public void SetUp()
         {
             // Flat ground at 8 m: 2 m bedrock under 6 m of dirt.
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep: 1f);
+            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), heightStep: 1f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     SetHeight(x, z, 8f);

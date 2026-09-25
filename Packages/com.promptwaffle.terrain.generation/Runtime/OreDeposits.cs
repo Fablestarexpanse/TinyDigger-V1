@@ -36,30 +36,53 @@ namespace PromptWaffle.Terrain.Generation
     }
 
     /// <summary>
+    /// Which of a game's materials fills each ore habit (<see cref="OreDeposits"/>). A habit left
+    /// as <see cref="MaterialId.None"/> gets no ore; the default, all None, lays none at all.
+    /// </summary>
+    public struct OreMaterials
+    {
+        /// <summary>One seam at a single height across the island, gently undulating.</summary>
+        public MaterialId Seam;
+
+        /// <summary>Thick, shallow beds under the lowlands.</summary>
+        public MaterialId LowlandBeds;
+
+        /// <summary>Lenses in the rock under hills, at a varying depth.</summary>
+        public MaterialId Lenses;
+
+        /// <summary>Small rich bodies near the ridges.</summary>
+        public MaterialId RidgeBodies;
+
+        public bool Any => !Seam.IsNone || !LowlandBeds.IsNone || !Lenses.IsNone || !RidgeBodies.IsNone;
+    }
+
+    /// <summary>
     /// Ore underground (slice 10): turns stone inside each ore's patches and depth window into ore,
     /// column by column, after the strata are built. Only rock, granite and bedrock are converted, and
     /// a layer is split rather than moved, so the surface height never changes and the land keeps
     /// every shape the generator gave it. Soil and sand sit on top as before, so ore is buried under
     /// grassland and only crops out where rock is bare: on cliffs and ridges.
     ///
-    /// Each ore has its own habit:
-    /// - Coal: a seam at one height across the island, gently undulating, so a cliff cut shows it
-    ///   as a band.
-    /// - Limestone: thick, shallow beds under the lowlands.
-    /// - Iron ore: lenses in the rock under hills, at a varying depth.
-    /// - Copper ore: small rich bodies near the ridges.
+    /// Each habit lays its ore its own way (<see cref="OreMaterials"/> says which material; in
+    /// TinyDiggers coal, limestone, iron and copper):
+    /// - Seam: at one height across the island, gently undulating, so a cliff cut shows it as a band.
+    /// - Lowland beds: thick, shallow beds under the lowlands.
+    /// - Lenses: in the rock under hills, at a varying depth.
+    /// - Ridge bodies: small rich bodies near the ridges.
     /// </summary>
     public static class OreDeposits
     {
         /// <summary>The noise offsets for one island; drawn from the island's seed.</summary>
         public struct Fields
         {
-            public Vector2 Coal, Iron, Copper, Limestone, Depth;
+            public Vector2 Seam, Lenses, RidgeBodies, LowlandBeds, Depth;
 
+            // Drawn in this order whatever the game's ores are, so every other feature of the
+            // island comes out the same with ores or without.
             public static Fields Draw(System.Random random)
             {
                 Vector2 Next() => new Vector2((float)random.NextDouble() * 1000f, (float)random.NextDouble() * 1000f);
-                return new Fields { Coal = Next(), Iron = Next(), Copper = Next(), Limestone = Next(), Depth = Next() };
+                return new Fields { Seam = Next(), Lenses = Next(), RidgeBodies = Next(), LowlandBeds = Next(), Depth = Next() };
             }
         }
 
@@ -70,42 +93,42 @@ namespace PromptWaffle.Terrain.Generation
         /// Never lets the column exceed <paramref name="column"/>'s length.
         /// </summary>
         public static void Apply(Span<Layer> column, ref int count, float x, float z, float surface, float datum,
-            float high, Fields fields, TerrainGenSettings settings)
+            float high, Fields fields, TerrainGenSettings settings, OreMaterials ores)
         {
             // Under the sea there is nobody to dig it, and the budget is half a second.
-            if (!settings.Ores || surface < World.SeaLevel)
+            if (!settings.Ores || !ores.Any || surface < World.SeaLevel)
                 return;
 
             var at = new Vector2(x, z);
             var wander = -1f;
             float Wander() => wander >= 0f ? wander : wander = Noise(at, fields.Depth, 50f / settings.GenerationCellSize);
 
-            // Coal: one seam height for the island, undulating a few metres.
-            var coal = Strength(at, fields.Coal, settings.CoalOre);
-            if (coal > 0f)
+            // Seam: one height for the island, undulating a few metres.
+            var seam = ores.Seam.IsNone ? 0f : Strength(at, fields.Seam, settings.SeamOre);
+            if (seam > 0f)
             {
                 var wanderAt = Wander();
-                var top = settings.CoalSeamHeight + (wanderAt - 0.5f) * 6f;
-                if (surface - top >= settings.CoalOre.DepthMin)
-                    Convert(column, ref count, datum, top - Thickness(coal, settings.CoalOre), top, MaterialTable.Coal);
+                var top = settings.SeamHeight + (wanderAt - 0.5f) * 6f;
+                if (surface - top >= settings.SeamOre.DepthMin)
+                    Convert(column, ref count, datum, top - Thickness(seam, settings.SeamOre), top, ores.Seam);
             }
 
-            // Limestone: shallow beds, strongest under the lowlands.
-            var lowland = Mathf.Clamp01(1f - surface / Mathf.Max(1f, settings.LimestoneBelowHeight));
-            var limestone = lowland > 0.05f ? Strength(at, fields.Limestone, settings.LimestoneOre) * lowland : 0f;
-            if (limestone > 0.05f)
-                ConvertAtDepth(column, ref count, datum, surface, Wander(), limestone, settings.LimestoneOre, MaterialTable.Limestone);
+            // Lowland beds: shallow, strongest under the lowlands.
+            var lowland = Mathf.Clamp01(1f - surface / Mathf.Max(1f, settings.LowlandBelowHeight));
+            var beds = lowland > 0.05f && !ores.LowlandBeds.IsNone ? Strength(at, fields.LowlandBeds, settings.LowlandOre) * lowland : 0f;
+            if (beds > 0.05f)
+                ConvertAtDepth(column, ref count, datum, surface, Wander(), beds, settings.LowlandOre, ores.LowlandBeds);
 
-            // Iron: lenses under hills at a varying depth.
-            var iron = Strength(at, fields.Iron, settings.IronOre);
-            if (iron > 0f)
-                ConvertAtDepth(column, ref count, datum, surface, 1f - Wander(), iron, settings.IronOre, MaterialTable.IronOre);
+            // Lenses: under hills at a varying depth.
+            var lens = ores.Lenses.IsNone ? 0f : Strength(at, fields.Lenses, settings.LensOre);
+            if (lens > 0f)
+                ConvertAtDepth(column, ref count, datum, surface, 1f - Wander(), lens, settings.LensOre, ores.Lenses);
 
-            // Copper: small bodies near the ridges.
+            // Ridge bodies: small, near the ridges.
             var ridge = Mathf.Clamp01(high * 2f);
-            var copper = ridge > 0.05f ? Strength(at, fields.Copper, settings.CopperOre) * ridge : 0f;
-            if (copper > 0.05f)
-                ConvertAtDepth(column, ref count, datum, surface, Wander(), copper, settings.CopperOre, MaterialTable.CopperOre);
+            var body = ridge > 0.05f && !ores.RidgeBodies.IsNone ? Strength(at, fields.RidgeBodies, settings.RidgeOre) * ridge : 0f;
+            if (body > 0.05f)
+                ConvertAtDepth(column, ref count, datum, surface, Wander(), body, settings.RidgeOre, ores.RidgeBodies);
         }
 
         /// <summary>0 outside a patch, rising to 1 at its heart.</summary>

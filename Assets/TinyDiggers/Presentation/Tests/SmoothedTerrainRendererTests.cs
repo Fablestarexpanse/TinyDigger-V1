@@ -21,7 +21,7 @@ namespace TinyDiggers.Presentation.Tests
             _root = new GameObject("Renderer Test Root");
             // 70x40 is deliberately not a multiple of the chunk size: 3x2 chunks, the last row
             // and column partial. Flat 2m of undisturbed dirt everywhere.
-            _grid = new TerrainGrid(70, 40, MaterialTable.CreateDefault());
+            _grid = new TerrainGrid(70, 40, TinyDiggersMaterials.CreateTable());
             for (var z = 0; z < _grid.Height; z++)
                 for (var x = 0; x < _grid.Width; x++)
                     _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Dirt, 2f) });

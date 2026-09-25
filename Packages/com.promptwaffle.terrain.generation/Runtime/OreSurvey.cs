@@ -80,7 +80,7 @@ namespace PromptWaffle.Terrain.Generation
                 if (depth > Depth)
                     break;
                 var layer = _grid.GetLayer(x, z, i);
-                if (MaterialTable.IsOre(layer.Material))
+                if (_grid.Materials.IsOre(layer.Material))
                     return new Find { Ore = layer.Material, DepthToTop = depth, Thickness = layer.Thickness };
                 depth += layer.Thickness;
             }

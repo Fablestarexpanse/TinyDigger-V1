@@ -10,7 +10,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
 
         static TerrainGrid Generate(int seed, int size = 96)
         {
-            var grid = new TerrainGrid(size, size, MaterialTable.CreateDefault());
+            var grid = new TerrainGrid(size, size, TestOres.CreateTable());
             TerrainGenerator.Generate(grid, seed);
             return grid;
         }
@@ -108,7 +108,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         {
             // Terraces one step high are what make the land read as plateaus, and a single step
             // can never slump, so freshly generated ground is stable.
-            var grid = new TerrainGrid(256, 256, MaterialTable.CreateDefault(), heightStep: 1f);
+            var grid = new TerrainGrid(256, 256, TestOres.CreateTable(), heightStep: 1f);
             TerrainGenerator.Generate(grid, seed);
 
             var flat = 0;
@@ -136,7 +136,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         [Test]
         public void WithAHeightStepEverySurfaceLandsOnTheStepGrid()
         {
-            var grid = new TerrainGrid(64, 64, MaterialTable.CreateDefault(), heightStep: 1f);
+            var grid = new TerrainGrid(64, 64, TestOres.CreateTable(), heightStep: 1f);
             TerrainGenerator.Generate(grid, 4);
 
             for (var z = 0; z < grid.Height; z++)

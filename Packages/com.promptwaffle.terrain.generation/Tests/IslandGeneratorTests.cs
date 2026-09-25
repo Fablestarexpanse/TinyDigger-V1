@@ -31,13 +31,13 @@ namespace PromptWaffle.Terrain.Generation.Tests
         public void TearDown() => Object.DestroyImmediate(_settings);
 
         TerrainGrid NewGrid() =>
-            new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f, _settings.Datum);
+            new TerrainGrid(Size, Size, TestOres.CreateTable(), 1f, _settings.Datum);
 
         [Test]
         public void TheRimIsUnderTheSeaAndTheMiddleIsAboveIt()
         {
             var grid = NewGrid();
-            IslandGenerator.Generate(grid, _settings);
+            IslandGenerator.Generate(grid, _settings, TestOres.Ores);
 
             // Most of the middle third of the map is land: the mask decides where exactly, so this
             // asks about the interior rather than about one cell of it.
@@ -68,7 +68,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         public void TheCoastlineIsNotACircle()
         {
             var grid = NewGrid();
-            IslandGenerator.Generate(grid, _settings);
+            IslandGenerator.Generate(grid, _settings, TestOres.Ores);
 
             var centre = new Vector2(Size * 0.5f, Size * 0.5f);
             var shortest = float.MaxValue;
@@ -98,7 +98,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         public void TheRiverOnlyEverDescendsAndEndsInTheSea()
         {
             var grid = NewGrid();
-            var island = IslandGenerator.Generate(grid, _settings);
+            var island = IslandGenerator.Generate(grid, _settings, TestOres.Ores);
 
             Assert.That(island.River.Count, Is.GreaterThan(2), "there is a river");
             for (var i = 1; i < island.River.Count; i++)
@@ -114,7 +114,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         public void SoilNeverStepsMoreThanOneMetreAndRockNeverMoreThanACliff()
         {
             var grid = NewGrid();
-            IslandGenerator.Generate(grid, _settings);
+            IslandGenerator.Generate(grid, _settings, TestOres.Ores);
 
             for (var z = 1; z < Size - 1; z++)
             {
@@ -133,8 +133,8 @@ namespace PromptWaffle.Terrain.Generation.Tests
                             continue;
 
                         // Rock is allowed to stand in a cliff; soil is not, because soil slumps.
-                        Assert.That(IslandGenerator.IsStone(grid.GetTopMaterial(x, z))
-                            && IslandGenerator.IsStone(grid.GetTopMaterial(x + dx, z + dz)), Is.True,
+                        Assert.That(TestOres.Table.IsStone(grid.GetTopMaterial(x, z))
+                            && TestOres.Table.IsStone(grid.GetTopMaterial(x + dx, z + dz)), Is.True,
                             $"cell ({x}, {z}) steps {difference} m to ({x + dx}, {z + dz}) on soil");
                         Assert.That(difference, Is.LessThanOrEqualTo(_settings.MaxCliffStep + 1e-3f),
                             $"cell ({x}, {z}) steps {difference} m to ({x + dx}, {z + dz})");
@@ -147,7 +147,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         public void EverySurfaceLandsOnTheHeightStep()
         {
             var grid = NewGrid();
-            IslandGenerator.Generate(grid, _settings);
+            IslandGenerator.Generate(grid, _settings, TestOres.Ores);
 
             for (var z = 0; z < Size; z += 3)
             {
@@ -165,7 +165,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         public void EveryColumnStandsOnBedrockFromTheDatum()
         {
             var grid = NewGrid();
-            IslandGenerator.Generate(grid, _settings);
+            IslandGenerator.Generate(grid, _settings, TestOres.Ores);
 
             for (var z = 0; z < Size; z += 5)
             {
@@ -184,9 +184,9 @@ namespace PromptWaffle.Terrain.Generation.Tests
         public void TheSameSeedGivesTheSameIsland()
         {
             var first = NewGrid();
-            var firstIsland = IslandGenerator.Generate(first, _settings);
+            var firstIsland = IslandGenerator.Generate(first, _settings, TestOres.Ores);
             var second = NewGrid();
-            var secondIsland = IslandGenerator.Generate(second, _settings);
+            var secondIsland = IslandGenerator.Generate(second, _settings, TestOres.Ores);
 
             for (var z = 0; z < Size; z += 7)
                 for (var x = 0; x < Size; x += 7)
@@ -201,11 +201,11 @@ namespace PromptWaffle.Terrain.Generation.Tests
         public void ADifferentSeedGivesADifferentIsland()
         {
             var first = NewGrid();
-            IslandGenerator.Generate(first, _settings);
+            IslandGenerator.Generate(first, _settings, TestOres.Ores);
 
             _settings.Seed = 8;
             var second = NewGrid();
-            IslandGenerator.Generate(second, _settings);
+            IslandGenerator.Generate(second, _settings, TestOres.Ores);
 
             var differences = 0;
             for (var z = 0; z < Size; z += 7)
@@ -220,7 +220,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         public void ThereIsSandAroundSeaLevelAndTopsoilWellAboveIt()
         {
             var grid = NewGrid();
-            IslandGenerator.Generate(grid, _settings);
+            IslandGenerator.Generate(grid, _settings, TestOres.Ores);
 
             var sandNearTheSea = 0;
             var topsoilInland = 0;

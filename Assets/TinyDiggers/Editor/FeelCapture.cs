@@ -206,7 +206,7 @@ namespace TinyDiggers.EditorTools
                             continue;
                         if (!grid.IsGround(x, z) || grid.GetSurfaceHeight(x, z) < World.SeaLevel + 1f)
                             continue;
-                        if (MaterialTable.IsStone(grid.GetTopMaterial(x, z)))
+                        if (TinyDiggersMaterials.IsStone(grid.GetTopMaterial(x, z)))
                             continue;
                         var dx = grid.GetSurfaceHeight(x + 4, z) - grid.GetSurfaceHeight(x - 4, z);
                         var dz = grid.GetSurfaceHeight(x, z + 4) - grid.GetSurfaceHeight(x, z - 4);

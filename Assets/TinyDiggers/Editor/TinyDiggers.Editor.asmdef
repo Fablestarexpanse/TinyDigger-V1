@@ -9,7 +9,8 @@
         "TinyDiggers.Interaction",
         "UnityEditor.TestRunner",
         "UnityEngine.TestRunner",
-        "PromptWaffle.DynamicWater"
+        "PromptWaffle.DynamicWater",
+        "TinyDiggers.Materials"
     ],
     "includePlatforms": [
         "Editor"

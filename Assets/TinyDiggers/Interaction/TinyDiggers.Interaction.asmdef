@@ -8,7 +8,8 @@
         "TinyDiggers.Units",
         "PromptWaffle.DynamicWater",
         "Unity.InputSystem",
-        "UnityEngine.UI"
+        "UnityEngine.UI",
+        "TinyDiggers.Materials"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

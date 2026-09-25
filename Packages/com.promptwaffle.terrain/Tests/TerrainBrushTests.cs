@@ -14,7 +14,7 @@ namespace PromptWaffle.Terrain.Tests
         public void SetUp()
         {
             // Bedrock 5, dirt 1, topsoil 0.5 everywhere.
-            _grid = new TerrainGrid(12, 12, MaterialTable.CreateDefault());
+            _grid = new TerrainGrid(12, 12, MaterialTable.CreateBasic());
             for (var z = 0; z < _grid.Height; z++)
                 for (var x = 0; x < _grid.Width; x++)
                     _grid.SetColumn(x, z, new[]

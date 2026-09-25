@@ -10,10 +10,10 @@ namespace TinyDiggers.Units.Tests
 
         static TerrainGrid IronField()
         {
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f);
+            var grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), 1f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
-                    grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, 2f), new Layer(MaterialTable.IronOre, 4f) });
+                    grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, 2f), new Layer(TinyDiggersMaterials.IronOre, 4f) });
             return grid;
         }
 
@@ -25,7 +25,7 @@ namespace TinyDiggers.Units.Tests
 
             Excavation.Dig(grid, scoop, 4, 4, 0, 1f);
 
-            Assert.That(scoop.GetVolume(MaterialTable.IronOreLoose), Is.EqualTo(1.5f).Within(1e-3f), "1 m³ of ore bulks by 1.5");
+            Assert.That(scoop.GetVolume(TinyDiggersMaterials.IronOreLoose), Is.EqualTo(1.5f).Within(1e-3f), "1 m³ of ore bulks by 1.5");
             Assert.That(scoop.GetVolume(MaterialTable.RockLoose), Is.Zero);
         }
 
@@ -39,19 +39,19 @@ namespace TinyDiggers.Units.Tests
             ledger.Record(Excavation.Dig(grid, scoop, 4, 4, 0, 1f).InPlaceBySource);
             ledger.Record(Excavation.Dig(grid, scoop, 3, 4, 0, 1f).InPlaceBySource);
 
-            Assert.That(ledger.Dug(MaterialTable.IronOre), Is.EqualTo(2f).Within(1e-3f));
+            Assert.That(ledger.Dug(TinyDiggersMaterials.IronOre), Is.EqualTo(2f).Within(1e-3f));
             Assert.That(ledger.OreSummary(grid.Materials), Is.EqualTo("Dug: Iron ore 2 m³"));
         }
 
         [Test]
         public void TippedOreSlumpsLikeRubble()
         {
-            var table = MaterialTable.CreateDefault();
-            Assert.That(table.GetDisturbed(MaterialTable.IronOre), Is.EqualTo(MaterialTable.IronOreLoose));
-            Assert.That(table.Get(MaterialTable.IronOreLoose).IsLoose, Is.True);
-            Assert.That(table.Get(MaterialTable.IronOreLoose).AngleOfRepose, Is.LessThan(45f));
-            Assert.That(MaterialTable.IsStone(MaterialTable.IronOre), Is.True, "ore in a face stands like rock");
-            Assert.That(MaterialTable.IsStone(MaterialTable.IronOreLoose), Is.False);
+            var table = TinyDiggersMaterials.CreateTable();
+            Assert.That(table.GetDisturbed(TinyDiggersMaterials.IronOre), Is.EqualTo(TinyDiggersMaterials.IronOreLoose));
+            Assert.That(table.Get(TinyDiggersMaterials.IronOreLoose).IsLoose, Is.True);
+            Assert.That(table.Get(TinyDiggersMaterials.IronOreLoose).AngleOfRepose, Is.LessThan(45f));
+            Assert.That(TinyDiggersMaterials.IsStone(TinyDiggersMaterials.IronOre), Is.True, "ore in a face stands like rock");
+            Assert.That(TinyDiggersMaterials.IsStone(TinyDiggersMaterials.IronOreLoose), Is.False);
         }
     }
 }

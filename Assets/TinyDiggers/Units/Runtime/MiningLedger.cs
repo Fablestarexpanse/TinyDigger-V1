@@ -41,7 +41,7 @@ namespace TinyDiggers.Units
         {
             var ores = new List<KeyValuePair<MaterialId, float>>();
             foreach (var pair in _dug)
-                if (MaterialTable.IsOre(pair.Key) && pair.Value >= 0.05f)
+                if (TinyDiggersMaterials.IsOre(pair.Key) && pair.Value >= 0.05f)
                     ores.Add(pair);
             if (ores.Count == 0)
                 return string.Empty;

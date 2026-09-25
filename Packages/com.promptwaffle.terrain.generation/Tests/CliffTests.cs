@@ -27,7 +27,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
             _settings.PlateauRadius = 26f;
             _settings.ShallowCells = 6;
             _settings.ChannelCells = 5;
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f, _settings.Datum);
+            _grid = new TerrainGrid(Size, Size, TestOres.CreateTable(), 1f, _settings.Datum);
         }
 
         [TearDown]
@@ -38,7 +38,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         [Test]
         public void OnlyRockStandsInACliffAndNoneIsTallerThanTheLimit()
         {
-            IslandGenerator.Generate(_grid, _settings);
+            IslandGenerator.Generate(_grid, _settings, TestOres.Ores);
 
             var cliffs = 0;
             for (var z = 1; z < Size - 1; z++)
@@ -59,9 +59,9 @@ namespace PromptWaffle.Terrain.Generation.Tests
                         cliffs++;
                         Assert.That(step, Is.LessThanOrEqualTo(_settings.MaxCliffStep + 1e-3f),
                             $"the step at ({x}, {z}) is {step} m");
-                        Assert.That(IslandGenerator.IsStone(_grid.GetTopMaterial(x, z)), Is.True,
+                        Assert.That(TestOres.Table.IsStone(_grid.GetTopMaterial(x, z)), Is.True,
                             $"({x}, {z}) stands in a cliff but is not rock");
-                        Assert.That(IslandGenerator.IsStone(_grid.GetTopMaterial(x + dx, z + dz)), Is.True,
+                        Assert.That(TestOres.Table.IsStone(_grid.GetTopMaterial(x + dx, z + dz)), Is.True,
                             $"({x + dx}, {z + dz}) is the foot of a cliff but is not rock");
                     }
                 }
@@ -73,7 +73,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         [Test]
         public void AFreshlyGeneratedCliffIsStableOnceTheSlumpHasSettled()
         {
-            IslandGenerator.Generate(_grid, _settings);
+            IslandGenerator.Generate(_grid, _settings, TestOres.Ores);
 
             var before = new float[Size * Size];
             for (var z = 0; z < Size; z++)

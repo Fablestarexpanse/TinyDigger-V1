@@ -25,7 +25,7 @@ namespace TinyDiggers.Units.Tests
         public void SetUp()
         {
             // The strait from FerryTests: a beach each side of two metres of water.
-            _grid = new TerrainGrid(Width, Depth, MaterialTable.CreateDefault(), heightStep: 0.5f, datum: -10f,
+            _grid = new TerrainGrid(Width, Depth, TinyDiggersMaterials.CreateTable(), heightStep: 0.5f, datum: -10f,
                 cellSize: 0.5f);
             for (var z = 0; z < Depth; z++)
                 for (var x = 0; x < Width; x++)

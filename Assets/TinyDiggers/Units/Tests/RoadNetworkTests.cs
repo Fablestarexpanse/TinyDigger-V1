@@ -13,7 +13,7 @@ namespace TinyDiggers.Units.Tests
     {
         static TerrainGrid Flat(int size, float height, float cellSize = 1f)
         {
-            var grid = new TerrainGrid(size, size, MaterialTable.CreateDefault(), 0.5f, 0f, cellSize);
+            var grid = new TerrainGrid(size, size, TinyDiggersMaterials.CreateTable(), 0.5f, 0f, cellSize);
             for (var z = 0; z < size; z++)
                 for (var x = 0; x < size; x++)
                     grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Dirt, height) });
@@ -175,7 +175,7 @@ namespace TinyDiggers.Units.Tests
             var pathfinder = new GridPathfinder(grid);
             // A road along row 14 from (2, 14) to (21, 14), with ramps to it at the ends.
             for (var x = 2; x <= 21; x++)
-                grid.SetColumn(x, 14, new[] { new Layer(MaterialTable.Dirt, 4.9f), new Layer(MaterialTable.Road, 0.1f) });
+                grid.SetColumn(x, 14, new[] { new Layer(MaterialTable.Dirt, 4.9f), new Layer(TinyDiggersMaterials.Road, 0.1f) });
             Assert.That(pathfinder.StepCost(5, 14, 6, 14), Is.EqualTo(0.7f * grid.CellSize).Within(1e-5f));
             Assert.That(pathfinder.StepCost(5, 10, 6, 10), Is.EqualTo(1f * grid.CellSize).Within(1e-5f));
 

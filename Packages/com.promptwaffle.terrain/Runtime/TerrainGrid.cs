@@ -767,13 +767,13 @@ namespace PromptWaffle.Terrain
             // it would cost more than the search.
             if (wasTop != nowTop)
             {
-                if (wasTop == MaterialTable.Road)
+                if (Materials.IsRoad(wasTop))
                 {
                     RoadCellCount--;
                     NoteRoadBlock(x, z, -1);
                 }
 
-                if (nowTop == MaterialTable.Road)
+                if (Materials.IsRoad(nowTop))
                 {
                     RoadCellCount++;
                     NoteRoadBlock(x, z, 1);

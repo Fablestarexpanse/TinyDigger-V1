@@ -25,7 +25,7 @@ namespace TinyDiggers.Units.Tests
         [SetUp]
         public void SetUp()
         {
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep: 1f);
+            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), heightStep: 1f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     SetRock(x, z, 8f);

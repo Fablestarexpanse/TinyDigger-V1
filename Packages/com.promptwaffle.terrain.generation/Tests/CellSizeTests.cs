@@ -15,7 +15,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
 
         static TerrainGrid Flat(int size, float cellSize, float heightStep)
         {
-            var grid = new TerrainGrid(size, size, MaterialTable.CreateDefault(), heightStep, 0f, cellSize);
+            var grid = new TerrainGrid(size, size, TestOres.CreateTable(), heightStep, 0f, cellSize);
             for (var z = 0; z < size; z++)
                 for (var x = 0; x < size; x++)
                     grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, 2f) });
@@ -37,7 +37,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         public void ACellSizeOfZeroIsRefused()
         {
             Assert.Throws<System.ArgumentOutOfRangeException>(() =>
-                new TerrainGrid(4, 4, MaterialTable.CreateDefault(), 0.5f, 0f, 0f));
+                new TerrainGrid(4, 4, TestOres.CreateTable(), 0.5f, 0f, 0f));
         }
 
         [Test]
@@ -129,8 +129,8 @@ namespace PromptWaffle.Terrain.Generation.Tests
                 var best = double.MaxValue;
                 for (var run = 0; run < 2; run++)
                 {
-                    var grid = new TerrainGrid(1024, 1024, MaterialTable.CreateDefault(), Half, settings.Datum, Half);
-                    best = System.Math.Min(best, IslandGenerator.Generate(grid, settings).Milliseconds);
+                    var grid = new TerrainGrid(1024, 1024, TestOres.CreateTable(), Half, settings.Datum, Half);
+                    best = System.Math.Min(best, IslandGenerator.Generate(grid, settings, TestOres.Ores).Milliseconds);
                 }
 
                 Assert.That(best, Is.LessThan(1600d), $"1024² at 0.5 m took {best:0} ms at best of two");
@@ -143,8 +143,8 @@ namespace PromptWaffle.Terrain.Generation.Tests
 
         static (float land, float peak, float iron, bool ironDepthOk) Measure(TerrainGenSettings settings, int size, float cellSize)
         {
-            var grid = new TerrainGrid(size, size, MaterialTable.CreateDefault(), cellSize, settings.Datum, cellSize);
-            IslandGenerator.Generate(grid, settings);
+            var grid = new TerrainGrid(size, size, TestOres.CreateTable(), cellSize, settings.Datum, cellSize);
+            IslandGenerator.Generate(grid, settings, TestOres.Ores);
             var land = 0f;
             var peak = float.MinValue;
             var iron = 0f;
@@ -165,11 +165,11 @@ namespace PromptWaffle.Terrain.Generation.Tests
                     {
                         var layer = grid.GetLayer(x, z, i);
                         var top = baseHeight + layer.Thickness;
-                        if (layer.Material == MaterialTable.IronOre)
+                        if (layer.Material == TestOres.Lens)
                         {
                             iron += layer.Thickness * grid.CellArea;
                             var depth = surface - top;
-                            ok &= depth >= settings.IronOre.DepthMin - 1e-3f && depth <= settings.IronOre.DepthMax + 1e-3f;
+                            ok &= depth >= settings.LensOre.DepthMin - 1e-3f && depth <= settings.LensOre.DepthMax + 1e-3f;
                         }
 
                         baseHeight = top;

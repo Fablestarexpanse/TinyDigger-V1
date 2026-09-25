@@ -750,7 +750,7 @@ namespace TinyDiggers.Units
             if (CutsStone || !_grid.InBounds(x, z))
                 return cut;
             var material = _grid.GetTopMaterial(x, z);
-            if (!MaterialTable.IsStone(material))
+            if (!TinyDiggersMaterials.IsStone(material))
                 return cut;
             return cut * (1f + _grid.Materials.Get(material).Hardness * StoneEffort);
         }
@@ -844,7 +844,7 @@ namespace TinyDiggers.Units
             if (above <= FaceReachLevels * Step + Epsilon)
                 return true;
             return above <= CliffReachLevels * Step + Epsilon
-                && MaterialTable.IsStone(_grid.GetTopMaterial(x, z));
+                && TinyDiggersMaterials.IsStone(_grid.GetTopMaterial(x, z));
         }
 
         /// <summary>

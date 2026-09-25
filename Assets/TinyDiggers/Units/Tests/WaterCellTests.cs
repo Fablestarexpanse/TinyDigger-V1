@@ -20,7 +20,7 @@ namespace TinyDiggers.Units.Tests
         {
             // The datum is below the sea, so a column's height decides whether it is land: five
             // metres of rock puts the left half at +1 m, one metre puts the right half at -3 m.
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f, datum: -4f);
+            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), 1f, datum: -4f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Rock, x < Size / 2 ? 5f : 1f) });

@@ -43,8 +43,8 @@ namespace TinyDiggers.Presentation.Tests
         (TerrainGrid grid, IslandMap map) Filled(int seed, float riverFill = ChannelSprings.DefaultRiverFill)
         {
             _settings.Seed = seed;
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f, _settings.Datum);
-            var map = IslandGenerator.Generate(grid, _settings);
+            var grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), 1f, _settings.Datum);
+            var map = IslandGenerator.Generate(grid, _settings, TinyDiggersMaterials.Ores);
             var depths = new float[Size * Size];
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)

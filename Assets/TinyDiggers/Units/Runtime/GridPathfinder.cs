@@ -131,7 +131,7 @@ namespace TinyDiggers.Units
         public float StepCost(int ax, int az, int bx, int bz)
         {
             var distance = (ax != bx && az != bz ? Diagonal : 1f) * _grid.CellSize;
-            if (_grid.GetTopMaterial(ax, az) == MaterialTable.Road && _grid.GetTopMaterial(bx, bz) == MaterialTable.Road)
+            if (_grid.GetTopMaterial(ax, az) == TinyDiggersMaterials.Road && _grid.GetTopMaterial(bx, bz) == TinyDiggersMaterials.Road)
                 return distance * RoadCost;
             var rise = Math.Abs(_grid.GetSurfaceHeight(bx, bz) - _grid.GetSurfaceHeight(ax, az));
             return distance * (1f + rise * SlopeCostFactor);

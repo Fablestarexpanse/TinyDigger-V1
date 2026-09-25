@@ -168,14 +168,14 @@ namespace PromptWaffle.Terrain.Generation.Tests
             {
                 settings.Seed = 11;
                 settings.Shape = LandShape.Continent;
-                var grid = new TerrainGrid(256, 256, MaterialTable.CreateDefault(), 1f, settings.Datum);
+                var grid = new TerrainGrid(256, 256, TestOres.CreateTable(), 1f, settings.Datum);
                 settings.RimWaterCells = 14;
                 settings.LandFeatureSize = 80f;
                 settings.RidgeWidth = 34f;
                 settings.PlateauRadius = 26f;
                 settings.ShallowCells = 6;
                 settings.ChannelCells = 5;
-                IslandGenerator.Generate(grid, settings);
+                IslandGenerator.Generate(grid, settings, TestOres.Ores);
 
                 for (var z = 0; z < grid.Height; z++)
                 {

@@ -23,7 +23,7 @@ namespace TinyDiggers.Units.Tests
         [SetUp]
         public void SetUp()
         {
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 0.5f, 0f, 1f);
+            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), 0.5f, 0f, 1f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Rock, 3f), new Layer(MaterialTable.Topsoil, Ground - 3f) });
@@ -79,7 +79,7 @@ namespace TinyDiggers.Units.Tests
             var paved = _builder.Tick();
 
             Assert.That(paved, Is.GreaterThan(50));
-            Assert.That(_grid.GetTopMaterial(10, 15), Is.EqualTo(MaterialTable.Road));
+            Assert.That(_grid.GetTopMaterial(10, 15), Is.EqualTo(TinyDiggersMaterials.Road));
             Assert.That(_grid.GetSurfaceHeight(10, 15), Is.EqualTo(Ground).Within(1e-3f), "the road is laid in the ground, not on it");
             Assert.That(_grid.GetTopMaterial(10, 18), Is.EqualTo(MaterialTable.Topsoil), "beside the road is untouched");
         }
@@ -98,7 +98,7 @@ namespace TinyDiggers.Units.Tests
             _map.Prune();
 
             Assert.That(_builder.Tick(), Is.GreaterThan(40));
-            Assert.That(_grid.GetTopMaterial(10, 15), Is.EqualTo(MaterialTable.Road));
+            Assert.That(_grid.GetTopMaterial(10, 15), Is.EqualTo(TinyDiggersMaterials.Road));
             Assert.That(_grid.GetSurfaceHeight(10, 15), Is.EqualTo(Ground + 1f).Within(1e-3f));
         }
 
@@ -126,7 +126,7 @@ namespace TinyDiggers.Units.Tests
             Plan(1, 4f, 14f, 15.5f, Ground);
             _builder.Tick();
 
-            Assert.That(_grid.GetTopMaterial(8, 15), Is.EqualTo(MaterialTable.Road), "kept where the road still runs");
+            Assert.That(_grid.GetTopMaterial(8, 15), Is.EqualTo(TinyDiggersMaterials.Road), "kept where the road still runs");
             Assert.That(_grid.GetTopMaterial(20, 15), Is.EqualTo(MaterialTable.Dirt), "given back where it no longer does");
         }
 
@@ -146,11 +146,11 @@ namespace TinyDiggers.Units.Tests
             RoadPlanner.Footprint(_grid, samples, 3, footprint, bed);
             _builder.PlanRoad(3, footprint, bed);
             _builder.Tick();
-            Assert.That(_grid.GetTopMaterial(14, 15), Is.EqualTo(MaterialTable.Road));
+            Assert.That(_grid.GetTopMaterial(14, 15), Is.EqualTo(TinyDiggersMaterials.Road));
 
             _builder.RemoveRoad(3);
 
-            Assert.That(_grid.GetTopMaterial(14, 15), Is.EqualTo(MaterialTable.Road), "the other road still runs through the junction");
+            Assert.That(_grid.GetTopMaterial(14, 15), Is.EqualTo(TinyDiggersMaterials.Road), "the other road still runs through the junction");
             Assert.That(_grid.GetTopMaterial(14, 22), Is.EqualTo(MaterialTable.Dirt), "the removed road's own cells are dirt again");
         }
 
@@ -162,7 +162,7 @@ namespace TinyDiggers.Units.Tests
             // Top first.
             var count = _grid.CopyLayers(3, 3, layers);
             Assert.That(count, Is.EqualTo(3));
-            Assert.That(layers[0].Material, Is.EqualTo(MaterialTable.Road));
+            Assert.That(layers[0].Material, Is.EqualTo(TinyDiggersMaterials.Road));
             Assert.That(layers[0].Thickness, Is.EqualTo(RoadBuilder.Thickness).Within(1e-4f));
             Assert.That(layers[1].Material, Is.EqualTo(MaterialTable.Topsoil), "the soil under it is still there, thinner");
             Assert.That(layers[1].Thickness, Is.EqualTo(2f - RoadBuilder.Thickness).Within(1e-4f));
@@ -184,7 +184,7 @@ namespace TinyDiggers.Units.Tests
             Assert.That(_builder.NeedsSurface(10, 15), Is.True);
 
             Assert.That(_builder.LaySurface(10, 15), Is.True, "what a paver will do");
-            Assert.That(_grid.GetTopMaterial(10, 15), Is.EqualTo(MaterialTable.Road));
+            Assert.That(_grid.GetTopMaterial(10, 15), Is.EqualTo(TinyDiggersMaterials.Road));
             Assert.That(_builder.NeedsSurface(10, 15), Is.False);
             Assert.That(_builder.LaySurface(10, 18), Is.False, "beside the road there is nothing to surface");
         }

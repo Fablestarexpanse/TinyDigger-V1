@@ -25,7 +25,7 @@ namespace TinyDiggers.Units.Tests
         [SetUp]
         public void SetUp()
         {
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 0.5f, 0f, 1f);
+            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), 0.5f, 0f, 1f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Rock, 3f), new Layer(MaterialTable.Topsoil, Ground - 3f) });
@@ -94,7 +94,7 @@ namespace TinyDiggers.Units.Tests
             Run(120f);
 
             Assert.That(AllBed((x, z) => _roads.IsGraded(x, z)), Is.True, "the bulldozer went over the whole bed");
-            Assert.That(AllBed((x, z) => _grid.GetTopMaterial(x, z) == MaterialTable.Road), Is.True, "and the paver after it");
+            Assert.That(AllBed((x, z) => _grid.GetTopMaterial(x, z) == TinyDiggersMaterials.Road), Is.True, "and the paver after it");
             Assert.That(dozer.RoadCellsDone, Is.GreaterThan(20));
             Assert.That(paver.RoadCellsDone, Is.GreaterThan(20));
             Assert.That(_grid.GetTopMaterial(20, 26), Is.EqualTo(MaterialTable.Topsoil), "off the road nothing changed");

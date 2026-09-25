@@ -65,7 +65,17 @@ namespace PromptWaffle.Terrain
             return disturbed.IsNone ? id : disturbed;
         }
 
-        // Ids are fixed so that generation, tests and saved data all agree on them.
+        /// <summary>Whether the material stands up like rock (<see cref="MaterialDefinition.IsStone"/>). None is not.</summary>
+        public bool IsStone(MaterialId id) => !id.IsNone && Contains(id) && _byId[id.Value].IsStone;
+
+        /// <summary>Whether the material is an ore, in place or dug (<see cref="MaterialDefinition.IsOre"/>).</summary>
+        public bool IsOre(MaterialId id) => !id.IsNone && Contains(id) && _byId[id.Value].IsOre;
+
+        /// <summary>Whether the material is a built road surface (<see cref="MaterialDefinition.IsRoad"/>).</summary>
+        public bool IsRoad(MaterialId id) => !id.IsNone && Contains(id) && _byId[id.Value].IsRoad;
+
+        // The basic set, the same in every game, with ids fixed so that generation, tests and saved
+        // data all agree on them. A game adds its own from id 10 up (ores, road surfaces, ...).
         public static readonly MaterialId Bedrock = new MaterialId(1);
         public static readonly MaterialId Granite = new MaterialId(2);
         public static readonly MaterialId Rock = new MaterialId(3);
@@ -76,72 +86,43 @@ namespace PromptWaffle.Terrain
         public static readonly MaterialId RockLoose = new MaterialId(8);
         public static readonly MaterialId DirtLoose = new MaterialId(9);
 
-        // Ores (slice 10): each in-place ore stands like rock and digs out into its own loose form,
-        // so a load of iron ore is still iron ore in the hauler.
-        public static readonly MaterialId Coal = new MaterialId(10);
-        public static readonly MaterialId CoalLoose = new MaterialId(11);
-        public static readonly MaterialId IronOre = new MaterialId(12);
-        public static readonly MaterialId IronOreLoose = new MaterialId(13);
-        public static readonly MaterialId CopperOre = new MaterialId(14);
-        public static readonly MaterialId CopperOreLoose = new MaterialId(15);
-        public static readonly MaterialId Limestone = new MaterialId(16);
-        public static readonly MaterialId LimestoneLoose = new MaterialId(17);
+        /// <summary>The first id free for a game's own materials.</summary>
+        public const byte FirstGameId = 10;
 
         /// <summary>
-        /// A built road's surface (Slice 17 Part B): packed gravel laid in place of the top of the
-        /// ground, not on top of it. Crews drive it at full speed whatever its slope.
+        /// The basic set, per TERRAIN_REFERENCE.md section 2. Undisturbed ground stands steep; once
+        /// dug it becomes a loose variant with a lower angle of repose and swells by its bulking
+        /// factor, so spoil heaps are bigger than the holes they came from and slump where cut faces
+        /// hold. Slopes of one 1 m step per cell never slump (a move needs a 2 m drop), so generated
+        /// terraces are stable.
         /// </summary>
-        public static readonly MaterialId Road = new MaterialId(18);
-
-        /// <summary>The in-place ores, in the order generation and the ore view use.</summary>
-        public static readonly MaterialId[] Ores = { Coal, IronOre, CopperOre, Limestone };
-
-        /// <summary>Whether a material is an ore, in place or dug.</summary>
-        public static bool IsOre(MaterialId material) => material.Value >= Coal.Value && material.Value <= LimestoneLoose.Value;
-
-        /// <summary>
-        /// The seed material set, per TERRAIN_REFERENCE.md section 2. Undisturbed ground stands
-        /// steep; once dug it becomes a loose variant with a lower angle of repose and swells by
-        /// its bulking factor, so spoil heaps are bigger than the holes they came from and slump
-        /// where cut faces hold. Slopes of one 1 m step per cell never slump (a move needs a 2 m
-        /// drop), so generated terraces are stable.
-        /// </summary>
-        /// <summary>
-        /// Whether a material stands up rather than slumping: rock, granite, bedrock and the
-        /// in-place ores (ore in a rock face is part of the face). A step
-        /// taller than one height step is only allowed between two of these — that is what a cliff
-        /// is — and the crew works such a face from its foot rather than walking up it.
-        /// </summary>
-        public static bool IsStone(MaterialId material) =>
-            material == Rock || material == Granite || material == Bedrock
-            || material == Coal || material == IronOre || material == CopperOre || material == Limestone;
-
-        public static MaterialTable CreateDefault()
+        public static MaterialDefinition[] BasicDefinitions() => new[]
         {
-            return new MaterialTable(
-                // The palette is warm, fairly desaturated, and deliberately high in value: every
-                // material sits inside about two stops of the next, so nothing goes black in shade
-                // and a shadowed slope still reads as the stuff it is made of rather than as grey.
-                // Darker, more saturated colours looked right in a swatch and read as dirt in game.
-                new MaterialDefinition(Bedrock, "Bedrock", new Color32(96, 99, 108, 255), 1.00f, 90f, isDiggable: false),
-                new MaterialDefinition(Granite, "Granite", new Color32(168, 158, 156, 255), 0.85f, 90f, disturbed: RockLoose, bulkingFactor: 1.5f),
-                new MaterialDefinition(Rock, "Rock", new Color32(174, 168, 158, 255), 0.60f, 80f, disturbed: RockLoose, bulkingFactor: 1.5f),
-                new MaterialDefinition(Clay, "Clay", new Color32(196, 144, 108, 255), 0.35f, 60f, bulkingFactor: 1.3f),
-                new MaterialDefinition(Dirt, "Dirt", new Color32(176, 136, 94, 255), 0.20f, 50f, disturbed: DirtLoose, bulkingFactor: 1.25f),
-                new MaterialDefinition(Sand, "Sand", new Color32(228, 210, 170, 255), 0.15f, 34f, bulkingFactor: 1.1f, isLoose: true),
-                new MaterialDefinition(Topsoil, "Topsoil", new Color32(140, 154, 100, 255), 0.10f, 50f, disturbed: Dirt, bulkingFactor: 1.25f),
-                new MaterialDefinition(RockLoose, "Loose rock", new Color32(182, 175, 164, 255), 0.30f, 38f, isLoose: true),
-                new MaterialDefinition(DirtLoose, "Loose dirt", new Color32(190, 152, 110, 255), 0.10f, 32f, isLoose: true),
-                new MaterialDefinition(Coal, "Coal", new Color32(40, 40, 44, 255), 0.45f, 80f, disturbed: CoalLoose, bulkingFactor: 1.4f),
-                new MaterialDefinition(CoalLoose, "Loose coal", new Color32(52, 52, 56, 255), 0.20f, 38f, isLoose: true),
-                new MaterialDefinition(IronOre, "Iron ore", new Color32(140, 72, 48, 255), 0.70f, 85f, disturbed: IronOreLoose, bulkingFactor: 1.5f),
-                new MaterialDefinition(IronOreLoose, "Loose iron ore", new Color32(150, 82, 56, 255), 0.30f, 38f, isLoose: true),
-                new MaterialDefinition(CopperOre, "Copper ore", new Color32(78, 140, 118, 255), 0.65f, 85f, disturbed: CopperOreLoose, bulkingFactor: 1.5f),
-                new MaterialDefinition(CopperOreLoose, "Loose copper ore", new Color32(88, 148, 124, 255), 0.30f, 38f, isLoose: true),
-                new MaterialDefinition(Limestone, "Limestone", new Color32(214, 206, 184, 255), 0.50f, 85f, disturbed: LimestoneLoose, bulkingFactor: 1.45f),
-                new MaterialDefinition(LimestoneLoose, "Loose limestone", new Color32(222, 214, 192, 255), 0.25f, 36f, isLoose: true),
-                // Packed gravel: greyer and a little darker than loose rock, so a road reads as a road.
-                new MaterialDefinition(Road, "Road", new Color32(158, 150, 136, 255), 0.45f, 60f, disturbed: RockLoose, bulkingFactor: 1.3f));
+            // The palette is warm, fairly desaturated, and deliberately high in value: every
+            // material sits inside about two stops of the next, so nothing goes black in shade
+            // and a shadowed slope still reads as the stuff it is made of rather than as grey.
+            // Darker, more saturated colours looked right in a swatch and read as dirt in game.
+            new MaterialDefinition(Bedrock, "Bedrock", new Color32(96, 99, 108, 255), 1.00f, 90f, isDiggable: false, isStone: true),
+            new MaterialDefinition(Granite, "Granite", new Color32(168, 158, 156, 255), 0.85f, 90f, disturbed: RockLoose, bulkingFactor: 1.5f, isStone: true),
+            new MaterialDefinition(Rock, "Rock", new Color32(174, 168, 158, 255), 0.60f, 80f, disturbed: RockLoose, bulkingFactor: 1.5f, isStone: true),
+            new MaterialDefinition(Clay, "Clay", new Color32(196, 144, 108, 255), 0.35f, 60f, bulkingFactor: 1.3f),
+            new MaterialDefinition(Dirt, "Dirt", new Color32(176, 136, 94, 255), 0.20f, 50f, disturbed: DirtLoose, bulkingFactor: 1.25f),
+            new MaterialDefinition(Sand, "Sand", new Color32(228, 210, 170, 255), 0.15f, 34f, bulkingFactor: 1.1f, isLoose: true),
+            new MaterialDefinition(Topsoil, "Topsoil", new Color32(140, 154, 100, 255), 0.10f, 50f, disturbed: Dirt, bulkingFactor: 1.25f),
+            new MaterialDefinition(RockLoose, "Loose rock", new Color32(182, 175, 164, 255), 0.30f, 38f, isLoose: true),
+            new MaterialDefinition(DirtLoose, "Loose dirt", new Color32(190, 152, 110, 255), 0.10f, 32f, isLoose: true),
+        };
+
+        /// <summary>The basic set plus a game's own materials.</summary>
+        public static MaterialTable CreateBasic(params MaterialDefinition[] gameMaterials)
+        {
+            var basic = BasicDefinitions();
+            if (gameMaterials == null || gameMaterials.Length == 0)
+                return new MaterialTable(basic);
+            var all = new MaterialDefinition[basic.Length + gameMaterials.Length];
+            basic.CopyTo(all, 0);
+            gameMaterials.CopyTo(all, basic.Length);
+            return new MaterialTable(all);
         }
     }
 }

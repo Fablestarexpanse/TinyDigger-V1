@@ -34,8 +34,8 @@ namespace PromptWaffle.Terrain.Generation.Tests
 
         TerrainGrid Generate(int size)
         {
-            var grid = new TerrainGrid(size, size, MaterialTable.CreateDefault(), 1f, _settings.Datum);
-            IslandGenerator.Generate(grid, _settings);
+            var grid = new TerrainGrid(size, size, TestOres.CreateTable(), 1f, _settings.Datum);
+            IslandGenerator.Generate(grid, _settings, TestOres.Ores);
             return grid;
         }
 
@@ -43,7 +43,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         public void TheSameIslandSitsInTheMiddleOfABiggerDisc()
         {
             // The small disc's whole radius, so its island is the one it always made.
-            _settings.LandRadius = TerrainGenerator.DiscRadius(new TerrainGrid(Small, Small, MaterialTable.CreateDefault(), 1f, _settings.Datum));
+            _settings.LandRadius = TerrainGenerator.DiscRadius(new TerrainGrid(Small, Small, TestOres.CreateTable(), 1f, _settings.Datum));
             var small = Generate(Small);
             var big = Generate(Big);
             var shift = (Big - Small) / 2;

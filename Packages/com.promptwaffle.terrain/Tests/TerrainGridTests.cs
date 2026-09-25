@@ -14,7 +14,7 @@ namespace PromptWaffle.Terrain.Tests
         [SetUp]
         public void SetUp()
         {
-            _materials = MaterialTable.CreateDefault();
+            _materials = MaterialTable.CreateBasic();
             _grid = new TerrainGrid(4, 3, _materials);
         }
 
@@ -423,7 +423,7 @@ namespace PromptWaffle.Terrain.Tests
         [Test]
         public void LooseVariantsSlumpAtShallowerAnglesThanTheGroundTheyCameFrom()
         {
-            var table = MaterialTable.CreateDefault();
+            var table = MaterialTable.CreateBasic();
 
             Assert.That(table.Get(MaterialTable.RockLoose).AngleOfRepose, Is.LessThan(table.Get(MaterialTable.Rock).AngleOfRepose));
             Assert.That(table.Get(MaterialTable.DirtLoose).AngleOfRepose, Is.LessThan(table.Get(MaterialTable.Dirt).AngleOfRepose));
@@ -438,13 +438,13 @@ namespace PromptWaffle.Terrain.Tests
         [TestCase(9, 1f)] // DirtLoose is already loose
         public void BulkingFactorsFollowTheReference(int id, float expected)
         {
-            Assert.That(MaterialTable.CreateDefault().Get(new MaterialId((byte)id)).BulkingFactor, Is.EqualTo(expected));
+            Assert.That(MaterialTable.CreateBasic().Get(new MaterialId((byte)id)).BulkingFactor, Is.EqualTo(expected));
         }
 
         [Test]
         public void OnlyLooseMaterialsAreMarkedLoose()
         {
-            var table = MaterialTable.CreateDefault();
+            var table = MaterialTable.CreateBasic();
 
             Assert.That(table.Get(MaterialTable.RockLoose).IsLoose, Is.True);
             Assert.That(table.Get(MaterialTable.DirtLoose).IsLoose, Is.True);
@@ -472,7 +472,7 @@ namespace PromptWaffle.Terrain.Tests
         [Test]
         public void WithAHeightStepEditsMoveWholeSteps()
         {
-            var grid = new TerrainGrid(2, 2, MaterialTable.CreateDefault(), heightStep: 1f);
+            var grid = new TerrainGrid(2, 2, MaterialTable.CreateBasic(), heightStep: 1f);
             SetColumn(grid, 0, 0, new Layer(MaterialTable.Bedrock, 1f), new Layer(MaterialTable.Dirt, 5f));
             var removed = new List<MaterialVolume>();
 

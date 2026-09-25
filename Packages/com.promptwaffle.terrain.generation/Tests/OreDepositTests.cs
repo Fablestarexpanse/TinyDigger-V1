@@ -35,8 +35,8 @@ namespace PromptWaffle.Terrain.Generation.Tests
         TerrainGrid Generate(bool ores)
         {
             _settings.Ores = ores;
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f, _settings.Datum);
-            IslandGenerator.Generate(grid, _settings);
+            var grid = new TerrainGrid(Size, Size, TestOres.CreateTable(), 1f, _settings.Datum);
+            IslandGenerator.Generate(grid, _settings, TestOres.Ores);
             return grid;
         }
 
@@ -48,7 +48,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
                     for (var i = 0; i < grid.GetLayerCount(x, z); i++)
                     {
                         var layer = grid.GetLayer(x, z, i);
-                        if (!MaterialTable.IsOre(layer.Material))
+                        if (!TestOres.Table.IsOre(layer.Material))
                             continue;
                         volumes.TryGetValue(layer.Material, out var v);
                         volumes[layer.Material] = v + layer.Thickness;
@@ -60,7 +60,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         public void EveryOreIsLaidDownOnTheIsland()
         {
             var volumes = OreVolumes(Generate(ores: true));
-            foreach (var ore in MaterialTable.Ores)
+            foreach (var ore in TestOres.InPlace)
                 Assert.That(volumes.ContainsKey(ore) && volumes[ore] > 50f, Is.True,
                     $"{ore.Value} should have more than 50 m³ on the island");
         }
@@ -78,7 +78,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
                     Assert.That(withOre.GetSurfaceHeight(x, z), Is.EqualTo(plain.GetSurfaceHeight(x, z)).Within(1e-3f),
                         $"({x}, {z}) moved");
                     Assert.That(withOre.GetTopMaterial(x, z) == plain.GetTopMaterial(x, z)
-                        || MaterialTable.IsOre(withOre.GetTopMaterial(x, z)) && MaterialTable.IsStone(plain.GetTopMaterial(x, z)),
+                        || TestOres.Table.IsOre(withOre.GetTopMaterial(x, z)) && TestOres.Table.IsStone(plain.GetTopMaterial(x, z)),
                         Is.True, $"({x}, {z}) changed its top from something other than stone");
                 }
             }
@@ -104,7 +104,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         public void IronLiesInsideItsDepthWindow()
         {
             var grid = Generate(ores: true);
-            var spec = _settings.IronOre;
+            var spec = _settings.LensOre;
             for (var z = 0; z < Size; z++)
             {
                 for (var x = 0; x < Size; x++)
@@ -115,7 +115,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
                     {
                         var layer = grid.GetLayer(x, z, i);
                         var top = baseHeight + layer.Thickness;
-                        if (layer.Material == MaterialTable.IronOre)
+                        if (layer.Material == TestOres.Lens)
                         {
                             var depth = surface - top;
                             Assert.That(depth, Is.GreaterThanOrEqualTo(spec.DepthMin - 1e-3f), $"({x}, {z}) iron {depth} m down");
@@ -133,7 +133,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
         {
             var a = OreVolumes(Generate(ores: true));
             var b = OreVolumes(Generate(ores: true));
-            foreach (var ore in MaterialTable.Ores)
+            foreach (var ore in TestOres.InPlace)
                 Assert.That(b[ore], Is.EqualTo(a[ore]).Within(1e-3f));
         }
 
@@ -145,7 +145,7 @@ namespace PromptWaffle.Terrain.Generation.Tests
             for (var i = 0; i < column.Length; i++)
                 column[count++] = new Layer(i % 2 == 0 ? MaterialTable.Rock : MaterialTable.Clay, 1f);
 
-            OreDeposits.Convert(column, ref count, 0f, 2.2f, 2.8f, MaterialTable.IronOre);
+            OreDeposits.Convert(column, ref count, 0f, 2.2f, 2.8f, TestOres.Lens);
 
             Assert.That(count, Is.EqualTo(column.Length), "a full column is left alone rather than overflowing");
         }

@@ -13,7 +13,7 @@ namespace PromptWaffle.Terrain.Tests
 
         static TerrainGrid FlatGrid()
         {
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 0.5f, 0f, 0.5f);
+            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateBasic(), 0.5f, 0f, 0.5f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, Ground) });

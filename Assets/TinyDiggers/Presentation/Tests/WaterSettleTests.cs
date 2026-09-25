@@ -15,7 +15,7 @@ namespace TinyDiggers.Presentation.Tests
 
         static (TerrainGrid grid, IslandMap island) Island(float landHeight)
         {
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep: 0.5f);
+            var grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), heightStep: 0.5f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, landHeight) });
@@ -103,7 +103,7 @@ namespace TinyDiggers.Presentation.Tests
         [Test]
         public void TheSoakedFilmIsShallowerThanTheCrewWades()
         {
-            var grid = new TerrainGrid(4, 4, MaterialTable.CreateDefault());
+            var grid = new TerrainGrid(4, 4, TinyDiggersMaterials.CreateTable());
             Assert.That(WaterSettle.DefaultSoakDepth, Is.LessThan(grid.DeepWater),
                 "only a film soaks; anything the player floods stays");
             Assert.That(WaterSettle.DefaultSoakRate, Is.GreaterThan(0f));

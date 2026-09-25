@@ -25,7 +25,7 @@ namespace TinyDiggers.Units.Tests
         public void SetUp()
         {
             // Datum 4 m under the sea: the left half stands at +1 m, the right half is a pit at -3 m.
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f, datum: -4f);
+            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), 1f, datum: -4f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Rock, x < Size / 2 ? 5f : 1f) });

@@ -20,7 +20,7 @@ namespace TinyDiggers.Units.Tests
         [SetUp]
         public void SetUp()
         {
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep: 0.5f,
+            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), heightStep: 0.5f,
                 cellSize: 0.5f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
@@ -48,7 +48,7 @@ namespace TinyDiggers.Units.Tests
         public void TheSameAngleMeansTheSameGroundWhateverTheCellSize()
         {
             var coarse = new GridPathfinder(new TerrainGrid(Size, Size,
-                MaterialTable.CreateDefault(), heightStep: 1f, cellSize: 1f));
+                TinyDiggersMaterials.CreateTable(), heightStep: 1f, cellSize: 1f));
             _pathfinder.MaxSlopeDegrees = 30f;
             coarse.MaxSlopeDegrees = 30f;
 

@@ -126,9 +126,9 @@ namespace TinyDiggers.Interaction
 
         Color32 ColourOf(MaterialId ore)
         {
-            if (ore == MaterialTable.Coal || ore == MaterialTable.CoalLoose) return _coal;
-            if (ore == MaterialTable.IronOre || ore == MaterialTable.IronOreLoose) return _iron;
-            if (ore == MaterialTable.CopperOre || ore == MaterialTable.CopperOreLoose) return _copper;
+            if (ore == TinyDiggersMaterials.Coal || ore == TinyDiggersMaterials.CoalLoose) return _coal;
+            if (ore == TinyDiggersMaterials.IronOre || ore == TinyDiggersMaterials.IronOreLoose) return _iron;
+            if (ore == TinyDiggersMaterials.CopperOre || ore == TinyDiggersMaterials.CopperOreLoose) return _copper;
             return _limestone;
         }
     }

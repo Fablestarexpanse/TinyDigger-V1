@@ -12,7 +12,7 @@ namespace TinyDiggers.Units.Tests
         static TerrainGrid RockField(float heightStep)
         {
             // Bedrock 2m under 6m of rock everywhere: surface at 8m.
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep);
+            var grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), heightStep);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, 2f), new Layer(MaterialTable.Rock, 6f) });
@@ -214,7 +214,7 @@ namespace TinyDiggers.Units.Tests
         {
             // Plains soil: each 1m dig is 0.3 topsoil (-> 0.375 dirt) over 0.7 dirt (-> 0.875 loose
             // dirt), so the load alternates pieces that are each under one step.
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep: 1f);
+            var grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), heightStep: 1f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     grid.SetColumn(x, z, new[]
@@ -244,7 +244,7 @@ namespace TinyDiggers.Units.Tests
             // Hilltop soil: each 1m dig is topsoil, a little dirt and some rock, three pieces.
             // Three cells interleave loose dirt and loose rock six times; one tip must still fit
             // on a generated five-layer column.
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), heightStep: 1f);
+            var grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), heightStep: 1f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     grid.SetColumn(x, z, new[]

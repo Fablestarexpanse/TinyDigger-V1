@@ -13,7 +13,7 @@ namespace PromptWaffle.Terrain.Tests
         public void SetUp()
         {
             // 20x20 of flat 2m dirt.
-            _grid = new TerrainGrid(20, 20, MaterialTable.CreateDefault());
+            _grid = new TerrainGrid(20, 20, MaterialTable.CreateBasic());
             for (var z = 0; z < _grid.Height; z++)
                 for (var x = 0; x < _grid.Width; x++)
                     _grid.Add(x, z, MaterialTable.Dirt, 2f);

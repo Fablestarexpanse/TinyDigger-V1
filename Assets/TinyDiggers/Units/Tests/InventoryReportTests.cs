@@ -12,7 +12,7 @@ namespace TinyDiggers.Units.Tests
             inventory.Add(MaterialTable.DirtLoose, 1f);
             inventory.Add(MaterialTable.RockLoose, 1.5f);
 
-            var text = new InventoryReport().Describe(inventory, MaterialTable.CreateDefault());
+            var text = new InventoryReport().Describe(inventory, TinyDiggersMaterials.CreateTable());
 
             Assert.That(text, Does.Contain("Crew load 2.5 / 5.0 m³ (2.5 m³ free)"));
             Assert.That(text.IndexOf("Loose rock"), Is.LessThan(text.IndexOf("Loose dirt")), "top of the stack first");
@@ -22,7 +22,7 @@ namespace TinyDiggers.Units.Tests
         [Test]
         public void SaysFullAndEmpty()
         {
-            var materials = MaterialTable.CreateDefault();
+            var materials = TinyDiggersMaterials.CreateTable();
             var inventory = new MaterialInventory(3f);
             var report = new InventoryReport();
 

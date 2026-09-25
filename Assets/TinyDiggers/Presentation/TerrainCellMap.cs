@@ -178,7 +178,7 @@ namespace TinyDiggers.Presentation
             var top = _grid.GetTopMaterial(x, z);
             _pixels[at] = top.Value;
             _pixels[at + 1] = Exposed(x, z, top.Value);
-            _pixels[at + 3] = MaterialTable.IsStone(top) ? (byte)255 : (byte)0;
+            _pixels[at + 3] = TinyDiggersMaterials.IsStone(top) ? (byte)255 : (byte)0;
         }
 
         /// <summary>

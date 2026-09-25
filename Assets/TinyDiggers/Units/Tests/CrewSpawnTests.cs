@@ -18,7 +18,7 @@ namespace TinyDiggers.Units.Tests
         public void SetUp()
         {
             // Level land at +1 m everywhere (datum 4 m under the sea).
-            _grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f, datum: -4f);
+            _grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), 1f, datum: -4f);
             for (var z = 0; z < Size; z++)
                 for (var x = 0; x < Size; x++)
                     Column(x, z, 5f);

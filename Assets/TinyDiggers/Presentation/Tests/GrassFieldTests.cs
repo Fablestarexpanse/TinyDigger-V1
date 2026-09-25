@@ -12,7 +12,7 @@ namespace TinyDiggers.Presentation.Tests
         /// <summary>Topsoil land for x &lt; 40, then sand, then sea past x = 50.</summary>
         static TerrainGrid Meadow()
         {
-            var grid = new TerrainGrid(Size, Size, MaterialTable.CreateDefault(), 1f, -10f);
+            var grid = new TerrainGrid(Size, Size, TinyDiggersMaterials.CreateTable(), 1f, -10f);
             for (var z = 0; z < Size; z++)
             {
                 for (var x = 0; x < Size; x++)

@@ -127,7 +127,8 @@ namespace PromptWaffle.Terrain.Generation
         static readonly int[] StepX = { 1, -1, 0, 0, 1, 1, -1, -1 };
         static readonly int[] StepZ = { 0, 0, 1, -1, 1, -1, 1, -1 };
 
-        public static IslandMap Generate(TerrainGrid grid, TerrainGenSettings settings)
+        /// <param name="ores">Which of the game's materials fills each ore habit; the default lays no ore.</param>
+        public static IslandMap Generate(TerrainGrid grid, TerrainGenSettings settings, OreMaterials ores = default)
         {
             if (grid == null)
                 throw new ArgumentNullException(nameof(grid));
@@ -137,11 +138,11 @@ namespace PromptWaffle.Terrain.Generation
             // The generator works in cells; the settings are in metres. At one-metre cells they
             // are the same thing, so the asset is used as it is.
             if (Mathf.Approximately(grid.CellSize, 1f))
-                return GenerateInCells(grid, settings);
+                return GenerateInCells(grid, settings, ores);
             var scaled = settings.ScaledForCells(grid.CellSize);
             try
             {
-                return GenerateInCells(grid, scaled);
+                return GenerateInCells(grid, scaled, ores);
             }
             finally
             {
@@ -149,7 +150,7 @@ namespace PromptWaffle.Terrain.Generation
             }
         }
 
-        static IslandMap GenerateInCells(TerrainGrid grid, TerrainGenSettings settings)
+        static IslandMap GenerateInCells(TerrainGrid grid, TerrainGenSettings settings, OreMaterials ores)
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             var lastMark = 0d;
@@ -427,7 +428,7 @@ namespace PromptWaffle.Terrain.Generation
             // the step is a cliff face and stays rock, or loose gravel would stand as a cliff.
             if (map.ChannelBeds != null)
                 for (var cell = 0; cell < cells; cell++)
-                    if (map.ChannelBeds[cell] != 0 && inDisc[cell] && !IsStone(surfaceMaterials[cell]))
+                    if (map.ChannelBeds[cell] != 0 && inDisc[cell] && !grid.Materials.IsStone(surfaceMaterials[cell]))
                         surfaceMaterials[cell] = MaterialTable.RockLoose;
 
             map.Mark("materials", stopwatch, ref lastMark);
@@ -464,7 +465,7 @@ namespace PromptWaffle.Terrain.Generation
 
                         var count = BuildColumn(column, heights[cell], surfaceMaterials[cell],
                             highGround[cell], ValleyStrength(accumulation[cell]), datum, settings);
-                        OreDeposits.Apply(column, ref count, x - shift.x, z - shift.y, heights[cell], datum, highGround[cell], oreFields, settings);
+                        OreDeposits.Apply(column, ref count, x - shift.x, z - shift.y, heights[cell], datum, highGround[cell], oreFields, settings, ores);
                         column.Slice(0, count).CopyTo(new Span<Layer>(bandLayers, slot * perCell, perCell));
                         bandCounts[slot] = (byte)count;
                     }
@@ -1598,7 +1599,7 @@ namespace PromptWaffle.Terrain.Generation
         /// crew walks on that has to stay climbable.
         /// </summary>
         /// <summary>Rock, granite and bedrock stand up; everything else slumps.</summary>
-        public static bool IsStone(MaterialId material) => MaterialTable.IsStone(material);
+
 
         /// <summary>
         /// Which cells are allowed to stand in a cliff: the ones the land is already steep at,

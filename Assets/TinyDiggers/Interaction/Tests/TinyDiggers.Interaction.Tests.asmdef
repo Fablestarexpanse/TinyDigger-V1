@@ -7,7 +7,8 @@
         "PromptWaffle.Terrain",
         "PromptWaffle.Terrain.Generation",
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner"
+        "UnityEditor.TestRunner",
+        "TinyDiggers.Materials"
     ],
     "includePlatforms": [
         "Editor"

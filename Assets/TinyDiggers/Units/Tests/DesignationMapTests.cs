@@ -12,7 +12,7 @@ namespace TinyDiggers.Units.Tests
         [SetUp]
         public void SetUp()
         {
-            _grid = new TerrainGrid(8, 8, MaterialTable.CreateDefault(), heightStep: 1f);
+            _grid = new TerrainGrid(8, 8, TinyDiggersMaterials.CreateTable(), heightStep: 1f);
             for (var z = 0; z < 8; z++)
                 for (var x = 0; x < 8; x++)
                     _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, 1f), new Layer(MaterialTable.Dirt, 4f) });
