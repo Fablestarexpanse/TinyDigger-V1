@@ -6765,3 +6765,28 @@ Run on the seed island: a 40 m × 6 m mesa at (1550, 1697) raised 2,538 cells by
 click, the middle from 5.5 m to 11.5 m under topsoil, and 11 seconds later the profile across it
 (5.5 … 8, 11.5, 11.5, 11.5, 8.5 … 7) had not moved: cliffs and flat top held.
 `Screenshots/god-mode-before-after.png` (the upper frame is just after the click, with the next ghost on the cursor).
+
+**More stamps, and what size they want (2026-09-24).** Six more through the same workflow (seeds
+9700–10200): volcano 80 × 20 m, three hills (hills3) 50 × 5, plateau 60 × 6, drumlins 50 × 3, crag
+24 × 6 all read as their shape first time (`Screenshots/stamps-sheet-2.png`). The ridge failed twice
+more before it worked: asked for a ridge "across the middle", Krea2 ran it edge to edge and the depth
+pass read the land on one side as higher, a wall with cut ends. What worked (seed 9701) was asking for
+a *short isolated hogback, about half the frame long, in the very centre, flat plain on every side*:
+a sharp crest with both ends dropping to the plain. It replaced the clipped `ridge.png`, so the ridge
+asset keeps its name. Lesson for prompts: say how big the feature is in the frame, not just where.
+
+All eleven were god-stamped at one size, 36 m across with height in proportion, on a pad flattened by
+a 240 m Replace stamp (`Screenshots/stamps-styles-36m.png`): every one reads. Sizes, crater at 16 / 40
+/ 90 m and volcano at 20 / 50 / 110 m (`Screenshots/stamps-sizes.png`): **under about 30 m a stamp is
+a dimple or a blob** (32 cells across is too few for its shape); 40–50 m reads; 90–110 m is where the
+detail pays off (the 110 m volcano's radial gullies, 25,803 cells and 60,612 m³ in one click).
+
+**A god stamp lifted the sea with it.** The water simulation keeps each cell's *depth* when the ground
+under it changes — right for a dig or a tip, wrong for land lifted metres out of the sea: the pad came
+up with the sea still on it, and 20 s later 1,177 of 3,876 samples on it were wet with water pouring
+off in foam. `WaterDisplacement.KeepSurface` (Presentation) now runs after every god stamp: where the
+ground rose, the water surface stays put, so depth drops by the rise and land raised clear of it is
+dry (0 of 3,876 wet afterwards). It is a tool's-click operation: it reads the depths back from the GPU
+and writing them stills the flow everywhere for a moment. Land raised out of the sea comes up as its
+seabed (sand, then the darker seabed material), not grass. **Still open:** a god stamp over a river
+leaves the cells flagged as river bed, drawn as a grey ribbon over the new hill.

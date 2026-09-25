@@ -29,6 +29,12 @@ namespace TinyDiggers.EditorTools
                 case "ridge": return (50f, 6f);
                 case "butte": return (24f, 8f);
                 case "terraces": return (40f, 6f);
+                case "ridge2": return (60f, 8f);
+                case "volcano": return (80f, 20f);
+                case "hills3": return (50f, 5f);
+                case "plateau": return (60f, 6f);
+                case "drumlins": return (50f, 3f);
+                case "crag": return (24f, 6f);
                 default: return (40f, 6f);
             }
         }

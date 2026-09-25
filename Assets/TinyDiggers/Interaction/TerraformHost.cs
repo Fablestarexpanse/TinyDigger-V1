@@ -460,6 +460,8 @@ namespace TinyDiggers.Interaction
                 return;
             }
 
+            // Land raised out of a sea pushes the sea aside rather than lifting it.
+            WaterDisplacement.KeepSurface(_terrain, edit.Changes);
             _godEdits.Add(edit);
             if (_godEdits.Count > GodUndoDepth)
                 _godEdits.RemoveAt(0);

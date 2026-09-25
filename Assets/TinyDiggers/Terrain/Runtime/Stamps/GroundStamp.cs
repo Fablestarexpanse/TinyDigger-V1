@@ -23,6 +23,12 @@ namespace TinyDiggers.Terrain
         {
             internal readonly List<(int X, int Z, Layer[] Column)> Before = new List<(int, int, Layer[])>();
 
+            /// <summary>
+            /// Each cell whose surface moved, and by how much (up positive). What the water needs to
+            /// know: land raised out of a sea must not carry the sea up with it.
+            /// </summary>
+            public readonly List<(int X, int Z, float Change)> Changes = new List<(int, int, float)>();
+
             /// <summary>Cells whose surface moved.</summary>
             public int Cells { get; internal set; }
 
@@ -84,6 +90,7 @@ namespace TinyDiggers.Terrain
                     continue;
 
                 edit.Before.Add((x, z, before));
+                edit.Changes.Add((x, z, moved));
                 edit.Cells++;
                 if (moved > 0f)
                     edit.Raised += moved * grid.CellArea;
