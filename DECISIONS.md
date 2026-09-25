@@ -6837,3 +6837,10 @@ raised cell's own top is something else it lays a 0.5 m skin of that surface ove
 samples under it: all 25,803 raised cells came up topsoil, no stripe
 (`Screenshots/god-volcano-over-river.png`). The river now ends at its foot either side, which is what
 burying a river does; the stretch upstream will pond against it.
+
+**Ruling: the generator does not place stamps (Ronan, 2026-09-24: "I don't think generator needs to
+place stamps just user").** Stamps are the player's tool — the terraform tool, crew-built or god mode —
+and nothing else. This reverses the earlier "one library, two uses" ruling: slice C (generator stamp
+rules) is dropped, and the mountain shapes stay the generator's own job. `StampUse.Generator` and the
+stamp code living in the Terrain assembly are left as they are; they cost nothing, but nothing is to be
+built on them for the generator.
