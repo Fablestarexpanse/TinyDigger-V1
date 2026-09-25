@@ -36,7 +36,13 @@ Shader "TinyDiggers/Terrain Triplanar"
         _DetailRepeat ("Detail normal repeat (m)", Range(0.05, 16)) = 0.25
         _DetailStrength ("Detail normal strength", Range(0, 2)) = 1
         _MacroRatio ("Anti-tiling: second scale (x repeat)", Range(1, 8)) = 3.3
-        _MacroMix ("Anti-tiling: second scale share", Range(0, 1)) = 0.45
+        _MacroMix ("Anti-tiling: overall strength", Range(0, 1)) = 1
+        _MacroNear ("Anti-tiling: second scale share up close", Range(0, 1)) = 0.25
+        _MacroFar ("Anti-tiling: second scale share far off", Range(0, 1)) = 0.7
+        _MacroFarDistance ("Anti-tiling: far off from (m)", Range(5, 200)) = 45
+        _MacroRotation ("Anti-tiling: second scale turned (degrees)", Range(0, 180)) = 37
+        _FarRatio ("Anti-tiling: third scale (x repeat)", Range(2, 40)) = 12
+        _FarMix ("Anti-tiling: third scale share far off", Range(0, 1)) = 0.35
         _MottleRepeat ("Mottle repeat (m)", Range(2, 40)) = 11.3
         _MottleStrength ("Mottle strength", Range(0, 0.4)) = 0.1
         _BlendWidth ("Material blend width (cells)", Range(0.05, 4)) = 2
@@ -87,6 +93,12 @@ Shader "TinyDiggers/Terrain Triplanar"
             half _DetailStrength;
             float _MacroRatio;
             half _MacroMix;
+            half _MacroNear;
+            half _MacroFar;
+            float _MacroFarDistance;
+            float _MacroRotation;
+            float _FarRatio;
+            half _FarMix;
             float _MottleRepeat;
             half _MottleStrength;
             float _BlendWidth;
@@ -310,7 +322,23 @@ Shader "TinyDiggers/Terrain Triplanar"
                 // never line up, and mixed in: a painted tile repeated every few metres reads as a
                 // grid of the same blocks (the rock tiles did, 2026-09-24); two scales that do not
                 // share a period break it up.
-                TriplanarUV macroUV = MakeTriplanarUV(positionWS + float3(37.1, 11.3, 23.7), _AlbedoRepeat * _MacroRatio);
+                //
+                // Multi-UV mixing (Ronan's reference, 2026-09-24): the second scale is turned, so its
+                // grid never runs parallel to the first, and its share grows with distance, so the
+                // fine detail stays crisp up close while a hillside far off shows the broad pattern
+                // instead of a grid. Slow noise pushes the share about so it is not even anywhere.
+                // Beyond the far distance a third, much larger scale joins in for the long views;
+                // it is only sampled there.
+                float viewDistance = length(positionWS - _WorldSpaceCameraPos);
+                float farAmount = smoothstep(0.0, _MacroFarDistance, viewDistance);
+                float shareNoise = ValueNoise(positionWS.xz * 0.02 + 71.0) - 0.5;
+                float macroShare = saturate(lerp(_MacroNear, _MacroFar, farAmount) + shareNoise * 0.3) * _MacroMix;
+                float turn = radians(_MacroRotation);
+                float2 turned = float2(positionWS.x * cos(turn) - positionWS.z * sin(turn), positionWS.x * sin(turn) + positionWS.z * cos(turn));
+                float3 macroAt = float3(turned.x, positionWS.y, turned.y) + float3(37.1, 11.3, 23.7);
+                TriplanarUV macroUV = MakeTriplanarUV(macroAt, _AlbedoRepeat * _MacroRatio);
+                float farShare = _FarMix * _MacroMix * smoothstep(_MacroFarDistance * 0.75, _MacroFarDistance * 2.0, viewDistance);
+                TriplanarUV farUV = MakeTriplanarUV(positionWS + float3(-53.7, 5.1, 91.3), _AlbedoRepeat * _FarRatio);
 
                 // Stone and everything else are blended separately and then mixed along a smooth
                 // line: the 0.5 contour of the blurred stone field (cell map blue), bent by noise.
@@ -352,8 +380,10 @@ Shader "TinyDiggers/Terrain Triplanar"
                     // the band samples both; the gradients are explicit, so the branch is safe.
                     float firstSlice = cutBlend >= 0.999 ? cutSlice : topSlice;
                     half4 albedoSample = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), albedoUV, axisWeights, firstSlice);
-                    if (_MacroMix > 0.001)
-                        albedoSample = lerp(albedoSample, SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), macroUV, axisWeights, firstSlice), _MacroMix);
+                    if (macroShare > 0.001)
+                        albedoSample = lerp(albedoSample, SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), macroUV, axisWeights, firstSlice), macroShare);
+                    if (farShare > 0.001)
+                        albedoSample = lerp(albedoSample, SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), farUV, axisWeights, firstSlice), farShare);
                     half4 normalSample = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Normals, sampler_Normals), detailUV, axisWeights, firstSlice);
                     half smooth = _MaterialParams[(int)firstSlice].x;
 

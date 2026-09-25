@@ -7021,3 +7021,16 @@ multi-UV. Ronan: "ok go".
 - The effect fades out once a cell is under about 8 pixels across. Far off, mipped heights made the
   edges sparkle with specks.
 - `_HeightBlend` 0 restores the old even fade. `_HeightBlendDepth` 0.2 sets how sharp the edge is.
+
+**Multi-UV mixing (built).**
+- The second, 3.3× larger albedo scale is turned 37°, so its grid never runs parallel to the first.
+- Its share grows with distance, from 25 % up close to 70 % beyond 45 m, and slow noise moves it
+  ±15 %. It used to be a flat 45 % everywhere.
+- A third scale, 12× larger, joins at up to 35 % from about 34 m to 90 m and beyond. It is only
+  sampled there, so close-up cost is unchanged.
+- A/B on the rockiest hillside from about 60 m: the old small repeating blocks on the cliffs give way
+  to broader, irregular structure. Up close the fine detail is crisper, because the fine scale now
+  keeps 75 % instead of 55 %.
+- `_MacroMix` is now an overall strength (1). The near/far shares, far distance, rotation, third
+  scale and its share are all on the material.
+- Still open: the lush/dry variant patches sample only the fine scale.
