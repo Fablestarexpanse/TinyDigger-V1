@@ -51,6 +51,21 @@ namespace TinyDiggers.Terrain.Tests
         }
 
         [Test]
+        public void AHillOverARiverBedIsGrassedLikeTheLandRoundIt()
+        {
+            // A sand bed three cells wide running right through where the hill goes.
+            for (var z = 0; z < Size; z++)
+                for (var x = 39; x <= 41; x++)
+                    _grid.SetColumn(x, z, new[] { new Layer(MaterialTable.Bedrock, 2f), new Layer(MaterialTable.Sand, 3f) });
+
+            GroundStamp.Apply(_grid, _mound, At(4f));
+
+            Assert.That(_grid.GetTopMaterial(40, 40), Is.EqualTo(MaterialTable.Topsoil), "grassed, not a sand stripe over the hill");
+            Assert.That(_grid.GetSurfaceHeight(40, 40), Is.EqualTo(5f + 4f).Within(1e-3f), "and just as high");
+            Assert.That(_grid.GetTopMaterial(40, 5), Is.EqualTo(MaterialTable.Sand), "the bed away from the hill is left alone");
+        }
+
+        [Test]
         public void AHollowStopsAtBedrock()
         {
             GroundStamp.Apply(_grid, _mound, At(10f, invert: true));

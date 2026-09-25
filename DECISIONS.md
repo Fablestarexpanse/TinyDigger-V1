@@ -6827,3 +6827,13 @@ from it by the ordinary flow.
 sampling. The heights cached from the texture were private fields on the ScriptableObject, and the
 reload brought them back as an empty array beside the old resolution. The cache is `[NonSerialized]`
 now, and a cache that does not match its resolution is read from the texture again.
+
+**God-raised land takes the surface round it (2026-09-24).** The grey stripe over a god-stamped hill
+was not the river-bed flag but the river's own gravel: a raise thickened each column under its top
+layer, so a channel's gravel (or a beach's sand) stayed on top of the new hill. `GroundStamp` now finds
+the land's surface first — the commonest top material on the stamp's rim, 48 samples — and where a
+raised cell's own top is something else it lays a 0.5 m skin of that surface over a body of dirt
+(under topsoil) or of the surface itself (anything else). A 110 m volcano over a river, 481 river-bed
+samples under it: all 25,803 raised cells came up topsoil, no stripe
+(`Screenshots/god-volcano-over-river.png`). The river now ends at its foot either side, which is what
+burying a river does; the stretch upstream will pond against it.
