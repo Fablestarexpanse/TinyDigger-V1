@@ -37,6 +37,7 @@ namespace TinyDiggers.Interaction
         static readonly Color32 OutlineColor = new Color32(255, 255, 255, 230);
         static readonly Color32 ActiveNodeColor = new Color32(255, 220, 60, 240);
         static readonly Color32 BuiltColor = new Color32(250, 240, 200, 150);
+        static readonly Color32 GodColor = new Color32(255, 200, 40, 255);
 
         PlayerTools _tools;
         TerrainView _terrain;
@@ -93,6 +94,16 @@ namespace TinyDiggers.Interaction
         public float BrushAmount = 0.5f;
 
         public bool IsDrawing => Draft.Any && Draft.Form.Kind != LandformKind.Stamp;
+
+        /// <summary>
+        /// God mode (Ronan, 2026-09-24): a placed stamp reshapes the ground on the spot instead of
+        /// becoming orders for the crew. G toggles it while a stamp is in hand; Ctrl+Z takes back the
+        /// last god stamp.
+        /// </summary>
+        public bool GodMode;
+
+        readonly List<GroundStamp.Edit> _godEdits = new List<GroundStamp.Edit>();
+        const int GodUndoDepth = 20;
 
         /// <summary>The stamps the tool offers, in library order; empty before any are imported.</summary>
         public List<HeightStamp> Stamps { get; } = new List<HeightStamp>();
@@ -171,6 +182,7 @@ namespace TinyDiggers.Interaction
         /// <summary>A new island: the old plan means nothing on it.</summary>
         void Forget()
         {
+            _godEdits.Clear();
             Plan = new LandformPlan();
             Builder = null;
             _builtFor = null;
@@ -285,6 +297,19 @@ namespace TinyDiggers.Interaction
             if (Draft.Form.Kind == LandformKind.Stamp && StampKeys(keyboard))
                 return true;
 
+            // Ctrl+Z after a god stamp takes the ground back; with none to take back it falls through
+            // to the designation undo as ever.
+            if (keyboard.zKey.wasPressedThisFrame && keyboard.ctrlKey.isPressed && !keyboard.shiftKey.isPressed
+                && Draft.Form.Kind == LandformKind.Stamp && _godEdits.Count > 0)
+            {
+                var last = _godEdits[_godEdits.Count - 1];
+                _godEdits.RemoveAt(_godEdits.Count - 1);
+                last.Undo(Grid);
+                _plannedVersion = -1;
+                _tools.Say($"God stamp taken back: {last.Cells} cells as they were");
+                return true;
+            }
+
             if (keyboard.backspaceKey.wasPressedThisFrame && Draft.Any)
             {
                 Draft.RemoveLast();
@@ -350,6 +375,11 @@ namespace TinyDiggers.Interaction
                 Draft.RaiseStamp(step * 2f);
             else if (keyboard.pageDownKey.wasPressedThisFrame)
                 Draft.RaiseStamp(-step * 2f);
+            else if (keyboard.gKey.wasPressedThisFrame && !keyboard.ctrlKey.isPressed)
+            {
+                GodMode = !GodMode;
+                _tools.Say(GodMode ? "God mode: stamps shape the ground at once, no crew" : "God mode off: stamps are orders for the crew");
+            }
             else if (keyboard.iKey.wasPressedThisFrame)
             {
                 Draft.FlipStamp();
@@ -378,6 +408,12 @@ namespace TinyDiggers.Interaction
         {
             if (!Draft.CanCommit || Grid == null)
                 return;
+
+            if (GodMode && Draft.Form.Kind == LandformKind.Stamp)
+            {
+                GodStamp();
+                return;
+            }
             EnsureBuilder();
             if (Builder == null)
                 return;
@@ -409,6 +445,26 @@ namespace TinyDiggers.Interaction
                 LandformKind.Pit => $"Pit committed: {LandformProfile.Reserves(Grid, _floors):0.#} m³ in reserve",
                 _ => $"Shape committed: {made} cells of work, cut {cut:0.#} m³, fill {fill:0.#} m³",
             });
+        }
+
+        /// <summary>
+        /// The stamp in hand, straight into the ground. It stays in hand for the next one, and the
+        /// ghost is worked out again against the ground as it now is.
+        /// </summary>
+        void GodStamp()
+        {
+            var edit = GroundStamp.Apply(Grid, Draft.Form.ResolveStamp(), Draft.Form.Placement);
+            if (edit.Cells == 0)
+            {
+                _tools.Say("God stamp: nothing to change here");
+                return;
+            }
+
+            _godEdits.Add(edit);
+            if (_godEdits.Count > GodUndoDepth)
+                _godEdits.RemoveAt(0);
+            _plannedVersion = -1;
+            _tools.Say($"God stamp: {edit.Cells} cells, raised {edit.Raised:0.#} m³, lowered {edit.Lowered:0.#} m³   (Ctrl+Z takes it back)");
         }
 
         /// <summary>Which shape covers the cell under the cursor, or 0 for bare ground.</summary>
@@ -590,7 +646,7 @@ namespace TinyDiggers.Interaction
 
                 // A stamp's reach, a ring on the ground, so a flat stretch of it still shows its edge.
                 if (Draft.Form.Kind == LandformKind.Stamp && Draft.CanCommit)
-                    StampRing(Draft.Form.Placement, OutlineColor, cell);
+                    StampRing(Draft.Form.Placement, GodMode ? GodColor : OutlineColor, cell);
 
                 // The outline itself, on the ground it is drawn round, and its corners. A stroke has
                 // neither: the tiles above are the whole of what it is.
@@ -703,13 +759,16 @@ namespace TinyDiggers.Interaction
                 var placement = Draft.Form.Placement;
                 var stamp = Draft.Form.ResolveStamp();
                 says = $"{(stamp != null ? stamp.DisplayName : "?")}  {placement.Size:0} m across, {placement.Height:0.#} m"
-                       + (placement.Invert ? " deep" : " tall") + $", turned {placement.Rotation:0}°   " + says;
+                       + (placement.Invert ? " deep" : " tall") + $", turned {placement.Rotation:0}°   "
+                       + (GodMode ? $"raises about {Fill:0.#} m³, lowers {Cut:0.#} m³   area {area:0.#} m²" : says);
             }
 
             GUI.Label(new Rect(12f, Screen.height - 76f, 900f, 26f), says, _label);
             GUI.Label(new Rect(12f, Screen.height - 48f, 900f, 26f),
                 Draft.Form.Kind == LandformKind.Stamp
-                    ? "Click to place   •   T next stamp   •   [ ] size   •   , . turn   •   PgUp/PgDn height   •   I upside down"
+                    ? (GodMode ? "GOD MODE: click shapes the ground now   •   Ctrl+Z takes it back   •   G for crew orders"
+                                : "Click to place   •   G god mode")
+                      + "   •   T next stamp   •   [ ] size   •   , . turn   •   PgUp/PgDn height   •   I upside down"
                     : Draft.Form.Kind == LandformKind.Brush
                     ? $"Hold the button and paint   •   B changes what it does ({BrushMode.ToString().ToLowerInvariant()})"
                       + "   •   [ and ] resize it   •   Enter commits"

@@ -31,7 +31,8 @@ namespace TinyDiggers.Interaction
         bool _builtStamp;
 
         // The stamp picker: one button a stamp in the library, made the first time it is shown.
-        RectTransform _stampRow;
+        RectTransform _stampRow, _godRow;
+        Toggle _god;
         readonly List<(HeightStamp Stamp, Image Background, Text Label)> _stampButtons = new List<(HeightStamp, Image, Text)>();
 
         RectTransform _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow;
@@ -67,6 +68,11 @@ namespace TinyDiggers.Interaction
             _title = UiKit.NewLabel(_panel, "", Pad, 4f, Width - 2 * Pad, 24f, 16);
 
             _stampRow = Row("Stamps");
+            _godRow = Row("God mode");
+            _god = UiKit.NewToggle(_godRow, "God mode: shape the ground now, no crew  (G)", false,
+                on => _tools.Terraform.GodMode = on);
+            UiKit.Place((RectTransform)_god.transform, 0f, 4f, Width - 2 * Pad, RowHeight - 8f);
+            UiKit.AddTooltip(_god, () => "On, a stamp you place is the ground at once — for laying out the land. Off, it is orders the crew build. Ctrl+Z takes back a god stamp");
 
             _brushRow = Row("Brush");
             UiKit.NewLabel(_brushRow, "Brush radius", 0f, 0f, 120f, RowHeight);
@@ -283,7 +289,7 @@ namespace TinyDiggers.Interaction
 
         void Show(params RectTransform[] rows)
         {
-            foreach (var row in new[] { _stampRow, _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow, _rampRow, _roadGradeRow, _roadBendRow, _roadOptionsRow, _roadShapeRow, _roadNodeRow, _roadHintRow, _quarryRow, _worksiteRow, _worksiteButtons, _worksiteHint })
+            foreach (var row in new[] { _stampRow, _godRow, _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow, _rampRow, _roadGradeRow, _roadBendRow, _roadOptionsRow, _roadShapeRow, _roadNodeRow, _roadHintRow, _quarryRow, _worksiteRow, _worksiteButtons, _worksiteHint })
                 row.gameObject.SetActive(false);
             _shown.Clear();
             var y = 30f;
@@ -331,7 +337,7 @@ namespace TinyDiggers.Interaction
                         break;
                     case ToolMode.Terraform when stampInHand:
                         BuildStampButtons();
-                        Show(_stampRow, _volumeRow);
+                        Show(_stampRow, _godRow, _volumeRow);
                         break;
                     case ToolMode.Terraform:
                         Show(_heightRow, _followRow, _pickRow, _volumeRow);
@@ -365,6 +371,14 @@ namespace TinyDiggers.Interaction
 
             if (!_panel.gameObject.activeSelf)
                 return;
+
+            if (_godRow.gameObject.activeSelf)
+            {
+                _god.SetIsOnWithoutNotify(_tools.Terraform.GodMode);
+                _title.text = _tools.Terraform.GodMode
+                    ? "Stamp  —  GOD MODE: click to shape the ground now"
+                    : "Stamp  —  click to place it; the crew build it";
+            }
 
             if (_stampRow.gameObject.activeSelf)
             {
@@ -401,7 +415,10 @@ namespace TinyDiggers.Interaction
                     ? $"{what}: nothing to move at H"
                     : $"{what}:  cut {cut:0.#} m³   fill {fill:0.#} m³   net {cut - fill:+0.#;-0.#;0} m³";
                 _volume.color = Color.white;
-                if (fill > 0.05f && QuarryStock() < fill - 0.05f)
+                var god = _builtStamp && _tools.Terraform != null && _tools.Terraform.GodMode;
+                if (god)
+                    _volume.text = $"God stamp: raises about {fill:0.#} m³, lowers {cut:0.#} m³ — no crew, no quarry";
+                if (!god && fill > 0.05f && QuarryStock() < fill - 0.05f)
                 {
                     _volume.text += $"   —   needs {fill - QuarryStock():0.#} m³ from a quarry";
                     _volume.color = UiKit.Warning;

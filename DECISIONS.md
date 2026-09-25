@@ -6750,3 +6750,18 @@ commits 3,899 cells of Fill (a rim cell to 10 m on 5.5 m ground). Not yet seen: 
 one, which needs a worksite and far more quarry than a first island has. Known rough edges: the
 ghost's flat tiles let the ground show through in stripes on a steep stamp, and the Stamp button
 borrows the Terraform glyph until it has its own.
+
+**God mode for stamps (Ronan, 2026-09-24: "a god mode you can enable to use stamps to just place
+landmass stamps without having to build it").** With a stamp in hand, G (or the tool panel's God mode
+box) switches a click from orders for the crew to reshaping the ground at once: no designations, no
+crew, no quarry. `GroundStamp.Apply` (Terrain) rebuilds each column to the stamp's height as
+**landmass, not spoil**: a raise thickens the layer under the topsoil skin (the ground's own body, so
+the slump leaves it standing and it is grassed like its neighbours), a lowering takes from under the
+skin down to bedrock and no further. Every column touched is kept, so Ctrl+Z with a stamp in hand
+takes back the last god stamp (twenty deep); with none to take back Ctrl+Z is the designation undo as
+before. The ring turns gold in god mode, the title and readouts say so, and the quarry warning goes.
+
+Run on the seed island: a 40 m × 6 m mesa at (1550, 1697) raised 2,538 cells by 1,168 m³ in one
+click, the middle from 5.5 m to 11.5 m under topsoil, and 11 seconds later the profile across it
+(5.5 … 8, 11.5, 11.5, 11.5, 8.5 … 7) had not moved: cliffs and flat top held.
+`Screenshots/god-mode-before-after.png` (the upper frame is just after the click, with the next ghost on the cursor).
