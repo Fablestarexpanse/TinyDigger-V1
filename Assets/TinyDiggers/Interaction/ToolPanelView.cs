@@ -31,7 +31,7 @@ namespace TinyDiggers.Interaction
         bool _builtStamp;
 
         // The stamp picker: one button a stamp in the library, made the first time it is shown.
-        RectTransform _stampRow, _stampRow2, _godRow, _stampShapeRow, _stampHeightRow;
+        RectTransform _stampRow, _stampRow2, _stampRow3, _godRow, _stampShapeRow, _stampHeightRow;
         Toggle _god, _stampFlip;
         InputField _stampSize, _stampTurn, _stampHeight;
         readonly List<(HeightStamp Stamp, Image Background, Text Label)> _stampButtons = new List<(HeightStamp, Image, Text)>();
@@ -70,6 +70,7 @@ namespace TinyDiggers.Interaction
 
             _stampRow = Row("Stamps");
             _stampRow2 = Row("Stamps, more");
+            _stampRow3 = Row("Stamps, last");
             // Where it sits and how: size and turn on one row, height, flip and reset on the next.
             // Each is a box to type in with a step either side, and the keys and wheel still work.
             _stampShapeRow = Row("Stamp size and turn");
@@ -321,14 +322,15 @@ namespace TinyDiggers.Interaction
             // Only reads the library: picking a stamp here would put the one in hand back to its
             // own size and height every time the panel is first shown.
             host.LoadStamps();
-            // Six to a line, so the names fit; a second line holds the rest.
+            // Six to a line, so the names fit; three lines hold eighteen.
             const int perLine = 6;
             var width = (Width - 2 * Pad - 70f) / perLine - 3f;
             UiKit.NewLabel(_stampRow, "Stamp", 0f, 0f, 66f, RowHeight);
-            for (var i = 0; i < host.Stamps.Count && i < 2 * perLine; i++)
+            var lines = new[] { _stampRow, _stampRow2, _stampRow3 };
+            for (var i = 0; i < host.Stamps.Count && i < lines.Length * perLine; i++)
             {
                 var stamp = host.Stamps[i];
-                var button = UiKit.NewButton(i < perLine ? _stampRow : _stampRow2, stamp.DisplayName, () => host.ChooseStamp(stamp), null, 13);
+                var button = UiKit.NewButton(lines[i / perLine], stamp.DisplayName, () => host.ChooseStamp(stamp), null, 13);
                 UiKit.Place((RectTransform)button.transform, 70f + i % perLine * (width + 3f), 2f, width, RowHeight - 4f);
                 UiKit.AddTooltip(button, () => $"{stamp.DisplayName}: {stamp.NativeSize:0} m across, {stamp.NativeHeight:0.#} m high as it comes   (T steps through them)");
                 _stampButtons.Add((stamp, button.GetComponent<Image>(), button.GetComponentInChildren<Text>()));
@@ -344,7 +346,7 @@ namespace TinyDiggers.Interaction
 
         void Show(params RectTransform[] rows)
         {
-            foreach (var row in new[] { _stampRow, _stampRow2, _stampShapeRow, _stampHeightRow, _godRow, _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow, _rampRow, _roadGradeRow, _roadBendRow, _roadOptionsRow, _roadShapeRow, _roadNodeRow, _roadHintRow, _quarryRow, _worksiteRow, _worksiteButtons, _worksiteHint })
+            foreach (var row in new[] { _stampRow, _stampRow2, _stampRow3, _stampShapeRow, _stampHeightRow, _godRow, _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow, _rampRow, _roadGradeRow, _roadBendRow, _roadOptionsRow, _roadShapeRow, _roadNodeRow, _roadHintRow, _quarryRow, _worksiteRow, _worksiteButtons, _worksiteHint })
                 row.gameObject.SetActive(false);
             _shown.Clear();
             var y = 30f;
@@ -392,7 +394,7 @@ namespace TinyDiggers.Interaction
                         break;
                     case ToolMode.Terraform when stampInHand:
                         BuildStampButtons();
-                        Show(_stampRow, _stampRow2, _stampShapeRow, _stampHeightRow, _godRow, _volumeRow);
+                        Show(_stampRow, _stampRow2, _stampRow3, _stampShapeRow, _stampHeightRow, _godRow, _volumeRow);
                         break;
                     case ToolMode.Terraform:
                         Show(_heightRow, _followRow, _pickRow, _volumeRow);

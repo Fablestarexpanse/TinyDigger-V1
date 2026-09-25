@@ -61,8 +61,14 @@ namespace TinyDiggers.Terrain
 
         public StampUse Use = StampUse.Both;
 
-        float[] _heights;
-        int _resolution;
+        [Tooltip("A hollow rather than a hill (a canyon, a river bed, a sinkhole): the heights are how far below the plain, and it is placed upside down unless flipped.")]
+        public bool Negative;
+
+        // The heights read out of the texture, cached. Never serialised: a domain reload brought the
+        // cache back as an empty array with the old resolution beside it, and every stamp but the one
+        // never sampled threw out of range (2026-09-24).
+        [NonSerialized] float[] _heights;
+        [NonSerialized] int _resolution;
 
         /// <summary>Samples a side of the height array.</summary>
         public int Resolution
@@ -85,7 +91,7 @@ namespace TinyDiggers.Terrain
 
         void EnsureHeights()
         {
-            if (_heights != null)
+            if (_heights != null && _resolution >= 2 && _heights.Length == _resolution * _resolution)
                 return;
             if (Heightmap == null)
                 throw new InvalidOperationException($"Height stamp '{name}' has no heightmap and no heights");

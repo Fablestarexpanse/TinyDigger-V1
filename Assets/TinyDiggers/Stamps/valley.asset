@@ -10,13 +10,13 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4c7cb1014c03f534ba4c86c2a94d69e0, type: 3}
-  m_Name: mesa
+  m_Name: valley
   m_EditorClassIdentifier: TinyDiggers.Terrain::TinyDiggers.Terrain.HeightStamp
-  DisplayName: Mesa
-  Heightmap: {fileID: 2800000, guid: 0865067817bb8bf48926877b2c6cea34, type: 3}
-  NativeSize: 40
-  NativeHeight: 6
+  DisplayName: Valley
+  Heightmap: {fileID: 2800000, guid: 562cec5ee927662438e29c1a40f15ab2, type: 3}
+  NativeSize: 80
+  NativeHeight: 12
   Blend: 0
   EdgeFalloff: 0.2
   Use: 3
-  Negative: 0
+  Negative: 1

@@ -48,7 +48,7 @@ namespace TinyDiggers.Presentation
             var worldMin = terrain.transform.TransformPoint(new Vector3(minX * cell, 0f, minZ * cell));
             var worldMax = terrain.transform.TransformPoint(new Vector3((maxX + 1) * cell, 0f, (maxZ + 1) * cell));
             var drained = 0;
-            foreach (var zone in Object.FindObjectsByType<WaterZone>(FindObjectsSortMode.None))
+            foreach (var zone in Object.FindObjectsByType<WaterZone>())
             {
                 var simulation = zone.Simulation;
                 if (simulation == null)

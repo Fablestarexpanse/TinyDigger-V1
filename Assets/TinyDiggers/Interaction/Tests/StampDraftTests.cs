@@ -88,6 +88,30 @@ namespace TinyDiggers.Interaction.Tests
         }
 
         [Test]
+        public void AHollowComesUpsideDownAndResetKeepsItSo()
+        {
+            var canyon = ScriptableObject.CreateInstance<HeightStamp>();
+            canyon.name = "canyon";
+            canyon.Negative = true;
+            canyon.SetHeights(2, new[] { 1f, 1f, 1f, 1f });
+            try
+            {
+                _draft.SetStamp(canyon);
+                Assert.That(_draft.Form.Placement.Invert, Is.True, "a canyon digs as it comes");
+                _draft.FlipStamp();
+                _draft.ResetStamp();
+                Assert.That(_draft.Form.Placement.Invert, Is.True, "and Reset puts it back to digging");
+
+                _draft.SetStamp(_stamp);
+                Assert.That(_draft.Form.Placement.Invert, Is.False, "a mound picked after it builds");
+            }
+            finally
+            {
+                Object.DestroyImmediate(canyon);
+            }
+        }
+
+        [Test]
         public void SizeTurnAndHeightCarryOverToTheNextStamp()
         {
             _draft.SetStampSize(90f);

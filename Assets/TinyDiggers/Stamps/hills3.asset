@@ -19,3 +19,4 @@ MonoBehaviour:
   Blend: 0
   EdgeFalloff: 0.2
   Use: 3
+  Negative: 0

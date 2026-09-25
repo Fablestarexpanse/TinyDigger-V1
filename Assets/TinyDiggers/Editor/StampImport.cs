@@ -35,9 +35,19 @@ namespace TinyDiggers.EditorTools
                 case "plateau": return (60f, 6f);
                 case "drumlins": return (50f, 3f);
                 case "crag": return (24f, 6f);
+                case "canyon": return (70f, 12f);
+                case "riverbed": return (60f, 2.5f);
+                case "sinkhole": return (24f, 8f);
+                case "valley": return (80f, 12f);
+                case "gullies": return (50f, 4f);
+                case "basin": return (60f, 4f);
                 default: return (40f, 6f);
             }
         }
+
+        /// <summary>The hollows: cleaned with td_stamp_clean.py --negative, placed upside down.</summary>
+        static readonly System.Collections.Generic.HashSet<string> Negatives =
+            new System.Collections.Generic.HashSet<string> { "canyon", "riverbed", "sinkhole", "valley", "gullies", "basin" };
 
         [MenuItem("TinyDiggers/Import Stamps")]
         public static void Import()
@@ -79,6 +89,7 @@ namespace TinyDiggers.EditorTools
                     stamp.DisplayName = ObjectNames.NicifyVariableName(key);
                     stamp.NativeSize = size;
                     stamp.NativeHeight = height;
+                    stamp.Negative = Negatives.Contains(key);
                     AssetDatabase.CreateAsset(stamp, stampPath);
                 }
 

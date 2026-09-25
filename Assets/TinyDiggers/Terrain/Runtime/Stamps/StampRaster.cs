@@ -36,6 +36,7 @@ namespace TinyDiggers.Terrain
             Centre = centre,
             Size = stamp.NativeSize,
             Height = stamp.NativeHeight,
+            Invert = stamp.Negative,
             Base = groundAtCentre,
         };
     }

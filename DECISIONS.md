@@ -6802,3 +6802,28 @@ the keys (4–400 m, height at least 0.5 m, turns brought into 0–360). The ele
 two lines of six so the names fit. A bug found on the way: the panel loaded the library by re-picking
 the stamp in hand, which put its size and height back to native the first time the panel showed; it
 only loads the library now.
+
+**Hollow stamps (Ronan, 2026-09-24: "stamps that go negative like canyon or river bed").** Six:
+canyon 70 m × 12 m deep, river bed 60 × 2.5, valley 80 × 12, sinkhole 24 × 8, gullies 50 × 4, basin
+60 × 4. `HeightStamp.Negative` marks a hollow: its heights are how far below the plain, and it comes
+onto the cursor upside down (digging); Upside down flips it into a mound, and Reset puts it back to
+digging. `td_stamp_clean.py --negative` measures depth *below* the plain; a canyon runs out through the
+border, so the plain is fitted twice, the second time without the border's lowest third. Linear ones
+(canyon, river bed, valley) are cleaned `--no-centre`. The panel's stamp buttons run to three lines.
+
+What the depth pass could and could not read, first go (seeds 10300–10800): canyon, sinkhole and basin
+read cleanly. A shallow sandy river bed did not (too little relief: a jumble of bars and banks); asked
+as a *deeply incised meandering gorge* (seed 10401) it did. A cliff-walled valley read as bands; asked
+as a *smooth grassy U-shaped trough* (10601) it did. Thin erosion gullies were not seen at all; wide
+badland ravines (10701) were, but **the depth model reads dark ravine floors as near, so the gully
+heightmap comes out as ridges** — cleaned the ordinary (positive) way and placed as a hollow, that is
+exactly the gully system. Worth remembering for any dark-floored hollow.
+
+God-stamped on a pad flattened at 10 m (`Screenshots/stamps-hollows.png`): all six carve as their shape
+with nothing raised. The plain was above the sea, so none filled; a hollow cut to the sea would flood
+from it by the ordinary flow.
+
+**A bug the hollows turned up:** after an editor reload every stamp but one threw IndexOutOfRange on
+sampling. The heights cached from the texture were private fields on the ScriptableObject, and the
+reload brought them back as an empty array beside the old resolution. The cache is `[NonSerialized]`
+now, and a cache that does not match its resolution is read from the texture again.

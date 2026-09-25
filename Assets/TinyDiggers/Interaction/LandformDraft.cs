@@ -180,7 +180,10 @@ namespace TinyDiggers.Interaction
 
         // --- a stamp: which one, and where and how it sits ----------------------------------------
 
-        /// <summary>Picks the stamp, at its own size and height; the turn and flip are kept.</summary>
+        /// <summary>
+        /// Picks the stamp, at its own size and height and the way up it is meant to go — a canyon
+        /// digs, a hill builds; the turn is kept.
+        /// </summary>
         public void SetStamp(HeightStamp stamp)
         {
             if (stamp == null)
@@ -189,6 +192,7 @@ namespace TinyDiggers.Interaction
             Form.StampName = stamp.name;
             Form.Placement.Size = stamp.NativeSize;
             Form.Placement.Height = stamp.NativeHeight;
+            Form.Placement.Invert = stamp.Negative;
             Touch();
         }
 
@@ -253,7 +257,7 @@ namespace TinyDiggers.Interaction
             Touch();
         }
 
-        /// <summary>Back to the stamp as it comes: its own size and height, unturned, right way up.</summary>
+        /// <summary>Back to the stamp as it comes: its own size and height, unturned, the way up it is meant to go.</summary>
         public void ResetStamp()
         {
             var stamp = Form.ResolveStamp();
@@ -262,7 +266,7 @@ namespace TinyDiggers.Interaction
             Form.Placement.Size = stamp.NativeSize;
             Form.Placement.Height = stamp.NativeHeight;
             Form.Placement.Rotation = 0f;
-            Form.Placement.Invert = false;
+            Form.Placement.Invert = stamp.Negative;
             Touch();
         }
 
