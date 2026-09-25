@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4c7cb1014c03f534ba4c86c2a94d69e0, type: 3}
   m_Name: canyon
-  m_EditorClassIdentifier: TinyDiggers.Terrain::TinyDiggers.Terrain.HeightStamp
+  m_EditorClassIdentifier: PromptWaffle.Terrain::PromptWaffle.Terrain.HeightStamp
   DisplayName: Canyon
   Heightmap: {fileID: 2800000, guid: ba52ae62212fdc44c86d566d83bbaca9, type: 3}
   NativeSize: 70

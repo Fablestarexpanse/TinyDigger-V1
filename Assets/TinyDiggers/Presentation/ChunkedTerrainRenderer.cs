@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using TinyDiggers.Terrain;
+using PromptWaffle.Terrain;
 using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Rendering;

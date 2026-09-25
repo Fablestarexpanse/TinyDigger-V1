@@ -1,6 +1,6 @@
 # Unity Project Development Guide for AI Agents
 
-**Terrain:** read `TERRAIN_REFERENCE.md` (repo root) before touching anything under `Assets/TinyDiggers/Terrain/` or the terrain renderers. It is the design intent; `DECISIONS.md` records what was built and why.
+**Terrain:** read `TERRAIN_REFERENCE.md` (repo root) before touching the terrain core (`Packages/com.promptwaffle.terrain/`, namespace `PromptWaffle.Terrain`), `Assets/TinyDiggers/Terrain/` (settings and textures) or the terrain renderers. It is the design intent; `DECISIONS.md` records what was built and why. The terrain, stamps and the terrain-water bridge are being made into reusable PromptWaffle packages: nothing TinyDiggers-specific goes into `Packages/com.promptwaffle.*`.
 
 ## Project Context
 

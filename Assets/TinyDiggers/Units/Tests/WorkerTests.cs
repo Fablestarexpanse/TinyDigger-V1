@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
-using TinyDiggers.Terrain;
+using PromptWaffle.Terrain;
 using UnityEngine;
 
 namespace TinyDiggers.Units.Tests

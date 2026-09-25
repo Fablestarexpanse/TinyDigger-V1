@@ -51,6 +51,7 @@
     "com.unity.modules.xr": "1.0.0"
   },
   "testables": [
-    "com.promptwaffle.dynamicwater"
+    "com.promptwaffle.dynamicwater",
+    "com.promptwaffle.terrain"
   ]
 }

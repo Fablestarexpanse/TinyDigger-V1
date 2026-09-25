@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 934791ea661cec745b0ef9fe58960cfb, type: 3}
   m_Name: IslandSettings
-  m_EditorClassIdentifier: TinyDiggers.Terrain::TinyDiggers.Terrain.TerrainGenSettings
+  m_EditorClassIdentifier: PromptWaffle.Terrain::PromptWaffle.Terrain.TerrainGenSettings
   Seed: 11
   Datum: -45
   FeatureSize: 120

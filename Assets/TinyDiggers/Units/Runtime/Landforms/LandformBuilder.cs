@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using TinyDiggers.Terrain;
+using PromptWaffle.Terrain;
 
 namespace TinyDiggers.Units
 {

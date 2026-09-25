@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using TinyDiggers.Terrain;
+using PromptWaffle.Terrain;
 using Unity.Profiling;
 using UnityEngine;
 using Debug = UnityEngine.Debug;

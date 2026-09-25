@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4c7cb1014c03f534ba4c86c2a94d69e0, type: 3}
   m_Name: riverbed
-  m_EditorClassIdentifier: TinyDiggers.Terrain::TinyDiggers.Terrain.HeightStamp
+  m_EditorClassIdentifier: PromptWaffle.Terrain::PromptWaffle.Terrain.HeightStamp
   DisplayName: Riverbed
   Heightmap: {fileID: 2800000, guid: 139ef3a620487e247847507e566020c5, type: 3}
   NativeSize: 60

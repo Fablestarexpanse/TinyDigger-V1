@@ -2,7 +2,7 @@
     "name": "TinyDiggers.Units",
     "rootNamespace": "TinyDiggers.Units",
     "references": [
-        "TinyDiggers.Terrain"
+        "PromptWaffle.Terrain"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

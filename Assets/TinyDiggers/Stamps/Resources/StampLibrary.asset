@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 63c233b6e331f5e4eb54cfd91ca29520, type: 3}
   m_Name: StampLibrary
-  m_EditorClassIdentifier: TinyDiggers.Terrain::TinyDiggers.Terrain.StampLibrary
+  m_EditorClassIdentifier: PromptWaffle.Terrain::PromptWaffle.Terrain.StampLibrary
   Stamps:
   - {fileID: 11400000, guid: bc684e60031cd7241ab7116e296c0d5a, type: 2}
   - {fileID: 11400000, guid: 4db6a9faf17b136409baab901f8471b5, type: 2}

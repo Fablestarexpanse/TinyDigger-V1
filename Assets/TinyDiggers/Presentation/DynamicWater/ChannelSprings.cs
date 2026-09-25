@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Stopwatch = System.Diagnostics.Stopwatch;
 using PromptWaffle.DynamicWater;
-using TinyDiggers.Terrain;
+using PromptWaffle.Terrain;
 using UnityEngine;
 
 namespace TinyDiggers.Presentation

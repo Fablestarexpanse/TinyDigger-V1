@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using TinyDiggers.Interaction;
 using TinyDiggers.Presentation;
-using TinyDiggers.Terrain;
+using PromptWaffle.Terrain;
 using TinyDiggers.Units;
 using UnityEditor;
 using UnityEngine;

@@ -1,5 +1,5 @@
 using System.IO;
-using TinyDiggers.Terrain;
+using PromptWaffle.Terrain;
 using UnityEditor;
 using UnityEngine;
 

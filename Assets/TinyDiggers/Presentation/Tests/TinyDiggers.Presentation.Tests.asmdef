@@ -2,7 +2,7 @@
     "name": "TinyDiggers.Presentation.Tests",
     "rootNamespace": "TinyDiggers.Presentation.Tests",
     "references": [
-        "TinyDiggers.Terrain",
+        "PromptWaffle.Terrain",
         "TinyDiggers.Presentation",
         "TinyDiggers.Units",
         "PromptWaffle.DynamicWater",

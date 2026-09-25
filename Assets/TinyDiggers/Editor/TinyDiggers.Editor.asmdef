@@ -2,7 +2,7 @@
     "name": "TinyDiggers.Editor",
     "rootNamespace": "TinyDiggers.EditorTools",
     "references": [
-        "TinyDiggers.Terrain",
+        "PromptWaffle.Terrain",
         "TinyDiggers.Presentation",
         "TinyDiggers.Units",
         "TinyDiggers.Interaction",

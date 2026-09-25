@@ -3,7 +3,7 @@
     "rootNamespace": "TinyDiggers.Units.Tests",
     "references": [
         "TinyDiggers.Units",
-        "TinyDiggers.Terrain",
+        "PromptWaffle.Terrain",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

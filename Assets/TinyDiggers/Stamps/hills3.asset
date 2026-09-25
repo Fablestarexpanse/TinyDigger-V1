@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4c7cb1014c03f534ba4c86c2a94d69e0, type: 3}
   m_Name: hills3
-  m_EditorClassIdentifier: TinyDiggers.Terrain::TinyDiggers.Terrain.HeightStamp
+  m_EditorClassIdentifier: PromptWaffle.Terrain::PromptWaffle.Terrain.HeightStamp
   DisplayName: Hills 3
   Heightmap: {fileID: 2800000, guid: 3b132e2d33cea3748908cc8d4fa9759b, type: 3}
   NativeSize: 50

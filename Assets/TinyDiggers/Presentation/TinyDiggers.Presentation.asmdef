@@ -2,7 +2,7 @@
     "name": "TinyDiggers.Presentation",
     "rootNamespace": "TinyDiggers.Presentation",
     "references": [
-        "TinyDiggers.Terrain",
+        "PromptWaffle.Terrain",
         "Unity.InputSystem",
         "Unity.RenderPipelines.Universal.Runtime",
         "Unity.RenderPipelines.Core.Runtime",

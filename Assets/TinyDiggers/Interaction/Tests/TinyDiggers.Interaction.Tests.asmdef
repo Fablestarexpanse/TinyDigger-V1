@@ -4,7 +4,7 @@
     "references": [
         "TinyDiggers.Interaction",
         "TinyDiggers.Units",
-        "TinyDiggers.Terrain",
+        "PromptWaffle.Terrain",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

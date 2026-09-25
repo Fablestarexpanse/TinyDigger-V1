@@ -1,4 +1,4 @@
-using TinyDiggers.Terrain;
+using PromptWaffle.Terrain;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;

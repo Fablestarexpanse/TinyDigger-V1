@@ -1,6 +1,6 @@
 using System.Linq;
 using NUnit.Framework;
-using TinyDiggers.Terrain;
+using PromptWaffle.Terrain;
 
 namespace TinyDiggers.Units.Tests
 {

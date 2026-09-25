@@ -7121,3 +7121,34 @@ Tug. The other boats are not done yet"* (the bismarck, iowa and yamato stay out)
 - **Tests:** 7 new ones. Each kind crosses a strait and anchors without going over water too shallow
   for it. The scow refuses a shelf the tug takes. A refused order keeps the course. A send far
   inland is refused. 712 pass.
+
+## Terrain, water and stamps become reusable packages (Ronan, 2026-09-25)
+
+*"I'm loving our terrain system and water and stamps for building, is there any way we can remove
+these and turn it into a tool for future games that might be different from the one we are working
+on."* The water is already `com.promptwaffle.dynamicwater`. Rulings:
+- **Name:** `PromptWaffle.Terrain`, packages `com.promptwaffle.terrain*`, like the water. The game's
+  code takes a one-off namespace rename.
+- **Location:** embedded in this repo's `Packages/` while TinyDiggers drives them. Each moves to its
+  own git repo once it settles.
+- **Island generator:** goes in, as an optional generation module. TinyDiggers keeps its settings
+  asset and its space-disc and rim specifics.
+- **Timing:** now, before the dredge slice. The dredge digs through the terrain API, so it is built
+  against the package boundary.
+- **Planned split:**
+  - `terrain`: grid, layers, material table, dig and fill, slump, erosion, surface.
+  - `terrain.generation`: island, rivers, seabed, ores.
+  - `terrain.urp`: renderer, triplanar and height-blend shader, texture sets, hollows, grass.
+  - `terrain.stamps`: stamps, importer, clean script, god-mode tool.
+  - `terrain.water`: the terrain↔water bridge.
+  Crew-built stamps, dams, roads and units stay in the game. One move per step, all tests green
+  and a play check before each commit.
+
+**Step 1 done: terrain core moved (2026-09-25).** `Assets/TinyDiggers/Terrain/Runtime` and its tests
+are now `Packages/com.promptwaffle.terrain` (assembly and namespace `PromptWaffle.Terrain`),
+registered as testable. The rename touched 211 files, and the moves kept every .meta, so scripts,
+stamp assets and island settings still resolve by GUID. Measured before and after in play: the same
+water settle (31.4 m³ off 1,940 cells), the same moorings for all five craft, and the stamp library
+and 17 stamps load as `PromptWaffle.Terrain` types. 712 tests pass, the same count, so the package's
+tests run. Still inside the package and moving out in later steps: the TinyDiggers material list
+(ores, road) and the island generator.
