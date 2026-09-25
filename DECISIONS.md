@@ -6998,3 +6998,26 @@ out by distance. Ronan: "ok go".
   on the east beach, 0 on the central river.
 - Thin, even bands read as contour lines; thick whole ones as piping. Breaks along the crest and holes
   in the trail are what made them read as breakers.
+
+## Terrain textures: height blending and multi-UV mixing (Ronan, 2026-09-24)
+
+Ronan sent two references, *"height based detail blending"* and *"multi UV mixing"*, and said *"lets
+use some of these tricks to help with textures"*. The plan was agreed: height blending first, then
+multi-UV. Ronan: "ok go".
+
+**Height blending (built).**
+- Every painted tile carries a 0..1 height in its albedo alpha. `td_tile_clean.py` writes it for new
+  tiles, and `--add-height` adds it to existing albedos in place. It is brightness with the broad
+  shading taken out, stretched between percentiles: stone tops come out high and cracks low.
+- The shader weighs the four cells under a pixel by height as well as by nearness. A cell's height
+  counts only as far as the cell itself is near, so a distant cell's tall stones cannot show through
+  its neighbour. The same `HeightT` drives the lush/dry variants, the cut face and the stone/soil edge.
+- Measured: wiring only the stone/soil edge changed 0 pixels at a real outcrop. Those grass-to-rock
+  edges are the plain four-cell blend, so that blend had to be height-weighted too. After that the
+  outcrop A/B changed 82,593 pixels. Stones break through in their own shapes, and grass fills round
+  them with no blurry halo.
+- Height influence is 0.45 of a cell weight. At 0.6 the dirt, whose tile runs higher, spread visibly
+  into the grass.
+- The effect fades out once a cell is under about 8 pixels across. Far off, mipped heights made the
+  edges sparkle with specks.
+- `_HeightBlend` 0 restores the old even fade. `_HeightBlendDepth` 0.2 sets how sharp the edge is.

@@ -16,8 +16,17 @@ of the model is not a tile yet:
   target (per channel, so the detail keeps its contrast), which is how the tiles are matched to the
   terrain references Ronan picked on 2026-09-24 (vivid lime grass, cool blue-grey rock).
 
+- it has no height: one is taken from the brightness with the broad shading taken out (stone tops
+  and blade tips bright and high, cracks and gaps dark and low), stretched to 0..1 and stored in the
+  albedo's alpha, which the terrain shader blends materials by (2026-09-24, after Ronan's height-blend
+  reference: stone pokes through grass first, grass fills the cracks).
+
 Usage: python td_tile_clean.py render.png out_stem [--size 1024] [--flatten 0.85] [--normal 2.0] [--mean r,g,b]
-Writes out_stem_albedo.png, out_stem_normal.png and out_stem_preview.png (3 x 3, to eyeball repeats).
+Writes out_stem_albedo.png (height in alpha), out_stem_normal.png and out_stem_preview.png (3 x 3, to
+eyeball repeats).
+
+       python td_tile_clean.py --add-height tile_albedo.png [more_albedo.png ...]
+Puts a height into the alpha of albedos that were made before heights were, in place.
 """
 import argparse
 
@@ -58,7 +67,35 @@ def normal_from(rgb, strength):
     return np.stack([nx, ny, nz], axis=-1) / length[..., None] * 0.5 + 0.5
 
 
+def height_from(rgb, broad=0.1, blur=1.0):
+    """0..1 height from brightness: broad shading removed, wrapped, stretched between the 2nd and 98th
+    percentiles so every tile uses the whole range and the blend depth means the same on each."""
+    n = rgb.shape[0]
+    lum = luminance(rgb)
+    detail = lum - ndimage.gaussian_filter(lum, n * broad, mode="wrap")
+    detail = ndimage.gaussian_filter(detail, blur, mode="wrap")
+    low, high = np.percentile(detail, [2, 98])
+    return np.clip((detail - low) / max(high - low, 1e-4), 0, 1)
+
+
+def with_height(rgb):
+    return np.concatenate([rgb, height_from(rgb)[..., None]], axis=-1)
+
+
+def add_height(paths):
+    for path in paths:
+        rgb = np.asarray(Image.open(path).convert("RGB"), dtype=float) / 255.0
+        rgba = with_height(rgb)
+        Image.fromarray((rgba * 255).round().astype(np.uint8), "RGBA").save(path)
+        print(f"{path}: height mean {rgba[..., 3].mean():.3f}")
+
+
 def main():
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "--add-height":
+        add_height(sys.argv[2:])
+        return
+
     p = argparse.ArgumentParser()
     p.add_argument("render")
     p.add_argument("out_stem")
@@ -76,7 +113,7 @@ def main():
         target = np.array([float(v) for v in a.mean.split(",")])
         rgb = np.clip(rgb * (target / np.maximum(rgb.mean(axis=(0, 1)), 1e-3)), 0, 1)
     albedo = Image.fromarray((rgb * 255).round().astype(np.uint8))
-    albedo.save(a.out_stem + "_albedo.png")
+    Image.fromarray((with_height(rgb) * 255).round().astype(np.uint8), "RGBA").save(a.out_stem + "_albedo.png")
     Image.fromarray((normal_from(rgb, a.normal * a.size / 256.0) * 255).round().astype(np.uint8)).save(a.out_stem + "_normal.png")
 
     preview = Image.new("RGB", (a.size * 3 // 2, a.size * 3 // 2))

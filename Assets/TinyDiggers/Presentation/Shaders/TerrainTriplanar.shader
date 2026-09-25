@@ -40,6 +40,8 @@ Shader "TinyDiggers/Terrain Triplanar"
         _MottleRepeat ("Mottle repeat (m)", Range(2, 40)) = 11.3
         _MottleStrength ("Mottle strength", Range(0, 0.4)) = 0.1
         _BlendWidth ("Material blend width (cells)", Range(0.05, 4)) = 2
+        _HeightBlend ("Height blending (0 fades evenly)", Range(0, 1)) = 1
+        _HeightBlendDepth ("Height blend softness", Range(0.02, 1)) = 0.2
         _TriplanarSharpness ("Triplanar sharpness", Range(1, 16)) = 4
         _SteepStart ("Cut starts (degrees)", Range(0, 90)) = 40
         _SteepEnd ("Cut complete (degrees)", Range(0, 90)) = 55
@@ -88,6 +90,8 @@ Shader "TinyDiggers/Terrain Triplanar"
             float _MottleRepeat;
             half _MottleStrength;
             float _BlendWidth;
+            half _HeightBlend;
+            half _HeightBlendDepth;
             half _TriplanarSharpness;
             half _SteepStart;
             half _SteepEnd;
@@ -227,6 +231,18 @@ Shader "TinyDiggers/Terrain Triplanar"
                 return x * weights.x + y * weights.y + z * weights.z;
             }
 
+            /// Where a blend from material A to B really stands, given each one's height (the albedo's
+            /// alpha): the higher one shows first, so stone tops poke through grass before the grass
+            /// gives way and grass fills the cracks last (Ronan's reference, 2026-09-24). The heights
+            /// only act mid-blend, so t = 0 is all A and t = 1 all B whatever they are.
+            float HeightT(float t, float heightA, float heightB, float amount)
+            {
+                float window = saturate(4.0 * t * (1.0 - t));
+                float shifted = t - 0.5 + (heightB - heightA) * 0.5 * window;
+                float sharp = saturate(shifted / max(_HeightBlendDepth, 0.02) + 0.5);
+                return lerp(t, sharp, amount);
+            }
+
             half4 Frag(Varyings input) : SV_Target
             {
                 float3 positionWS = input.positionWS;
@@ -253,6 +269,9 @@ Shader "TinyDiggers/Terrain Triplanar"
                 float2 footprint = fwidth(cell);
                 float2 width = max(_BlendWidth, footprint * 1.5);
                 float2 t = saturate((f - 0.5) / max(width, 0.01) + 0.5);
+                // Height blending picks per texel, so it fades out once a cell is only a few pixels
+                // across: far off, mipped heights made the edges sparkle (2026-09-24).
+                float heightBlend = _HeightBlend * (1.0 - smoothstep(0.12, 0.4, max(footprint.x, footprint.y)));
                 t = t * t * (3.0 - 2.0 * t);
                 float w00 = (1.0 - t.x) * (1.0 - t.y);
                 float w10 = t.x * (1.0 - t.y);
@@ -300,9 +319,15 @@ Shader "TinyDiggers/Terrain Triplanar"
                 half3 albedoSoil = 0, albedoStone = 0;
                 half3 normalSoil = 0, normalStone = 0;
                 half smoothSoil = 0, smoothStone = 0;
+                half heightSoil = 0, heightStone = 0;
                 float weightSoil = 0, weightStone = 0;
                 float stoneField = 0;
                 float weights[4] = { w00, w10, w01, w11 };
+                half3 cellAlbedo[4];
+                half3 cellNormal[4];
+                half cellSmooth[4];
+                half cellHeight[4];
+                bool cellStone[4];
                 float2 offsets[4] = { float2(0, 0), float2(1, 0), float2(0, 1), float2(1, 1) };
                 // Plain bilinear weights for the field, so its contour is smooth, not stepped.
                 float2 fs = f;
@@ -338,40 +363,72 @@ Shader "TinyDiggers/Terrain Triplanar"
                     {
                         half4 lushAlbedo = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), albedoUV, axisWeights, topParams.z);
                         half4 lushNormal = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Normals, sampler_Normals), detailUV, axisWeights, topParams.z);
-                        albedoSample = lerp(albedoSample, lushAlbedo, lushWeight);
-                        normalSample = lerp(normalSample, lushNormal, lushWeight);
+                        float lushHere = HeightT(lushWeight, albedoSample.a, lushAlbedo.a, heightBlend);
+                        albedoSample = lerp(albedoSample, lushAlbedo, lushHere);
+                        normalSample = lerp(normalSample, lushNormal, lushHere);
                     }
 
                     if (firstSlice == topSlice && topParams.w > 0.5 && dryWeight > 0.01)
                     {
                         half4 dryAlbedo = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), albedoUV, axisWeights, topParams.w);
                         half4 dryNormal = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Normals, sampler_Normals), detailUV, axisWeights, topParams.w);
-                        albedoSample = lerp(albedoSample, dryAlbedo, dryWeight);
-                        normalSample = lerp(normalSample, dryNormal, dryWeight);
+                        float dryHere = HeightT(dryWeight, albedoSample.a, dryAlbedo.a, heightBlend);
+                        albedoSample = lerp(albedoSample, dryAlbedo, dryHere);
+                        normalSample = lerp(normalSample, dryNormal, dryHere);
                     }
 
                     if (cutBlend > 0.001 && cutBlend < 0.999 && cutSlice != topSlice)
                     {
                         half4 cutAlbedo = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), albedoUV, axisWeights, cutSlice);
                         half4 cutNormal = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Normals, sampler_Normals), detailUV, axisWeights, cutSlice);
-                        albedoSample = lerp(albedoSample, cutAlbedo, cutBlend);
-                        normalSample = lerp(normalSample, cutNormal, cutBlend);
-                        smooth = lerp(smooth, _MaterialParams[(int)cutSlice].x, cutBlend);
+                        float cutHere = HeightT(cutBlend, albedoSample.a, cutAlbedo.a, heightBlend);
+                        albedoSample = lerp(albedoSample, cutAlbedo, cutHere);
+                        normalSample = lerp(normalSample, cutNormal, cutHere);
+                        smooth = lerp(smooth, _MaterialParams[(int)cutSlice].x, cutHere);
                     }
-                    half3 n = normalSample.rgb * 2.0 - 1.0;
+                    cellAlbedo[i] = albedoSample.rgb;
+                    cellNormal[i] = normalSample.rgb * 2.0 - 1.0;
+                    cellSmooth[i] = smooth;
+                    cellHeight[i] = albedoSample.a;
+                    cellStone[i] = ids.a > 0.5;
+                }
 
-                    if (ids.a > 0.5)
+                // The four cells by height as well as by nearness: each one's weight is raised by its
+                // own height, and only those within the blend depth of the highest count, so where
+                // grass meets rock the stones' tops win first and the grass fills the cracks
+                // (Ronan's reference, 2026-09-24). The height counts only as far as the cell is near,
+                // or a far cell's tall stones would show through the middle of its neighbour.
+                float heightMax[2] = { -1.0, -1.0 };
+                float raised[4];
+                [unroll]
+                for (int j = 0; j < 4; j++)
+                {
+                    float w = weights[j] + 0.02;
+                    raised[j] = w + cellHeight[j] * 0.45 * saturate(w * 4.0);
+                    int group = cellStone[j] ? 1 : 0;
+                    heightMax[group] = max(heightMax[group], raised[j]);
+                }
+
+                [unroll]
+                for (int k = 0; k < 4; k++)
+                {
+                    float plain = weights[k] + 0.02;
+                    float byHeight = max(raised[k] - (heightMax[cellStone[k] ? 1 : 0] - max(_HeightBlendDepth, 0.02)), 0.0);
+                    float weight = lerp(plain, byHeight, heightBlend);
+                    if (cellStone[k])
                     {
-                        albedoStone += albedoSample.rgb * weight;
-                        normalStone += n * weight;
-                        smoothStone += smooth * weight;
+                        albedoStone += cellAlbedo[k] * weight;
+                        normalStone += cellNormal[k] * weight;
+                        smoothStone += cellSmooth[k] * weight;
+                        heightStone += cellHeight[k] * weight;
                         weightStone += weight;
                     }
                     else
                     {
-                        albedoSoil += albedoSample.rgb * weight;
-                        normalSoil += n * weight;
-                        smoothSoil += smooth * weight;
+                        albedoSoil += cellAlbedo[k] * weight;
+                        normalSoil += cellNormal[k] * weight;
+                        smoothSoil += cellSmooth[k] * weight;
+                        heightSoil += cellHeight[k] * weight;
                         weightSoil += weight;
                     }
                 }
@@ -379,7 +436,13 @@ Shader "TinyDiggers/Terrain Triplanar"
                 // Where the edge falls: the smooth field, pushed about by two octaves of noise so
                 // it wanders like a real outcrop edge, with a soft band either side.
                 float edgeNoise = ValueNoise(positionWS.xz * 0.45) * 0.65 + ValueNoise(positionWS.xz * 1.7) * 0.35;
-                float stoneAmount = smoothstep(0.38, 0.62, stoneField + (edgeNoise - 0.5) * 0.35);
+                // With height blending the band is wider: stone breaks through in its own shapes
+                // across it rather than fading in.
+                float edgeHalf = lerp(0.12, 0.22, heightBlend);
+                float stoneAmount = smoothstep(0.5 - edgeHalf, 0.5 + edgeHalf, stoneField + (edgeNoise - 0.5) * 0.35);
+                heightSoil /= max(weightSoil, 1e-4);
+                heightStone /= max(weightStone, 1e-4);
+                stoneAmount = HeightT(stoneAmount, heightSoil, heightStone, heightBlend);
                 if (weightStone <= 0.0) stoneAmount = 0.0;
                 if (weightSoil <= 0.0) stoneAmount = 1.0;
                 albedoSoil /= max(weightSoil, 1e-4);
