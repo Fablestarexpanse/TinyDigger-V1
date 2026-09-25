@@ -319,6 +319,18 @@ namespace TinyDiggers.Interaction
 
         public void Deselect() => Selected = false;
 
+        /// <summary>Selects the craft, as clicking it does (the units menu).</summary>
+        public void Select()
+        {
+            if (Craft == null)
+                return;
+            if (!Selected)
+                Craft.Nav.Refresh();
+            Selected = true;
+            _tools.Crew?.Deselect();
+            _tools.Say("Landing craft: right-click a shore to send it there");
+        }
+
         /// <summary>Sends the selected craft to beach near the cell; the status line says how it went.</summary>
         public bool OrderSailTo(int x, int z)
         {

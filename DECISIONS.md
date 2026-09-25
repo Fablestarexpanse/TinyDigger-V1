@@ -6655,3 +6655,32 @@ refreshed when the craft is selected. With machines selected, the cursor on the 
 sends them aboard and how many lanes are free, or that its ramp is not down or it is full. Checked in play
 by injecting the cursor through the Input System: the far beach gave the ghost, mid-lake gave the reason.
 
+## UI and menus re-evaluated (2026-09-24)
+
+Ronan: *"putting units in their own menu to free up screen space, let's re-evaluate our UI and menus before
+going to stamps"*. Seen in play: the crew list top left is always open, eight rows each repeating
+"Parked: no worksite - assign it t...", a dismiss cross on every row, hiring squeezed underneath; the
+machines still carry the walker names; the bottom toolbar is one flat row of ten tools with seed, settings
+and debug mixed in. Rulings (Ronan):
+
+- **Units: a button and a panel on demand** (hotkey U): the roster grouped by type, idle warnings rolled up
+  into one line, hiring inside it. Closed by default.
+- **Toolbar: grouped flyouts**: Select | Terrain (dig, fill, level, terraform, stamps) | Zones (dump,
+  quarry, worksite) | Road | Clear; seed, settings and debug to a menu top right.
+- **A selection card**, bottom left, only while something is selected: what it is, what each is doing,
+  and the actions (worksite, board the craft, hold, dismiss). The per-row crosses go.
+
+Order: units menu (with the renames: Excavator, Dump truck, Bulldozer), then the selection card, then the
+toolbar, then stamps.
+
+
+**Units menu built (2026-09-24).** `CrewPanelView` is now a button top left ("Units 8 ▾", U toggles it)
+and a panel under it, closed by default. Open, it groups the roster by kind: a header per kind with an
+icon, a count and a one-word summary ("all idle"); clicking a header selects that whole kind; slim rows
+under it (number, what it is doing, load bar); the × dismiss shows only on selected rows. The landing
+craft gets its own header with its state. "N units idle: no worksite" is one rolled-up line instead of a
+sentence on every row. Hiring sits at the foot, three buttons to a line, and the panel grows to fit
+them (the first cut let the fifth button spill out below the panel). A stuck unit still shows as a
+warning banner under the button with the menu closed, because it is a question for the player. The
+renames are in `UnitNames`: Excavator, Dump truck ("Truck" short), Bulldozer. Screens:
+`Screenshots/units-closed.png`, `Screenshots/units-open.png`.

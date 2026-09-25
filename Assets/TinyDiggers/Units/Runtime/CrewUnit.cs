@@ -14,8 +14,9 @@ namespace TinyDiggers.Units
     public static class UnitNames
     {
         public const string Worker = "Starter robot";
-        public const string Digger = "Digger mech";
-        public const string Hauler = "Dumper mech";
+        // The machine-forge models (2026-09-24): an excavator and a dump truck, no longer mechs.
+        public const string Digger = "Excavator";
+        public const string Hauler = "Dump truck";
         public const string Bulldozer = "Bulldozer";
         public const string Paver = "Paver";
 
@@ -27,8 +28,8 @@ namespace TinyDiggers.Units
         {
             switch (role)
             {
-                case UnitRole.Digger: return "Digger";
-                case UnitRole.Hauler: return "Dumper";
+                case UnitRole.Digger: return "Excavator";
+                case UnitRole.Hauler: return "Truck";
                 case UnitRole.Bulldozer: return "Dozer";
                 case UnitRole.Paver: return "Paver";
                 default: return "Robot";
