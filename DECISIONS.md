@@ -6966,3 +6966,8 @@ cut at 0.33 m spacing and 5 blades 4.35 vs 4.26 ms GPU (**0.09 ms**) — visibly
 0.2 m and 7 blades **4.52 vs 4.16 ms (0.36 ms)**, a quarter of the 1.5 ms budget. Look:
 `Screenshots/grass-v3.png` (low, and at play height). Next: gust waves and wildflowers, then units
 bending it.
+
+**Grass off for now (Ronan, 2026-09-24: "I think I don't like the grass all that much anymore").**
+Asked what to do, he chose to turn it off, not remove it: the `GPU Grass` object in the sandbox scene
+is inactive, the code, shader and compute pass stay. Slices B (gust waves, wildflowers) and C (units
+bending it) are on hold. Setting the object active brings it back as slice A left it.
