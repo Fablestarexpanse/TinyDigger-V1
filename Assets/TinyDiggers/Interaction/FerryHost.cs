@@ -3,6 +3,7 @@ using TinyDiggers.Presentation;
 using TinyDiggers.Terrain;
 using TinyDiggers.Units;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace TinyDiggers.Interaction
 {
@@ -33,6 +34,12 @@ namespace TinyDiggers.Interaction
         Transform _body;
         Animator _animator;
         LineRenderer _routeLine;
+        LineRenderer _ghost;
+        LineRenderer _rampMark;
+        LineRenderer _selectedOutline;
+        Vector2Int _lastHover = new Vector2Int(int.MinValue, int.MinValue);
+        Landing _preview;
+        bool _hintedBoard;
         FerryState _drawnState;
         bool _gaveUp;
 
@@ -53,6 +60,24 @@ namespace TinyDiggers.Interaction
             _routeLine.widthMultiplier = 0.15f;
             _routeLine.startColor = _routeLine.endColor = new Color(0.4f, 0.85f, 1f, 0.8f);
             _routeLine.positionCount = 0;
+
+            // The ghost of where it will beach, the ramp foot, and a ring round it when selected.
+            _ghost = Line("Landing Craft Ghost", _routeLine.sharedMaterial, new Color(0.45f, 1f, 0.55f, 0.9f), 0.12f);
+            _rampMark = Line("Landing Craft Ramp Foot", _routeLine.sharedMaterial, new Color(1f, 0.9f, 0.3f, 0.95f), 0.1f);
+            _selectedOutline = Line("Landing Craft Selected", _routeLine.sharedMaterial, new Color(1f, 0.95f, 0.5f, 0.9f), 0.1f);
+        }
+
+        LineRenderer Line(string name, Material material, Color colour, float width)
+        {
+            var go = new GameObject(name) { hideFlags = HideFlags.DontSave };
+            go.transform.SetParent(transform, false);
+            var line = go.AddComponent<LineRenderer>();
+            line.sharedMaterial = material;
+            line.widthMultiplier = width;
+            line.startColor = line.endColor = colour;
+            line.loop = true;
+            line.positionCount = 0;
+            return line;
         }
 
         void Update()
@@ -68,6 +93,8 @@ namespace TinyDiggers.Interaction
 
             Craft.Tick(Mathf.Min(Time.deltaTime, 0.1f));
             Draw();
+            Preview();
+            HintBoarding();
         }
 
         /// <summary>Moors the craft on the beach nearest the crew's spawn.</summary>
@@ -160,6 +187,97 @@ namespace TinyDiggers.Interaction
                 }
         }
 
+        /// <summary>
+        /// With the craft selected: where it would beach for the ground under the cursor, drawn as a
+        /// ghost of its hull and ramp foot, or the reason it cannot, on the status line. Worked out
+        /// only when the cursor moves to another cell, from the water as last refreshed.
+        /// </summary>
+        void Preview()
+        {
+            DrawHull(_selectedOutline, Selected ? Craft.Position : (Vector2?)null, Craft.Heading, 0.35f);
+            if (!Selected || !_tools.HasHover)
+            {
+                _ghost.positionCount = 0;
+                _rampMark.positionCount = 0;
+                _lastHover = new Vector2Int(int.MinValue, int.MinValue);
+                return;
+            }
+
+            var hover = new Vector2Int(_tools.HoverX, _tools.HoverZ);
+            if (hover != _lastHover)
+            {
+                _lastHover = hover;
+                _preview = Ferry.FindLanding(_terrain.Grid, Craft.Nav, hover);
+                _tools.Say(Craft.Busy ? "Landing craft: waiting for machines to finish going aboard or ashore"
+                    : _preview.Found ? "Landing craft: right-click to beach here"
+                    : "Landing craft can't beach here: " + _preview.Refusal);
+            }
+
+            DrawHull(_ghost, _preview.Found ? _preview.Hull : (Vector2?)null, _preview.Heading, 0.15f);
+            if (_preview.Found)
+            {
+                var foot = _preview.RampFoot;
+                var centre = new Vector2(foot.x + 0.5f, foot.y + 0.5f);
+                var y = _terrain.transform.TransformPoint(new Vector3(0f, _terrain.Grid.GetSurfaceHeight(foot.x, foot.y) + 0.08f, 0f)).y;
+                _rampMark.positionCount = 4;
+                _rampMark.SetPosition(0, World(centre + new Vector2(-0.45f, -0.45f), y));
+                _rampMark.SetPosition(1, World(centre + new Vector2(0.45f, -0.45f), y));
+                _rampMark.SetPosition(2, World(centre + new Vector2(0.45f, 0.45f), y));
+                _rampMark.SetPosition(3, World(centre + new Vector2(-0.45f, 0.45f), y));
+            }
+            else
+            {
+                _rampMark.positionCount = 0;
+            }
+        }
+
+        /// <summary>The hull's outline at <paramref name="hull"/> (cells), just above the water; hidden when null.</summary>
+        void DrawHull(LineRenderer line, Vector2? hull, float heading, float above)
+        {
+            if (!hull.HasValue)
+            {
+                line.positionCount = 0;
+                return;
+            }
+
+            var cell = _terrain.Grid.CellSize;
+            var radians = heading * Mathf.Deg2Rad;
+            var dir = new Vector2(Mathf.Sin(radians), Mathf.Cos(radians));
+            var side = new Vector2(dir.y, -dir.x);
+            var along = dir * (Ferry.HalfLength / cell);
+            var across = side * (Ferry.HalfBeam / cell);
+            var y = WaterLevel(hull.Value) + above;
+            line.positionCount = 4;
+            line.SetPosition(0, World(hull.Value + along + across, y));
+            line.SetPosition(1, World(hull.Value + along - across, y));
+            line.SetPosition(2, World(hull.Value - along - across, y));
+            line.SetPosition(3, World(hull.Value - along + across, y));
+        }
+
+        /// <summary>
+        /// With machines selected and the cursor on the craft: says that a right-click sends them
+        /// aboard, or why it would not.
+        /// </summary>
+        void HintBoarding()
+        {
+            var crew = _tools.Crew;
+            var mouse = Mouse.current;
+            var over = crew != null && crew.SelectedCount > 0 && mouse != null && _tools.Camera != null
+                       && Hits(_tools.Camera.ScreenPointToRay(mouse.position.ReadValue()));
+            if (over && !_hintedBoard)
+            {
+                var free = 0;
+                foreach (var lane in Craft.Lanes)
+                    if (lane < 0)
+                        free++;
+                _tools.Say(Craft.State != FerryState.RampDown ? "Landing craft: its ramp is not down"
+                    : free == 0 ? "Landing craft: full"
+                    : "Right-click to send them aboard the landing craft (" + free + (free == 1 ? " lane free)" : " lanes free)"));
+            }
+
+            _hintedBoard = over;
+        }
+
         /// <summary>Metres above the keel the machines ride: the deck of the well (forge 0.22 m).</summary>
         const float DeckHeight = 0.31f;
 
@@ -191,7 +309,11 @@ namespace TinyDiggers.Interaction
         /// <summary>Selects the craft if the ray hits it; true when it did.</summary>
         public bool TrySelectAt(Ray ray)
         {
+            var was = Selected;
             Selected = _body != null && Physics.Raycast(ray, out var hit, 10000f) && hit.transform == _body;
+            // The water has moved and been dug since it was last looked at: the ghost reads it fresh.
+            if (Selected && !was && Craft != null)
+                Craft.Nav.Refresh();
             return Selected;
         }
 

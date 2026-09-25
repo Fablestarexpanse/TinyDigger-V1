@@ -6645,3 +6645,13 @@ Three faults found on the way, each by tracing rather than guessing:
 - In play the craft first moored on a lake beach the crew could not drive to; the mooring now needs the crew
   to reach the ramp's line-up cell. Then: digger and dozer boarded in 34 s, crossed 46 cells and drove off.
 
+## Landing craft slice D: the ghost and the reasons (2026-09-24)
+
+With the craft selected it is outlined, and the cursor's cell is looked at the way an order would be: a
+green ghost of the hull where it would beach and a mark on the ramp foot, or no ghost and the reason on the
+status line ("too shallow to float here", "bank too steep for the ramp", "no room behind the ramp to line
+up", "no shore in reach"). The landing is worked out only when the cursor changes cell, from the water map
+refreshed when the craft is selected. With machines selected, the cursor on the craft says a right-click
+sends them aboard and how many lanes are free, or that its ramp is not down or it is full. Checked in play
+by injecting the cursor through the Input System: the far beach gave the ghost, mid-lake gave the reason.
+
