@@ -175,6 +175,20 @@ verbatim. Only the subject sentence changes per asset.
 > rounded shell panels like a sturdy toy, few parts, big readable shapes, a simple friendly
 > face, paint slightly worn at the edges. No plants or bushes anywhere.
 
+**TERRAIN TILE block** (ground textures; added with Ronan's OK on 2026-09-24, after the first
+bible-style tiles were "too cartoon"). Terrain is the one place the bible goes natural: a tile is
+**subject + this block**, and the object core above is not used.
+
+> Seamless tileable ground texture, viewed straight down, even from edge to edge, no focal point, no
+> horizon, no perspective, no cast shadows. Painted realistic style like a modern city-builder or
+> strategy game: natural colours, true-to-life shapes and proportions, fine soft detail, subtle not
+> saturated, matte, soft even overcast daylight, not cartoon, no chunky shapes, no outlines, no
+> text, no border.
+
+The subject sentence names the material and ends with "randomly scattered with no rows, no grid and
+no repeating motif" — without it the model lays tufts and stones out in rows. Rock faces say "seen
+straight on" instead of "viewed straight down". The colour grade in game supplies the saturation.
+
 **Negative block.** Kept for the record and for any non-distilled model:
 
 > photorealistic, photo, realistic bark texture, noise, film grain, black outlines, ink lines,

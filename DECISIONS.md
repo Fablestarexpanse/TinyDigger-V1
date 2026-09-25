@@ -6844,3 +6844,25 @@ and nothing else. This reverses the earlier "one library, two uses" ruling: slic
 rules) is dropped, and the mountain shapes stay the generator's own job. `StampUse.Generator` and the
 stamp code living in the Terrain assembly are left as they are; they cost nothing, but nothing is to be
 built on them for the generator.
+
+## Terrain textures from ComfyUI — rulings (Ronan, 2026-09-24)
+
+Ronan: *"Work on textures next."* Asked where they should come from: **ComfyUI painted tiles**, in
+place of the procedural recipes from `TerrainTextureGenerator`. What bothers him most about the
+ground now: **it is flat and samey** (one yellow-green everywhere, no patches), **rock and cliffs**,
+and **dug ground and sand**. Close-up detail was not on the list, so the tiles are judged at play
+distance first.
+
+**First tile tests: too cartoon (Ronan, 2026-09-24: "To cartoon at moment").** The style-bible look
+(chunky tufts in rows, bold bevelled stone blocks, saturated flat colour) is too cartoonish for the
+ground. Next round tries two directions per material — painted but natural (soft painterly detail,
+true-to-life shapes and colour, the Captain of Industry / Anno register) and near-photographic — for
+him to pick before any full set is made.
+
+**Tile style ruling (Ronan, 2026-09-24).** Of three rows — A painted-natural, B photographic, and the
+first cartoon tests (`Screenshots/tiles-style-choice.png`) — the ground uses **A, painted-natural**:
+natural shapes and colour with a soft painted finish. And **terrain goes natural in the style bible**:
+a TERRAIN TILE block is added to STYLE.md §7; props, trees and machines keep the stylized look.
+Observed in the round: Krea2 renders "painted" close to real anyway; A's grass has large dark blotches
+that must be flattened before it can tile; both rock tiles came out as boulder piles with baked
+shadows, so rock needs a flat-lit surface prompt.
