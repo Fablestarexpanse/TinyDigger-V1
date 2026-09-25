@@ -35,6 +35,8 @@ Shader "TinyDiggers/Terrain Triplanar"
         _AlbedoRepeat ("Albedo repeat (m)", Range(0.1, 16)) = 0.5
         _DetailRepeat ("Detail normal repeat (m)", Range(0.05, 16)) = 0.25
         _DetailStrength ("Detail normal strength", Range(0, 2)) = 1
+        _MacroRatio ("Anti-tiling: second scale (x repeat)", Range(1, 8)) = 3.3
+        _MacroMix ("Anti-tiling: second scale share", Range(0, 1)) = 0.45
         _MottleRepeat ("Mottle repeat (m)", Range(2, 40)) = 11.3
         _MottleStrength ("Mottle strength", Range(0, 0.4)) = 0.1
         _BlendWidth ("Material blend width (cells)", Range(0.05, 4)) = 2
@@ -81,6 +83,8 @@ Shader "TinyDiggers/Terrain Triplanar"
             float _AlbedoRepeat;
             float _DetailRepeat;
             half _DetailStrength;
+            float _MacroRatio;
+            half _MacroMix;
             float _MottleRepeat;
             half _MottleStrength;
             float _BlendWidth;
@@ -283,6 +287,11 @@ Shader "TinyDiggers/Terrain Triplanar"
 
                 TriplanarUV albedoUV = MakeTriplanarUV(positionWS, _AlbedoRepeat);
                 TriplanarUV detailUV = MakeTriplanarUV(positionWS, _DetailRepeat);
+                // The same albedo again at a scale _MacroRatio times larger, offset so the two grids
+                // never line up, and mixed in: a painted tile repeated every few metres reads as a
+                // grid of the same blocks (the rock tiles did, 2026-09-24); two scales that do not
+                // share a period break it up.
+                TriplanarUV macroUV = MakeTriplanarUV(positionWS + float3(37.1, 11.3, 23.7), _AlbedoRepeat * _MacroRatio);
 
                 // Stone and everything else are blended separately and then mixed along a smooth
                 // line: the 0.5 contour of the blurred stone field (cell map blue), bent by noise.
@@ -318,6 +327,8 @@ Shader "TinyDiggers/Terrain Triplanar"
                     // the band samples both; the gradients are explicit, so the branch is safe.
                     float firstSlice = cutBlend >= 0.999 ? cutSlice : topSlice;
                     half4 albedoSample = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), albedoUV, axisWeights, firstSlice);
+                    if (_MacroMix > 0.001)
+                        albedoSample = lerp(albedoSample, SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), macroUV, axisWeights, firstSlice), _MacroMix);
                     half4 normalSample = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Normals, sampler_Normals), detailUV, axisWeights, firstSlice);
                     half smooth = _MaterialParams[(int)firstSlice].x;
 

@@ -6919,3 +6919,16 @@ ground averaged over 2 m against its 6 m and 15 m averages, full at 1 m below; a
 half-metre steps read level. In play (`Screenshots/tex-hollows-compare.png`, left before, right after):
 the river valley and gullies run deep green, crests lift a little, the terrace bands are not made
 worse. Gentler than the references; the strength is a TerrainView field.
+
+**Stone less cartoony (Ronan, 2026-09-24: "work on the stone, it still looks too cartoony").** The
+painted rock tiles came out as tidy paving slabs and even strata, which is what read as a cartoon.
+Stone now uses **photographic** prompts (the TERRAIN TILE block with "photorealistic, not stylized,
+not painted"): six candidates, seeds 13000–13201 (`Screenshots/stone-candidates.png`); rock_face_0 is
+the rock surface, rock_face_1 the cliff face, rock_scree_1 the scree, cleaned with lighter flattening
+(0.6) to keep the fractures and matched to a cool blue-grey (0.36, 0.40, 0.44). The outcrop-top
+candidates each had one boulder in the middle, a focal point that repeats, and were not used. Tiled,
+the fractured blocks repeated as an obvious grid, so the shader gained **anti-tiling**: every albedo is
+also sampled at 3.3× its tile, offset, and mixed in at 0.45 (`_MacroRatio`, `_MacroMix`), which breaks
+the grid for every material, grass included. On a 10 m sea cliff (`Screenshots/stone-cliff.png`): blue-
+grey fractured rock with crevices and lichen and no visible repeat. Seen on the way: the grass top reads
+very saturated at a low angle, and the rock/sand line at the cliff foot draws pale spikes (mesh, old).
