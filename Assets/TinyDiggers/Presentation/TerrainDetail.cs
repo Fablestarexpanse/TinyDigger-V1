@@ -28,6 +28,9 @@ namespace TinyDiggers.Presentation
         static readonly int MottleRepeatId = Shader.PropertyToID("_MottleRepeat");
         static readonly int MottleStrengthId = Shader.PropertyToID("_MottleStrength");
         static readonly int BlendWidthId = Shader.PropertyToID("_BlendWidth");
+        static readonly int VariantScaleId = Shader.PropertyToID("_VariantScale");
+        static readonly int VariantAmountId = Shader.PropertyToID("_VariantAmount");
+        static readonly int DryHeightId = Shader.PropertyToID("_DryHeight");
 
         readonly TerrainMaterialAtlas _atlas;
         readonly TerrainCellMap _cellMap;
@@ -73,6 +76,17 @@ namespace TinyDiggers.Presentation
             _material.SetFloat(MottleStrengthId, mottleStrength);
             // Tuned in metres; the shader blends in cells.
             _material.SetFloat(BlendWidthId, blendWidth / _cellSize);
+        }
+
+        /// <summary>
+        /// The variant looks (lush and dry grass): metres across a patch, how strongly they show,
+        /// and the heights over which the ground turns dry.
+        /// </summary>
+        public void SetVariants(float scale, float amount, float dryFrom, float dryTo)
+        {
+            _material.SetFloat(VariantScaleId, scale);
+            _material.SetFloat(VariantAmountId, amount);
+            _material.SetVector(DryHeightId, new Vector4(dryFrom, dryTo, 0f, 0f));
         }
 
         /// <summary>Sends any cells changed since the last frame. Does nothing when nothing changed.</summary>

@@ -6866,3 +6866,44 @@ a TERRAIN TILE block is added to STYLE.md §7; props, trees and machines keep th
 Observed in the round: Krea2 renders "painted" close to real anyway; A's grass has large dark blotches
 that must be flattened before it can tile; both rock tiles came out as boulder piles with baked
 shadows, so rock needs a flat-lit surface prompt.
+
+**Painted terrain tiles, first set in (2026-09-24).** Why the ground read flat: the albedo repeated
+every **0.5 m**, about two pixels at play distance, so any detail averaged to one colour; the only
+large-scale variation was a brightness-only mottle. Now:
+
+- **Ten ComfyUI tiles** in the TERRAIN TILE style (seeds 12000–12900, posted straight to ComfyUI's API
+  — the draftsman tool kept losing its workflow when ComfyUI stalled loading models): grass meadow,
+  lush and dry; dirt; loose dirt; sand; rock; rock cliff face; scree; granite.
+- **`Art/Tools/td_tile_clean.py`** makes each one a tile: divides out blotches (the model lays dark
+  patches almost on a grid, which repeat visibly), crossfades with a half-shifted copy so the edges
+  meet, and takes a wrapped normal from the brightness. Grass flattens at full strength, rock less so
+  it keeps its slabs.
+- **`TinyDiggers/Import Painted Terrain Tiles`** builds `Terrain/TexturesPainted/TerrainTexturesPainted.asset`:
+  a copy of the procedural set with the painted tiles swapped in (clay, ores, bedrock, limestone and
+  road stay procedural for now), in its own folder because the procedural generator deletes textures
+  it did not write. The scene's `TerrainView` now uses it; pointing it back at `TerrainTextures.asset`
+  restores the old look.
+- **A set carries its own tile size** (`TileMetres`, 6 m for the painted set); 0 leaves the view's
+  0.5 m, so the procedural set is unchanged.
+- **Variant looks.** An entry can carry two alternates (`Alt`, `Alt2`); the atlas appends them (23 of
+  24 slices now used) and puts their slices in `_MaterialParams` z and w, and the shader blends them
+  over the base in patches drawn by two slow noise fields, the dry one favoured on high ground. For
+  grass: lush and dry. Tuned in play from 90 m patches at full strength, dry from 15 m (the dry look
+  took whole hillsides) to **70 m patches, strength 0.7, dry from 30 m to 70 m**.
+
+Before/after at the same close view: `Screenshots/tex-compare-close.png`. Still to do: the cliff tile
+repeats as visible bands on long faces, rock and granite slabs repeat, and the materials left
+procedural are drawn at 6 m tiles they were not made for.
+
+**Target look: Ronan's terrain references (2026-09-24, "going for textures more like these").** Two
+images of a stylized-natural terrain block (`Art/References~/terrain_ref_*.webp`): vivid lime grass
+with fine grain, deep green in hollows and on shaded sides, blue-grey cracked rock breaking through on
+steep ridges, no dry or straw colour. Sampled from them as rendered: grass mid #889d26, lit #bbc32f,
+shade #2b4721; rock a cool blue-grey. The first painted set was too olive (albedo mean 0.41, 0.46,
+0.23) and its dry-straw variant pointed the wrong way. `td_tile_clean.py --mean` now moves a tile's
+average colour onto a target, keeping its detail: meadow (0.50, 0.60, 0.13) — the colour the old
+procedural grass rendered close to the references with — lush (0.28, 0.44, 0.10), the "dry" slot now
+a sunlit lime (0.64, 0.68, 0.15) from the meadow tile, rock (0.36, 0.39, 0.42) and cliff face (0.34,
+0.37, 0.41). In play (`Screenshots/tex-lime.png`): the island reads vivid lime like the references,
+with painted rock and sand. Missing against them: deep green in hollows, and rock outcrops on steep
+grassy ridges.

@@ -32,6 +32,16 @@ namespace TinyDiggers.Presentation
 
             public Texture2D CutNormal;
 
+            [Tooltip("Optional: a second look of the same ground (lush grass), blended in in large patches.")]
+            public Texture2D AltAlbedo;
+
+            public Texture2D AltNormal;
+
+            [Tooltip("Optional: a third look (dry grass), blended in where the land is high and in its own patches.")]
+            public Texture2D Alt2Albedo;
+
+            public Texture2D Alt2Normal;
+
             [Range(0f, 1f)]
             [Tooltip("0 is matt (rock, soil), higher is softer and shinier (wet clay, sand sheen).")]
             public float Smoothness = 0.05f;
@@ -39,7 +49,19 @@ namespace TinyDiggers.Presentation
 
         [SerializeField] Entry[] _entries = Array.Empty<Entry>();
 
+        [SerializeField, Min(0f), Tooltip("Metres one tile covers, for this set; 0 leaves the terrain view's own setting. The painted set's tiles are metres across, the procedural set's half a metre.")]
+        float _tileMetres;
+
+        [SerializeField, Min(0f), Tooltip("Metres one tile of the normal covers; 0 follows the albedo's tile.")]
+        float _detailTileMetres;
+
         public Entry[] Entries => _entries;
+
+        /// <summary>Metres per albedo tile this set is painted for, or 0 to leave it to the view.</summary>
+        public float TileMetres => _tileMetres;
+
+        /// <summary>Metres per normal tile, or 0 to use <see cref="TileMetres"/>.</summary>
+        public float DetailTileMetres => _detailTileMetres;
 
         /// <summary>The entry for a material id, or null.</summary>
         public Entry Find(MaterialId id)
@@ -55,6 +77,13 @@ namespace TinyDiggers.Presentation
         public void SetEntries(Entry[] entries)
         {
             _entries = entries ?? Array.Empty<Entry>();
+        }
+
+        /// <summary>Sets the tile sizes. Used by the painted-tile importer.</summary>
+        public void SetTileMetres(float albedo, float detail)
+        {
+            _tileMetres = albedo;
+            _detailTileMetres = detail;
         }
 #endif
     }

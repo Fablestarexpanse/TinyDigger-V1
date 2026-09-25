@@ -16,7 +16,7 @@ namespace TinyDiggers.Presentation
     /// </summary>
     public sealed class TerrainMaterialAtlas : IDisposable
     {
-        /// <summary>x: smoothness. y: slice to use on a cut face. z, w: spare.</summary>
+        /// <summary>x: smoothness. y: slice to use on a cut face. z, w: the slices of its two variant looks, or 0.</summary>
         public const int MaxSlices = 24;
 
         readonly Texture2DArray _albedo;
@@ -38,8 +38,16 @@ namespace TinyDiggers.Presentation
             var slices = table.MaxId + 1;
             var cuts = 0;
             foreach (var entry in set.Entries)
-                if (entry != null && entry.CutAlbedo != null)
+            {
+                if (entry == null)
+                    continue;
+                if (entry.CutAlbedo != null)
                     cuts++;
+                if (entry.AltAlbedo != null)
+                    cuts++;
+                if (entry.Alt2Albedo != null)
+                    cuts++;
+            }
             slices += cuts;
             if (slices > MaxSlices)
                 throw new InvalidOperationException($"{slices} texture slices is more than the shader's {MaxSlices}.");
@@ -75,7 +83,24 @@ namespace TinyDiggers.Presentation
                     Parameters[cutSlice] = new Vector4(entry.Smoothness, cutSlice, 0f, 0f);
                 }
 
-                Parameters[id] = new Vector4(entry.Smoothness, cutSlice, 0f, 0f);
+                // Variant looks go after the cuts; the shader blends them in by their slice numbers.
+                var alt = 0;
+                var alt2 = 0;
+                if (entry.AltAlbedo != null)
+                {
+                    alt = nextCut++;
+                    Copy(entry.AltAlbedo, entry.AltNormal ?? entry.Normal, alt);
+                    Parameters[alt] = new Vector4(entry.Smoothness, alt, 0f, 0f);
+                }
+
+                if (entry.Alt2Albedo != null)
+                {
+                    alt2 = nextCut++;
+                    Copy(entry.Alt2Albedo, entry.Alt2Normal ?? entry.Normal, alt2);
+                    Parameters[alt2] = new Vector4(entry.Smoothness, alt2, 0f, 0f);
+                }
+
+                Parameters[id] = new Vector4(entry.Smoothness, cutSlice, alt, alt2);
             }
 
             _albedo.Apply(updateMipmaps: true, makeNoLongerReadable: false);

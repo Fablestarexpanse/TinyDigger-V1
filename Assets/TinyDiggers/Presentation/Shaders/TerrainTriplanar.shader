@@ -12,6 +12,9 @@
 //   one flat colour.
 // - Faces past _SteepStart degrees are a cut: they take the exposed material, its "cut" variant
 //   where the set has one, and are darkened by _CutDarken.
+// - A material can have two variant looks (lush and dry grass, 2026-09-24): the atlas gives their
+//   slices in _MaterialParams z and w, and they are blended over the base in large patches drawn by
+//   two noise fields _VariantScale metres across, the dry one favoured on high ground.
 // - The mesh's smooth normal is the base; the detail normal perturbs it.
 // - Lighting is URP's own: main light, additional lights, shadows and ambient, with per-material
 //   smoothness.
@@ -25,8 +28,8 @@ Shader "TinyDiggers/Terrain Triplanar"
         [NoScaleOffset] _Normals ("Material normals", 2DArray) = "" {}
 
         _Tint ("Tint", Color) = (1, 1, 1, 1)
-        _AlbedoRepeat ("Albedo repeat (m)", Range(0.1, 8)) = 0.5
-        _DetailRepeat ("Detail normal repeat (m)", Range(0.05, 4)) = 0.25
+        _AlbedoRepeat ("Albedo repeat (m)", Range(0.1, 16)) = 0.5
+        _DetailRepeat ("Detail normal repeat (m)", Range(0.05, 16)) = 0.25
         _DetailStrength ("Detail normal strength", Range(0, 2)) = 1
         _MottleRepeat ("Mottle repeat (m)", Range(2, 40)) = 11.3
         _MottleStrength ("Mottle strength", Range(0, 0.4)) = 0.1
@@ -36,6 +39,12 @@ Shader "TinyDiggers/Terrain Triplanar"
         _SteepEnd ("Cut complete (degrees)", Range(0, 90)) = 55
         _CutDarken ("Cut face darkening", Range(0, 0.5)) = 0.15
         _Occlusion ("Slope shading", Range(0, 1)) = 0.25
+
+        [Header(Variant looks)]
+        _VariantScale ("Variant patch size (m)", Range(10, 500)) = 90
+        _VariantAmount ("Variant amount", Range(0, 1)) = 1
+        _VariantSoftness ("Variant edge softness", Range(0.02, 0.5)) = 0.14
+        _DryHeight ("Dry from / to height (m)", Vector) = (15, 45, 0, 0)
 
         [Header(Slope and contours)]
         _SlopeTint ("Slope tint", Range(0, 0.6)) = 0.2
@@ -71,6 +80,10 @@ Shader "TinyDiggers/Terrain Triplanar"
             half _SteepEnd;
             half _CutDarken;
             half _Occlusion;
+            float _VariantScale;
+            half _VariantAmount;
+            half _VariantSoftness;
+            float4 _DryHeight;
             half _SlopeTint;
             half4 _SlopeColour;
             half _SlopeFullAt;
@@ -243,6 +256,17 @@ Shader "TinyDiggers/Terrain Triplanar"
                 float3 axisWeights = pow(abs(geometryNormal), _TriplanarSharpness);
                 axisWeights /= max(axisWeights.x + axisWeights.y + axisWeights.z, 0.0001);
 
+                // How much of each variant look shows here: two slow noise fields, the dry one pushed
+                // up on high ground and the lush one down there. The same for every cell under this
+                // fragment, so the patches run across cell edges as one.
+                float2 variantAt = positionWS.xz / _VariantScale;
+                float lushField = ValueNoise(variantAt) * 0.6 + ValueNoise(variantAt * 0.35 + 31.0) * 0.4;
+                float dryField = ValueNoise(variantAt + 57.0) * 0.6 + ValueNoise(variantAt * 0.35 + 93.0) * 0.4;
+                float highGround = saturate((positionWS.y - _DryHeight.x) / max(_DryHeight.y - _DryHeight.x, 0.01));
+                float dryWeight = smoothstep(0.5 - _VariantSoftness, 0.5 + _VariantSoftness, dryField + highGround * 0.35 - 0.08) * _VariantAmount;
+                float lushWeight = smoothstep(0.5 - _VariantSoftness, 0.5 + _VariantSoftness, lushField - highGround * 0.3 - 0.04)
+                    * (1.0 - dryWeight) * _VariantAmount;
+
                 TriplanarUV albedoUV = MakeTriplanarUV(positionWS, _AlbedoRepeat);
                 TriplanarUV detailUV = MakeTriplanarUV(positionWS, _DetailRepeat);
 
@@ -282,6 +306,25 @@ Shader "TinyDiggers/Terrain Triplanar"
                     half4 albedoSample = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), albedoUV, axisWeights, firstSlice);
                     half4 normalSample = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Normals, sampler_Normals), detailUV, axisWeights, firstSlice);
                     half smooth = _MaterialParams[(int)firstSlice].x;
+
+                    // The top material's variant looks, where it has them.
+                    float4 topParams = _MaterialParams[(int)topSlice];
+                    if (firstSlice == topSlice && topParams.z > 0.5 && lushWeight > 0.01)
+                    {
+                        half4 lushAlbedo = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), albedoUV, axisWeights, topParams.z);
+                        half4 lushNormal = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Normals, sampler_Normals), detailUV, axisWeights, topParams.z);
+                        albedoSample = lerp(albedoSample, lushAlbedo, lushWeight);
+                        normalSample = lerp(normalSample, lushNormal, lushWeight);
+                    }
+
+                    if (firstSlice == topSlice && topParams.w > 0.5 && dryWeight > 0.01)
+                    {
+                        half4 dryAlbedo = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), albedoUV, axisWeights, topParams.w);
+                        half4 dryNormal = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Normals, sampler_Normals), detailUV, axisWeights, topParams.w);
+                        albedoSample = lerp(albedoSample, dryAlbedo, dryWeight);
+                        normalSample = lerp(normalSample, dryNormal, dryWeight);
+                    }
+
                     if (cutBlend > 0.001 && cutBlend < 0.999 && cutSlice != topSlice)
                     {
                         half4 cutAlbedo = SampleTriplanar(TEXTURE2D_ARRAY_ARGS(_Albedos, sampler_Albedos), albedoUV, axisWeights, cutSlice);

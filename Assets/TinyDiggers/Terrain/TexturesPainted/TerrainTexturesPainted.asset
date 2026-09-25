@@ -1,0 +1,215 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c196568d4f262e6479494bbec2f7dbd6, type: 3}
+  m_Name: TerrainTexturesPainted
+  m_EditorClassIdentifier: TinyDiggers.Presentation::TinyDiggers.Presentation.TerrainTextureSet
+  _entries:
+  - MaterialId: 7
+    Name: Grass
+    Albedo: {fileID: 2800000, guid: 6e6b4a457d73c6c438d7a00210cad8e0, type: 3}
+    Normal: {fileID: 2800000, guid: 6e6428b20444ad84e84f2dbd6ff0c2bb, type: 3}
+    CutAlbedo: {fileID: 2800000, guid: 6ac9bb190cc0ded4d8bd13dd0ff99374, type: 3}
+    CutNormal: {fileID: 2800000, guid: a6c429eb864d3ce459054d84ef9bf885, type: 3}
+    AltAlbedo: {fileID: 2800000, guid: 72a866a65941e4747b93b76abee9f65a, type: 3}
+    AltNormal: {fileID: 2800000, guid: ff06cd34f62091649831b0e08ba91287, type: 3}
+    Alt2Albedo: {fileID: 2800000, guid: 714fb842aeea51e4fb66dbee1e7f7c63, type: 3}
+    Alt2Normal: {fileID: 2800000, guid: 03311ed1e4ec9b64f87fb9408151fe30, type: 3}
+    Smoothness: 0.08
+  - MaterialId: 5
+    Name: Dirt
+    Albedo: {fileID: 2800000, guid: 6ac9bb190cc0ded4d8bd13dd0ff99374, type: 3}
+    Normal: {fileID: 2800000, guid: a6c429eb864d3ce459054d84ef9bf885, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.04
+  - MaterialId: 9
+    Name: DirtLoose
+    Albedo: {fileID: 2800000, guid: 007308fbfb85574428f2ae83c3f94b01, type: 3}
+    Normal: {fileID: 2800000, guid: f0861c2ac39370b449d846762e3846fc, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.04
+  - MaterialId: 6
+    Name: Sand
+    Albedo: {fileID: 2800000, guid: a9d07344b751f184aa2fbcbb8c443a00, type: 3}
+    Normal: {fileID: 2800000, guid: f269543bfaeaa0843ad6d29508fdf189, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.22
+  - MaterialId: 3
+    Name: Rock
+    Albedo: {fileID: 2800000, guid: f0542e4980beb9743975a4f6125b3a14, type: 3}
+    Normal: {fileID: 2800000, guid: 6ed96b5970b99b24882b8f6960471081, type: 3}
+    CutAlbedo: {fileID: 2800000, guid: 8d21707e9378dfb4a9799b7bef42db07, type: 3}
+    CutNormal: {fileID: 2800000, guid: 491184124bf238741937aef91c8e3bea, type: 3}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.05
+  - MaterialId: 8
+    Name: RockLoose
+    Albedo: {fileID: 2800000, guid: f3e4a4638ea581b40aaee1ae1a0ca7e4, type: 3}
+    Normal: {fileID: 2800000, guid: 860445da7c703904d8a8d4c6d18edd05, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.06
+  - MaterialId: 2
+    Name: Granite
+    Albedo: {fileID: 2800000, guid: 7929be9dee4e05444a3077525b57eb9c, type: 3}
+    Normal: {fileID: 2800000, guid: dde7635d9627b1a41ba9ee1acae50b19, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.12
+  - MaterialId: 1
+    Name: Bedrock
+    Albedo: {fileID: 2800000, guid: 2099b9b796ac4144ba950b7dd6e14910, type: 3}
+    Normal: {fileID: 2800000, guid: 8b2bf83a232e43b46b46ac22bdcef207, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.02
+  - MaterialId: 4
+    Name: Clay
+    Albedo: {fileID: 2800000, guid: d2339c30e80146d4fa1ecc14ff6459a1, type: 3}
+    Normal: {fileID: 2800000, guid: 74af6a7f2c79ef745ad53296e242a478, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.2
+  - MaterialId: 10
+    Name: Coal
+    Albedo: {fileID: 2800000, guid: cf0c6415348b67d46aedd81de58a74ce, type: 3}
+    Normal: {fileID: 2800000, guid: b04614743c0f4f34aa1a505ab874e45a, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.35
+  - MaterialId: 11
+    Name: CoalLoose
+    Albedo: {fileID: 2800000, guid: 2f9ad1306c5d37b47ad3f95660a1bce1, type: 3}
+    Normal: {fileID: 2800000, guid: 13d771c25147bac43a2acdfe64521f49, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.06
+  - MaterialId: 12
+    Name: IronOre
+    Albedo: {fileID: 2800000, guid: 89d4f78d2afddea4dbe9bce054ddb9a7, type: 3}
+    Normal: {fileID: 2800000, guid: 3c13a0c84d5791d43baaeeaee61cf710, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.1
+  - MaterialId: 13
+    Name: IronOreLoose
+    Albedo: {fileID: 2800000, guid: 0de622972c5863442a5731621c312500, type: 3}
+    Normal: {fileID: 2800000, guid: b7b1d528420c3ed40a6a5d05db2a6d7e, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.06
+  - MaterialId: 14
+    Name: CopperOre
+    Albedo: {fileID: 2800000, guid: 5fafe7f26db9c9f49bd93640b61a5123, type: 3}
+    Normal: {fileID: 2800000, guid: 7d99c683f3d5d2541807c9d406aa1136, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.1
+  - MaterialId: 15
+    Name: CopperOreLoose
+    Albedo: {fileID: 2800000, guid: e143c188179bdff4db4426dc13a2e793, type: 3}
+    Normal: {fileID: 2800000, guid: d6fdc61bf50a04c4d9a1f7f8d121d9b0, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.06
+  - MaterialId: 16
+    Name: Limestone
+    Albedo: {fileID: 2800000, guid: 497be609574eac4459820ad2a6107478, type: 3}
+    Normal: {fileID: 2800000, guid: 3d5a5232151890a42a177721b3dd2a29, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.08
+  - MaterialId: 17
+    Name: LimestoneLoose
+    Albedo: {fileID: 2800000, guid: e7e5ec2224078b64da8df53d7eaba957, type: 3}
+    Normal: {fileID: 2800000, guid: 1e9cdca19d1420e48a4a09928b4e2e93, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.06
+  - MaterialId: 18
+    Name: Road
+    Albedo: {fileID: 2800000, guid: c53539d56019f5b4297bdc13209467d6, type: 3}
+    Normal: {fileID: 2800000, guid: 767e3e98ca8f0dd4c89a7e19add33b66, type: 3}
+    CutAlbedo: {fileID: 0}
+    CutNormal: {fileID: 0}
+    AltAlbedo: {fileID: 0}
+    AltNormal: {fileID: 0}
+    Alt2Albedo: {fileID: 0}
+    Alt2Normal: {fileID: 0}
+    Smoothness: 0.1
+  _tileMetres: 6
+  _detailTileMetres: 0

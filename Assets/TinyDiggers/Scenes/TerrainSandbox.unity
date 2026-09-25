@@ -404,12 +404,15 @@ MonoBehaviour:
   _lodBuildsPerFrame: 48
   _generator: 0
   _settings: {fileID: 11400000, guid: 71c274e726d46d744b04536afba423c9, type: 2}
-  _textures: {fileID: 11400000, guid: 4c25006ba99936d4ebe9286ad5b4000f, type: 2}
+  _textures: {fileID: 11400000, guid: 74294b29e6a600c458810f132c8bae0e, type: 2}
   AlbedoRepeat: 0.5
   DetailRepeat: 0.25
   DetailStrength: 1
   MottleRepeat: 12
   MottleStrength: 0.18
+  VariantScale: 70
+  VariantAmount: 0.7
+  DryHeight: {x: 30, y: 70}
   BlendWidth: 1
   HeightStep: 0.5
   SlumpTilesPerTick: 1000

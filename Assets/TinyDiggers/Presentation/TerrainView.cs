@@ -76,6 +76,15 @@ namespace TinyDiggers.Presentation
         /// <summary>How far the mottle lifts and drops brightness, either way.</summary>
         [Range(0f, 0.4f)] public float MottleStrength = 0.1f;
 
+        /// <summary>Metres across one patch of a variant look (lush or dry grass).</summary>
+        [Min(10f)] public float VariantScale = 70f;
+
+        /// <summary>How strongly the variant looks show; 0 shows only the base.</summary>
+        [Range(0f, 1f)] public float VariantAmount = 0.7f;
+
+        /// <summary>World heights (m) over which grass turns dry, lowest to fully favoured.</summary>
+        public Vector2 DryHeight = new Vector2(30f, 70f);
+
         /// <summary>Metres a material boundary is blended across.</summary>
         [Range(0.05f, 4f)] public float BlendWidth = 2f;
 
@@ -328,8 +337,17 @@ namespace TinyDiggers.Presentation
             _detail.Flush();
         }
 
-        void PushTuning() =>
-            _detail.SetTuning(AlbedoRepeat, DetailRepeat, DetailStrength, MottleRepeat, MottleStrength, BlendWidth);
+        void PushTuning()
+        {
+            // A set painted for its own tile size (the ComfyUI tiles are metres across) says so;
+            // otherwise the view's repeats stand, which is what the procedural set is tuned to.
+            var albedo = _textures != null && _textures.TileMetres > 0f ? _textures.TileMetres : AlbedoRepeat;
+            var detail = _textures != null && _textures.TileMetres > 0f
+                ? (_textures.DetailTileMetres > 0f ? _textures.DetailTileMetres : _textures.TileMetres)
+                : DetailRepeat;
+            _detail.SetTuning(albedo, detail, DetailStrength, MottleRepeat, MottleStrength, BlendWidth);
+            _detail.SetVariants(VariantScale, VariantAmount, DryHeight.x, DryHeight.y);
+        }
 
         void OnDestroy()
         {
