@@ -148,6 +148,7 @@ namespace TinyDiggers.Interaction
             panel.Build(_canvas, _tools, new Vector2(0f, ButtonSize + 60f));
             var crewPanel = gameObject.AddComponent<CrewPanelView>();
             crewPanel.Build(_canvas, _crew, FindAnyObjectByType<RtsCamera>());
+            gameObject.AddComponent<SelectionCardView>().Build(_canvas, _tools, _crew);
 
             Tooltip.Create(_canvas);
         }

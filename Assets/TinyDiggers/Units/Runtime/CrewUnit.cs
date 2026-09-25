@@ -1037,6 +1037,12 @@ namespace TinyDiggers.Units
             return true;
         }
 
+        /// <summary>
+        /// Stops where it is and takes no work until <see cref="ReleaseHold"/> (the selection
+        /// card's Hold, 2026-09-24). False on the landing craft, where it is not the one driving.
+        /// </summary>
+        public bool OrderHold() => !OnFerry && OrderMoveTo(Cell.x, Cell.y);
+
         /// <summary>Lets it go back to picking its own work.</summary>
         public void ReleaseHold()
         {

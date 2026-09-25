@@ -6684,3 +6684,14 @@ them (the first cut let the fifth button spill out below the panel). A stuck uni
 warning banner under the button with the menu closed, because it is a question for the player. The
 renames are in `UnitNames`: Excavator, Dump truck ("Truck" short), Bulldozer. Screens:
 `Screenshots/units-closed.png`, `Screenshots/units-open.png`.
+
+**Selection card built (2026-09-24).** `SelectionCardView`, bottom left, shows only while units or
+the landing craft are selected. One unit: its name and number among its kind ("Dump truck 1"), its
+worksite or "holding" top right, its full status, and its load bar. Several: a count by kind, then a
+line each (up to six, then "+N more"). The landing craft: its state, who is aboard, lanes free, and
+the right-click hint. Orders for the selection sit on the card: Worksite (a list of the worksites plus
+"No worksite"; with none drawn it says so rather than showing an empty list), Board (shown when there
+is a craft, greyed with the reason in its tooltip when the ramp is not down or it is full), Hold or
+Release, and Dismiss, which needs a second click within 2.5 s as the seed button does. The × on the
+units menu rows is gone: dismissing lives on the card. `CrewUnit.OrderHold` holds a unit on its own
+cell and refuses on the landing craft, where the craft is doing the driving.

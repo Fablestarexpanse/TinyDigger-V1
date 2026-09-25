@@ -229,6 +229,42 @@ namespace TinyDiggers.Interaction
             return told;
         }
 
+        /// <summary>Holds the selected units where they stand. Returns how many took the order.</summary>
+        public int HoldSelected()
+        {
+            var held = 0;
+            foreach (var unit in Selection)
+                if (unit.OrderHold())
+                    held++;
+            return held;
+        }
+
+        /// <summary>Lets the selected units that are holding go back to their own work.</summary>
+        public int ReleaseSelected()
+        {
+            var released = 0;
+            foreach (var unit in Selection)
+                if (unit.Holding)
+                {
+                    unit.ReleaseHold();
+                    released++;
+                }
+
+            return released;
+        }
+
+        /// <summary>Dismisses every selected unit, highest index first so the rest keep theirs.</summary>
+        public int DismissSelected()
+        {
+            var doomed = new List<int>(_selection);
+            doomed.Sort();
+            var gone = 0;
+            for (var i = doomed.Count - 1; i >= 0; i--)
+                if (Dismiss(doomed[i]))
+                    gone++;
+            return gone;
+        }
+
         void Start()
         {
             var grid = _terrain.Grid;

@@ -15,9 +15,9 @@ namespace TinyDiggers.Interaction
     /// line, and hiring at the bottom.
     ///
     /// It replaced a list that was always open: eight rows each repeating "Parked: no worksite —
-    /// assign it t…" and a dismiss cross on every row. Dismissing is for the selection now (the
-    /// cross shows on a selected row only), and a stuck unit's warning shows whether the menu is
-    /// open or not: that is a question for the player, not a detail.
+    /// assign it t…" and a dismiss cross on every row. Dismissing is for the selection now, on the
+    /// <see cref="SelectionCardView"/>, and a stuck unit's warning shows whether the menu is open or
+    /// not: that is a question for the player, not a detail.
     /// </summary>
     public sealed class CrewPanelView : MonoBehaviour
     {
@@ -37,7 +37,6 @@ namespace TinyDiggers.Interaction
             public Text Name;
             public Text State;
             public RectTransform Load;
-            public Button Dismiss;
         }
 
         sealed class Header
@@ -163,29 +162,18 @@ namespace TinyDiggers.Interaction
             row.State = UiKit.NewLabel(row.Rect, "", 122f, 0f, Width - 222f, RowHeight, 11);
             row.State.color = new Color(0.8f, 0.82f, 0.85f);
 
-            var loadBack = UiKit.Place(UiKit.NewRect(row.Rect, "Load"), Width - 96f, 8f, 50f, 8f);
+            var loadBack = UiKit.Place(UiKit.NewRect(row.Rect, "Load"), Width - 70f, 8f, 54f, 8f);
             loadBack.gameObject.AddComponent<Image>().color = UiKit.FieldColor;
             row.Load = UiKit.NewRect(loadBack, "Fill");
             row.Load.anchorMin = Vector2.zero;
             row.Load.anchorMax = new Vector2(0f, 1f);
             row.Load.offsetMin = row.Load.offsetMax = Vector2.zero;
             row.Load.gameObject.AddComponent<Image>().color = UiKit.Accent;
-
-            // Only on a row that is selected: a cross on every row was a unit let go by a slip.
-            row.Dismiss = UiKit.NewButton(row.Rect, "×", () =>
-            {
-                if (captured < _crew.Units.Count)
-                    _crew.Dismiss(captured);
-            });
-            UiKit.Place((RectTransform)row.Dismiss.transform, Width - 38f, 2f, 22f, RowHeight - 4f);
-            UiKit.AddTooltip(row.Dismiss, () => captured < _crew.Units.Count
-                ? $"Let this {UnitNames.Of(_crew.Units[captured].Role).ToLowerInvariant()} go — anything it is carrying goes with it"
-                : "");
             _rows.Add(row);
             return row;
         }
 
-        static ToolIcon RoleIcon(UnitRole role) =>
+        internal static ToolIcon RoleIcon(UnitRole role) =>
             // The road machines share the truck's icon until they have their own.
             role == UnitRole.Hauler || role == UnitRole.Bulldozer || role == UnitRole.Paver ? ToolIcon.Hauler
             : role == UnitRole.Digger ? ToolIcon.Digger : ToolIcon.Worker;
@@ -313,7 +301,6 @@ namespace TinyDiggers.Interaction
                     row.Load.anchorMax = new Vector2(full, 1f);
                     var selected = _crew.IsSelected(i);
                     row.Background.color = selected ? new Color(0.3f, 0.27f, 0.12f, 0.95f) : UiKit.ButtonColor;
-                    row.Dismiss.gameObject.SetActive(selected);
                 }
 
                 y += 4f;

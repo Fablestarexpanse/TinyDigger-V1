@@ -119,5 +119,31 @@ namespace TinyDiggers.Units.Tests
 
             Assert.That(_ferry.Loaded, Is.False, "and the craft is empty");
         }
+
+        [Test]
+        public void HoldStopsAUnitWhereItIsAndReleaseLetsItGo()
+        {
+            var dozer = Machine(2, 26, UnitRole.Bulldozer);
+            _units = new[] { dozer };
+            Assert.That(dozer.OrderHold(), Is.True);
+            Assert.That(dozer.Holding, Is.True);
+            Run(() => false, 2f);
+            Assert.That(dozer.Cell, Is.EqualTo(new Vector2Int(2, 26)), "it stays put");
+            Assert.That(dozer.Holding, Is.True, dozer.Status);
+
+            dozer.ReleaseHold();
+            Assert.That(dozer.Holding, Is.False);
+        }
+
+        [Test]
+        public void AMachineOnTheCraftCannotBeHeld()
+        {
+            var digger = Machine(2, 14, UnitRole.Digger);
+            _units = new[] { digger };
+            Assert.That(digger.OrderBoard(_ferry, out var why), Is.True, why);
+            Run(() => digger.State == CrewUnitState.Aboard, 90f);
+            Assert.That(digger.OrderHold(), Is.False, "the craft is driving, not the machine");
+            Assert.That(digger.State, Is.EqualTo(CrewUnitState.Aboard));
+        }
     }
 }
