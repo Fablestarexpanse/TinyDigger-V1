@@ -46,6 +46,18 @@ namespace TinyDiggers.Units
         /// <summary>Cells round a clicked shore searched for somewhere to beach.</summary>
         public const int SearchCells = 24;
 
+        /// <summary>Machines it carries: one a lane, two lanes (the forge's well, 1.2 m a lane).</summary>
+        public const int LaneCount = 2;
+
+        /// <summary>Metres from the middle line to a lane's middle, at our size (forge 0.425 m).</summary>
+        public const float LaneOffset = 0.6f;
+
+        /// <summary>Metres forward of the hull's middle a machine parks: the middle of the well.</summary>
+        public const float LaneForward = 0.2f;
+
+        readonly int[] _lanes = { -1, -1 };
+        readonly bool[] _aboard = new bool[LaneCount];
+
         readonly TerrainGrid _grid;
         readonly WaterNav _nav;
         readonly List<Vector2Int> _route = new List<Vector2Int>();
@@ -86,6 +98,89 @@ namespace TinyDiggers.Units
 
         public WaterNav Nav => _nav;
 
+        /// <summary>The unit in each lane, or -1 where it is free.</summary>
+        public IReadOnlyList<int> Lanes => _lanes;
+
+        /// <summary>Whether a machine is on its way aboard or ashore: it does not sail while one is.</summary>
+        public bool Busy
+        {
+            get
+            {
+                for (var i = 0; i < LaneCount; i++)
+                    if (_lanes[i] >= 0 && !_aboard[i])
+                        return true;
+                return false;
+            }
+        }
+
+        /// <summary>Whether anyone is aboard.</summary>
+        public bool Loaded
+        {
+            get
+            {
+                for (var i = 0; i < LaneCount; i++)
+                    if (_lanes[i] >= 0)
+                        return true;
+                return false;
+            }
+        }
+
+        /// <summary>Takes a free lane for <paramref name="unit"/>; false when both are taken.</summary>
+        public bool TryReserveLane(int unit, out int lane)
+        {
+            for (lane = 0; lane < LaneCount; lane++)
+                if (_lanes[lane] == unit)
+                    return true;
+            for (lane = 0; lane < LaneCount; lane++)
+                if (_lanes[lane] < 0)
+                {
+                    _lanes[lane] = unit;
+                    _aboard[lane] = false;
+                    return true;
+                }
+
+            lane = -1;
+            return false;
+        }
+
+        /// <summary>The unit is in its lane, parked.</summary>
+        public void MarkAboard(int unit, bool aboard)
+        {
+            for (var i = 0; i < LaneCount; i++)
+                if (_lanes[i] == unit)
+                    _aboard[i] = aboard;
+        }
+
+        /// <summary>Frees the unit's lane.</summary>
+        public void Leave(int unit)
+        {
+            for (var i = 0; i < LaneCount; i++)
+                if (_lanes[i] == unit)
+                {
+                    _lanes[i] = -1;
+                    _aboard[i] = false;
+                }
+        }
+
+        /// <summary>Where a machine parks in <paramref name="lane"/>, cells: port lane 0, starboard 1.</summary>
+        public Vector2 LanePosition(int lane)
+        {
+            var dir = Direction(Heading);
+            var right = new Vector2(dir.y, -dir.x);
+            var across = (lane == 0 ? -LaneOffset : LaneOffset) / CellSize;
+            return Position + dir * (LaneForward / CellSize) + right * across;
+        }
+
+        /// <summary>
+        /// The cell a machine lines up on to reverse aboard: inland of the ramp foot, down the straight
+        /// run the landing was chosen for (<see cref="LandingFinder"/>).
+        /// </summary>
+        public Vector2Int LineUpCell(int cells)
+        {
+            var dir = Direction(Landing.Heading);
+            return Landing.RampFoot + new Vector2Int(Mathf.RoundToInt(dir.x), Mathf.RoundToInt(dir.y)) * cells;
+        }
+
         Ferry(TerrainGrid grid, WaterNav nav)
         {
             _grid = grid ?? throw new ArgumentNullException(nameof(grid));
@@ -118,6 +213,12 @@ namespace TinyDiggers.Units
         /// </summary>
         public bool SailTo(Vector2Int shore, out string why)
         {
+            if (Busy)
+            {
+                why = "a machine is still boarding or landing";
+                return false;
+            }
+
             var landing = FindLanding(_grid, _nav, shore);
             if (!landing.Found)
             {

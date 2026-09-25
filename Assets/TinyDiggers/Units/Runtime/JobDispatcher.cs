@@ -458,6 +458,22 @@ namespace TinyDiggers.Units
 
         // --- traffic ------------------------------------------------------------------------------
 
+        /// <summary>
+        /// Takes a unit off the ground: it holds no cell and no path, as when it is aboard the
+        /// landing craft. <see cref="SetCell"/> puts it back.
+        /// </summary>
+        public void LeaveGround(int unitId)
+        {
+            if (unitId < 0 || unitId >= _cellOf.Count)
+                return;
+            Release(unitId);
+            SetPath(unitId, null, 0);
+            var cell = _cellOf[unitId];
+            if (cell >= 0 && _occupant[cell] == unitId)
+                _occupant[cell] = -1;
+            _cellOf[unitId] = -1;
+        }
+
         /// <summary>Records where a unit is standing. Units never share a cell.</summary>
         public void SetCell(int unitId, int x, int z)
         {
@@ -508,7 +524,9 @@ namespace TinyDiggers.Units
             var me = UnitOf(unitId);
             foreach (var other in _units)
             {
-                if (other == null || other.Id == unitId)
+                // A unit on the landing craft or its ramp is off the ground: parked in its lane it
+                // stood three cells from the ramp foot and kept the next machine from ever reaching it.
+                if (other == null || other.Id == unitId || other.OnFerry)
                     continue;
                 // A digger and its own hauler come in side by side, so only their widths keep them
                 // apart; anyone else keeps the full radius, which is the long way round.

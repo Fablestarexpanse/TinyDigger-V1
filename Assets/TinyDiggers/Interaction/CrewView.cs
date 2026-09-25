@@ -163,6 +163,9 @@ namespace TinyDiggers.Interaction
         readonly List<MachineBody> _machines = new List<MachineBody>();
         /// <summary>Where each body was drawn last frame, for how fast its tracks should turn.</summary>
         readonly List<Vector3> _lastDrawn = new List<Vector3>();
+
+        /// <summary>The landing craft, for drawing units that are aboard it.</summary>
+        FerryHost _ferries;
         readonly List<string> _clips = new List<string>();
         readonly List<bool> _tinted = new List<bool>();
         MaterialPropertyBlock _tint;
@@ -862,6 +865,25 @@ namespace TinyDiggers.Interaction
             index >= 0 && index < _bodies.Count ? _bodies[index].position : Vector3.zero;
 
         /// <summary>
+        /// Sends the selected units aboard the landing craft, as many as it has lanes for. Returns
+        /// how many went; <paramref name="why"/> is the first refusal.
+        /// </summary>
+        public int BoardSelected(Ferry ferry, out string why)
+        {
+            why = null;
+            var boarded = 0;
+            foreach (var index in _selection)
+            {
+                if (_units[index].OrderBoard(ferry, out var refusal))
+                    boarded++;
+                else
+                    why ??= refusal;
+            }
+
+            return boarded;
+        }
+
+        /// <summary>
         /// Sends the selected units to the cell, spread over the nearest cells they can stand on,
         /// one each. Onto a dig, fill or dump designation they go back to work once there; onto
         /// anything else they hold. Returns how many took the order.
@@ -930,6 +952,8 @@ namespace TinyDiggers.Interaction
         void LateUpdate()
         {
             UpdateOrderMarker();
+            if (_ferries == null)
+                _ferries = FindAnyObjectByType<FerryHost>();
             var terrainTransform = _terrain.transform;
             var grid = _terrain.Grid;
             var cellSize = grid.CellSize;
@@ -941,6 +965,24 @@ namespace TinyDiggers.Interaction
                 var height = unit.Height;
                 var rotation = terrainTransform.rotation * Quaternion.Euler(0f, unit.Heading, 0f);
                 var up = rotation * Vector3.up;
+
+                // On the landing craft or its ramp: drawn on the deck as it rides the water.
+                if (unit.OnFerry && _ferries != null && _ferries.TryDeckPose(unit, out var deck, out var deckRotation))
+                {
+                    _bodies[i].SetPositionAndRotation(deck, deckRotation);
+                    if (_renderers[i] == null)
+                    {
+                        var state = unit.Reversing ? CrewAnimation.Reverse : CrewAnimation.Idle;
+                        if (_machines[i] == null && state == CrewAnimation.Reverse)
+                            state = CrewAnimation.Move;
+                        PlayClip(i, state);
+                        DriveAtGroundSpeed(i, state);
+                    }
+
+                    _lines[i].positionCount = 0;
+                    continue;
+                }
+
                 if (_groundPose)
                 {
                     var print = new Footprint(_prints[i].x / cellSize, _prints[i].y / cellSize);

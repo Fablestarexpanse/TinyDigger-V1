@@ -90,7 +90,16 @@ namespace TinyDiggers.Interaction
                     var landing = Ferry.FindLanding(grid, nav, cell, 30);
                     if (!landing.Found)
                         continue;
-                    Craft = Ferry.BeachedAt(grid, nav, landing);
+                    // A beach the crew can drive to: the first take moored it on a lake the crew
+                    // could not reach, and every order to board was refused (2026-09-24).
+                    var craft = Ferry.BeachedAt(grid, nav, landing);
+                    var lineUp = craft.LineUpCell(CrewUnit.ReverseCells);
+                    if (crew != null && crew.Dispatcher != null
+                        && !crew.Dispatcher.Regions.CanReach(from.x, from.y, lineUp.x, lineUp.y))
+                        continue;
+                    Craft = craft;
+                    // Moored with the ramp down, ready for machines to come aboard.
+                    Craft.LowerRamp();
                     Place(landing);
                     Debug.Log($"FerryHost: landing craft moored at ({landing.Hull.x:0}, {landing.Hull.y:0}), {ring * grid.CellSize:0} m from the crew");
                     return;
@@ -150,6 +159,34 @@ namespace TinyDiggers.Interaction
                     _routeLine.SetPosition(i, World(at, WaterLevel(at) + 0.3f));
                 }
         }
+
+        /// <summary>Metres above the keel the machines ride: the deck of the well (forge 0.22 m).</summary>
+        const float DeckHeight = 0.31f;
+
+        /// <summary>
+        /// Where a unit on the craft is drawn: blended from the ramp foot on the beach to its lane on
+        /// the deck as drawn, bobbing and all, by how far up the ramp it is. False for a unit that is
+        /// not on this craft.
+        /// </summary>
+        public bool TryDeckPose(CrewUnit unit, out Vector3 position, out Quaternion rotation)
+        {
+            position = default;
+            rotation = default;
+            if (_body == null || Craft == null || unit.Ferry != Craft || unit.FerryLane < 0)
+                return false;
+            var grid = _terrain.Grid;
+            var lane = new Vector3((unit.FerryLane == 0 ? -Ferry.LaneOffset : Ferry.LaneOffset), DeckHeight, Ferry.LaneForward);
+            var deck = _body.TransformPoint(lane);
+            var footCell = Craft.Landing.RampFoot;
+            var foot = World(new Vector2(footCell.x + 0.5f, footCell.y + 0.5f),
+                _terrain.transform.TransformPoint(new Vector3(0f, grid.GetSurfaceHeight(footCell.x, footCell.y), 0f)).y);
+            position = Vector3.Lerp(foot, deck, unit.RampProgress);
+            rotation = unit.RampProgress >= 1f ? _body.rotation : Quaternion.Euler(0f, unit.Heading, 0f);
+            return true;
+        }
+
+        /// <summary>Whether the ray hits the craft.</summary>
+        public bool Hits(Ray ray) => _body != null && Physics.Raycast(ray, out var hit, 10000f) && hit.transform == _body;
 
         /// <summary>Selects the craft if the ray hits it; true when it did.</summary>
         public bool TrySelectAt(Ray ray)

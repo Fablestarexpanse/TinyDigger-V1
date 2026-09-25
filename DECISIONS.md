@@ -6627,3 +6627,21 @@ the mooring took the first landing found in any water. Now every point of the hu
 sides and the stern end, must lie over water, and the mooring must be joined to at least 2000 floating cells
 (about 500 m²). In play it then backed off a lake beach, sailed 51 cells and beached on the far side in 31 s.
 
+## Landing craft slice C: machines board, cross and land (2026-09-24)
+
+`CrewUnit.OrderBoard(ferry)` (right-click the craft with machines selected): the machine drives to a cell
+inland of the ramp foot, reverses straight down to it and on up the ramp into a lane, facing the ramp.
+Aboard it holds no cell and follows its lane; when the craft's ramp is down on another beach it drives
+forward off and stops four cells inland, holding for orders. Two lanes; a third machine is told the craft
+is full, and the craft will not sail while one is still going aboard or ashore.
+
+Three faults found on the way, each by tracing rather than guessing:
+- A unit parked in its lane still counted in the keep-apart check, three cells from the ramp foot, so the
+  next machine could never reach the ramp. Units on the craft are now off the ground to traffic.
+- `Tick` re-took the unit's cell at its end, so in the tick a machine went up the ramp it parked itself back
+  on the ramp foot for good. Units on the craft keep no cell.
+- The second machine gave its order up after the usual traffic wait; boarding is a queue at one ramp, so it
+  now waits its turn.
+- In play the craft first moored on a lake beach the crew could not drive to; the mooring now needs the crew
+  to reach the ramp's line-up cell. Then: digger and dozer boarded in 34 s, crossed 46 cells and drove off.
+

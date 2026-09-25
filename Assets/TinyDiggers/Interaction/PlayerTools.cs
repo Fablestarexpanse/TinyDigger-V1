@@ -508,6 +508,17 @@ namespace TinyDiggers.Interaction
                 return;
             }
 
+            // Machines selected and the landing craft right-clicked: they go aboard.
+            if (rightDown && _crew.SelectedCount > 0 && Ferries != null && Ferries.Craft != null
+                && Ferries.Hits(_camera.ScreenPointToRay(at)))
+            {
+                var boarded = _crew.BoardSelected(Ferries.Craft, out var why);
+                LastAction = boarded > 0
+                    ? $"{boarded} going aboard the landing craft" + (why != null ? $" ({why} for the rest)" : "")
+                    : $"Can't board: {why}";
+                return;
+            }
+
             if (rightDown && HasHover && _crew.SelectedCount > 0)
             {
                 // Right-clicking a worksite assigns the selection to it, and they go to work there;

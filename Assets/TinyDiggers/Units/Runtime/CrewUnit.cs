@@ -106,6 +106,15 @@ namespace TinyDiggers.Units
 
         /// <summary>A bulldozer grading or a paver surfacing the road cells round where it stands.</summary>
         RoadWork,
+
+        /// <summary>Going up the landing craft's ramp into a lane, tail first.</summary>
+        Boarding,
+
+        /// <summary>Parked in a lane on the landing craft: no cell, no work, carried.</summary>
+        Aboard,
+
+        /// <summary>Driving down the landing craft's ramp onto a new beach.</summary>
+        Landing,
     }
 
     public enum CrewJobKind
@@ -134,6 +143,9 @@ namespace TinyDiggers.Units
 
         /// <summary>Going where the player ordered it.</summary>
         Go,
+
+        /// <summary>Getting aboard the landing craft (FERRY_PROPOSAL.md, slice C).</summary>
+        Board,
 
         /// <summary>A bulldozer grading a stretch of road whose earthworks are done.</summary>
         Grade,
@@ -187,7 +199,7 @@ namespace TinyDiggers.Units
     /// <see cref="TrafficWaitSeconds"/>, then re-paths around the units in the way, and stands
     /// aside if there is no way round.
     /// </summary>
-    public sealed class CrewUnit : IDisposable
+    public sealed partial class CrewUnit : IDisposable
     {
         const float Epsilon = 1e-3f;
         static readonly int[] NeighbourX = { 1, -1, 0, 0, 1, 1, -1, -1 };
@@ -919,6 +931,10 @@ namespace TinyDiggers.Units
             if (_ownsDispatcher)
                 _dispatcher.Tick(deltaTime);
 
+            // On the landing craft, or on its ramp: nothing else applies.
+            if (FerryStep(deltaTime))
+                return;
+
             if (State == CrewUnitState.WaitingForHauler)
             {
                 WaitedForHauler += deltaTime;
@@ -962,8 +978,12 @@ namespace TinyDiggers.Units
                     break;
             }
 
+            // Not for a unit that has just gone up the landing craft's ramp this tick: it left the
+            // ground, and taking its cell back here parked it on the ramp foot for good, so the
+            // next machine waited behind a unit that was aboard (2026-09-24).
             var cell = Cell;
-            _dispatcher.SetCell(Id, cell.x, cell.y);
+            if (!OnFerry)
+                _dispatcher.SetCell(Id, cell.x, cell.y);
             var ground = TerrainSurface.SampleHeight(_grid, Position.x, Position.y);
             Height += (ground - Height) * (1f - (float)Math.Exp(-HeightFollowRate * deltaTime));
         }
@@ -2038,7 +2058,9 @@ namespace TinyDiggers.Units
             {
                 _waitTimer += deltaTime;
                 _stuckTimer += deltaTime;
-                if (_waitTimer < TrafficWaitSeconds)
+                // Boarding the landing craft is a queue at one ramp: the next machine waits its
+                // turn behind the one going up it rather than giving the order up (2026-09-24).
+                if (_waitTimer < TrafficWaitSeconds || Job == CrewJobKind.Board)
                 {
                     // Say which of the two it is. "Waiting for a unit at (21, 23)" was printed
                     // over and over about a cell nobody was standing on, because the thing in the
@@ -2075,7 +2097,7 @@ namespace TinyDiggers.Units
                 // without one, only the last few cells, and only with the tip ahead — a truck
                 // coming at it from the far side drives in forwards and turns on arrival.
                 var toTip = new Vector2(JobTarget.x + 0.5f, JobTarget.y + 0.5f) - Position;
-                Reversing = TipsWholeLoad && TipsHere && _pathIndex >= _reverseFrom
+                Reversing = (TipsWholeLoad && TipsHere || Job == CrewJobKind.Board) && _pathIndex >= _reverseFrom
                             && (_backsInStraight || Vector2.Dot(delta, toTip) > 0f);
                 if (distance > 1e-5f)
                     TurnToward(Reversing ? -delta : delta, deltaTime);
@@ -2225,6 +2247,12 @@ namespace TinyDiggers.Units
             _workTimer = 0f;
             _bitten = false;
             Reversing = false;
+            if (Job == CrewJobKind.Board)
+            {
+                StartUpTheRamp();
+                return;
+            }
+
             var toTarget = new Vector2(JobTarget.x + 0.5f, JobTarget.y + 0.5f) - Position;
             // A rear-tipping truck puts its tail to the tip, so the load comes out over it.
             if (TipsWholeLoad && TipsHere)
@@ -2643,6 +2671,8 @@ namespace TinyDiggers.Units
                 case CrewJobKind.Escape:
                 case CrewJobKind.Go:
                     return $"({JobTarget.x}, {JobTarget.y})";
+                case CrewJobKind.Board:
+                    return "the landing craft";
                 case CrewJobKind.Grade:
                 case CrewJobKind.Surface:
                     return $"road at ({JobTarget.x}, {JobTarget.y})";
