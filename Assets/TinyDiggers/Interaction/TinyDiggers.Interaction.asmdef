@@ -5,6 +5,7 @@
         "TinyDiggers.Terrain",
         "TinyDiggers.Presentation",
         "TinyDiggers.Units",
+        "PromptWaffle.DynamicWater",
         "Unity.InputSystem",
         "UnityEngine.UI"
     ],

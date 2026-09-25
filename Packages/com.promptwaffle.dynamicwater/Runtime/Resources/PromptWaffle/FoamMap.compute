@@ -1,0 +1,108 @@
+// PromptWaffle Dynamic Water System: foam left on the water by things moving through it.
+// One texel per simulation cell. Each frame, over the part of the zone that can hold foam:
+//   the old foam is carried along by the water's flow (read back from where it came from), eased
+//   toward its neighbours so a wake spreads as it ages, and faded;
+//   every emitter raises the foam round its hull to at least what it makes there: a lapping ring
+//   at the waterline, a bow wave ahead and a wake behind, both growing with speed.
+// Foam is a floor the emitters set, not something they pour in, so a boat at rest does not pile it
+// up; a moving one leaves what it set behind it to fade, which is its wake.
+
+#pragma kernel Step
+#pragma kernel Clear
+
+struct Emitter
+{
+    float2 position;
+    float2 forward;
+    float2 halfSize;
+    float2 velocity;
+    float ring;
+    float bow;
+    float wake;
+    float padding;
+};
+
+Texture2D<float> _Source;
+SamplerState sampler_linear_clamp;
+Texture2D<float4> _State;               // surface, depth, velocity x, velocity z
+RWTexture2D<float> _Target;
+StructuredBuffer<Emitter> _Emitters;
+
+int _Width;
+int _Height;
+int4 _Rect;                              // x0, z0, x1, z1 texels, end exclusive
+int _EmitterCount;
+float _CellSize;
+float2 _Origin;
+float _Dt;
+float _Fade;                             // what is left after this step
+float _Spread;                           // share eased toward the neighbours this step
+float _ReferenceSpeed;                   // m/s at which bow and wake are full
+
+float Load(int2 p)
+{
+    p = clamp(p, int2(0, 0), int2(_Width - 1, _Height - 1));
+    return _Source.Load(int3(p, 0));
+}
+
+[numthreads(8, 8, 1)]
+void Step(uint3 id : SV_DispatchThreadID)
+{
+    int2 t = _Rect.xy + int2(id.xy);
+    if (t.x >= _Rect.z || t.y >= _Rect.w)
+        return;
+
+    float4 state = _State.Load(int3(t, 0));
+    float2 size = float2(_Width, _Height);
+    float2 from = (float2(t) + 0.5 - state.zw * _Dt / _CellSize) / size;
+    float foam = _Source.SampleLevel(sampler_linear_clamp, from, 0);
+    float around = (Load(t + int2(1, 0)) + Load(t - int2(1, 0)) + Load(t + int2(0, 1)) + Load(t - int2(0, 1))) * 0.25;
+    foam = lerp(foam, around, _Spread) * _Fade;
+
+    float2 centre = _Origin + (float2(t) + 0.5) * _CellSize;
+    for (int e = 0; e < _EmitterCount; e++)
+    {
+        Emitter emitter = _Emitters[e];
+        float2 offset = centre - emitter.position;
+        float2 side = float2(emitter.forward.y, -emitter.forward.x);
+        float2 local = float2(dot(offset, emitter.forward), dot(offset, side));
+        float v = local.y / emitter.halfSize.y;
+        // Metres outside the hull, a box with its corners rounded off. Scaling a unit shape by the
+        // half width instead put the bow wave twice as far ahead as it was asked to go.
+        float2 q = abs(local) - emitter.halfSize;
+        float outside = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+        if (outside < -0.4)
+            continue;
+
+        float speed = length(emitter.velocity);
+        float moving = saturate(speed / max(_ReferenceSpeed, 0.01));
+        float2 travel = speed > 0.05 ? emitter.velocity / speed : emitter.forward;
+        // Along the way it is going, in hull lengths: +1 at the bow, -1 at the stern.
+        float lead = dot(offset, travel) / emitter.halfSize.x;
+
+        // A thin line along the hull: under way it is what trails off either side as the wake's
+        // arms. Wider, it laid a mat three hulls wide behind the boat (2026-09-24).
+        float ringBand = smoothstep(-0.4, 0.0, outside) * (1.0 - smoothstep(0.0, 0.7, outside));
+        float target = emitter.ring * ringBand * (1.0 - 0.3 * moving) + 0.35 * moving * ringBand;
+
+        float bowBand = smoothstep(0.4, 0.95, lead) * (1.0 - smoothstep(0.0, 0.5 + moving, outside));
+        target = max(target, emitter.bow * moving * bowBand);
+
+        float astern = smoothstep(-0.7, -1.0, lead) * (1.0 - smoothstep(0.8, 1.3, abs(v)));
+        // Churned water just behind the stern; what it leaves as the hull moves on is the wake.
+        float sternBand = smoothstep(-0.4, 0.0, outside) * (1.0 - smoothstep(0.3, 1.2, outside));
+        target = max(target, emitter.wake * moving * astern * sternBand);
+
+        foam = max(foam, target);
+    }
+
+    _Target[t] = foam < 0.02 ? 0.0 : saturate(foam);
+}
+
+[numthreads(8, 8, 1)]
+void Clear(uint3 id : SV_DispatchThreadID)
+{
+    int2 t = int2(id.xy);
+    if (t.x < _Width && t.y < _Height)
+        _Target[t] = 0.0;
+}

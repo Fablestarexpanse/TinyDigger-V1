@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using PromptWaffle.DynamicWater;
 using TinyDiggers.Presentation;
 using TinyDiggers.Terrain;
 using TinyDiggers.Units;
@@ -154,7 +155,35 @@ namespace TinyDiggers.Interaction
             var box = body.AddComponent<BoxCollider>();
             box.center = _body.InverseTransformPoint(bounds.center);
             box.size = new Vector3(bounds.size.x, bounds.size.y, bounds.size.z);
+
+            // Foam round the hull: lapping at rest, a bow wave and a wake under way (Ronan,
+            // 2026-09-24: "water effects surrounding" the boat). Sized from the hull in its own
+            // frame, a little inside the drawn outline, which includes the ramp and the rails.
+            var foam = body.AddComponent<WaterFoamEmitterComponent>();
+            var local = LocalFootprint(renderers);
+            foam.HullSize = new Vector2(local.size.z * 0.9f, local.size.x * 0.85f);
+            foam.HullOffset = new Vector2(local.center.x, local.center.z);
             _drawnState = Craft.State;
+        }
+
+        /// <summary>
+        /// The hull's extent in the body's own frame, from each renderer's own bounds: the world
+        /// bounds are boxes square to the world, and at a slant heading they overstate the hull.
+        /// </summary>
+        Bounds LocalFootprint(Renderer[] renderers)
+        {
+            var local = new Bounds(_body.InverseTransformPoint(renderers[0].bounds.center), Vector3.zero);
+            foreach (var r in renderers)
+            {
+                var b = r.localBounds;
+                for (var i = 0; i < 8; i++)
+                {
+                    var corner = new Vector3((i & 1) == 0 ? b.min.x : b.max.x, (i & 2) == 0 ? b.min.y : b.max.y, (i & 4) == 0 ? b.min.z : b.max.z);
+                    local.Encapsulate(_body.InverseTransformPoint(r.transform.TransformPoint(corner)));
+                }
+            }
+
+            return local;
         }
 
         void Draw()

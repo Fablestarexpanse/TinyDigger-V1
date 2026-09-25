@@ -12,6 +12,8 @@
 // - surf: bands of foam laid out by distance from the shore (WaterShoreDistance) that roll in,
 //   widen and tear as they break, and come in sets, so a beach has waves washing onto it rather
 //   than a still white rim; only on water open enough for waves to build, so rivers stay calm;
+// - foam round hulls (WaterFoamMap): lapping at a boat's waterline, a bow wave and a wake that
+//   drifts, spreads and fades, torn into lace;
 // - foam carried by the flow: two scrolling noise phases along the velocity, cross-faded, so the
 //   foam moves with the water without stretching; more where the water is fast or shallow;
 // - Fresnel reflection of the environment and a sun highlight;
@@ -39,6 +41,7 @@ Shader "PromptWaffle/Dynamic Water Surface"
         _SurfSpeed ("Surf waves reaching the shore per second", Range(0, 1)) = 0.25
         _SurfWidth ("Surf foam trail, share of the gap between waves", Range(0.1, 0.9)) = 0.45
         _SurfFetch ("Open water needed out to sea for surf (m)", Range(2, 30)) = 14
+        _HullFoam ("Foam round hulls: bow waves and wakes", Range(0, 1.5)) = 1
         _CascadeDrop ("Water higher beside a vertex than this is a cascade (m)", Float) = 0.25
         _FlowPeriod ("Flow cycle (s)", Float) = 1.6
         _NormalStrength ("Normal strength", Range(0, 4)) = 1.4
@@ -102,6 +105,7 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 float _SurfSpeed;
                 half _SurfWidth;
                 float _SurfFetch;
+                half _HullFoam;
                 float _CascadeDrop;
                 float _FlowPeriod;
                 half _NormalStrength;
@@ -122,6 +126,12 @@ Shader "PromptWaffle/Dynamic Water Surface"
             TEXTURE2D(_PWShoreDistance); SAMPLER(sampler_PWShoreDistance);
             float4 _PWShoreTexel;   // 1/width, 1/height, metres covered across, metres covered down
             float4 _PWShoreParams;  // reach (m), 1 when the field is there
+
+            // Foam left by hulls (WaterFoamMap), one texel per cell, set per zone by WaterZoneRenderer.
+            TEXTURE2D(_PWFoamMap);
+            // Inline linear sampler: the map is a random-write texture, and bilinear must not hang on its import settings.
+            SAMPLER(sampler_linear_clamp_foam);
+            float4 _PWFoamParams;   // x: 1 when the map is there
 
             // The swell, set per zone by WaterZoneRenderer from WaterWaves.Pack.
             #define PW_MAX_WAVES 8
@@ -164,6 +174,37 @@ Shader "PromptWaffle/Dynamic Water Surface"
                 f = f * f * (3.0 - 2.0 * f);
                 return lerp(lerp(Hash21(i), Hash21(i + float2(1, 0)), f.x),
                             lerp(Hash21(i + float2(0, 1)), Hash21(i + float2(1, 1)), f.x), f.y);
+            }
+
+            // Foam lace: cell (Worley) noise, the distance to the nearest of one scattered point per
+            // lattice cell, hashed on whole lattice numbers. Value noise cut by a threshold drew the
+            // hull foam as squares along its lattice, and its float hash, fed metres hundreds out
+            // from the origin, lost precision and made them worse (2026-09-24). Round patches read as
+            // foam. ValueNoise stays as it is: the swell damping has to match WaterWaves on the CPU.
+            float2 LatticePoint(int2 c)
+            {
+                uint h = (uint)c.x * 374761393u + (uint)c.y * 668265263u;
+                h = (h ^ (h >> 13)) * 1274126177u;
+                uint g = (h ^ (h >> 16)) * 2246822519u;
+                return float2((h >> 8) & 0xFFFF, (g >> 8) & 0xFFFF) * (1.0 / 65535.0);
+            }
+
+            /// 0 at a scattered point, about 1 between points.
+            float CellNoise(float2 p)
+            {
+                float2 i = floor(p);
+                float2 f = p - i;
+                int2 c = int2(i);
+                float nearest = 8.0;
+                [unroll]
+                for (int y = -1; y <= 1; y++)
+                    [unroll]
+                    for (int x = -1; x <= 1; x++)
+                    {
+                        float2 d = float2(x, y) + LatticePoint(c + int2(x, y)) - f;
+                        nearest = min(nearest, dot(d, d));
+                    }
+                return saturate(sqrt(nearest));
             }
 
             // Matches WaterWaves.Damping: none in the shallows, full in deep water in a rough patch.
@@ -505,6 +546,31 @@ Shader "PromptWaffle/Dynamic Water Surface"
 
                 float foam = smoothstep(1.0 - foamAmount, 1.0 - foamAmount + 0.25, pattern) * foamAmount;
                 foam = max(foam, surf);
+
+                // Foam round hulls: read where the water was before the swell moved it, so it rides
+                // the waves with the boat. Torn into lace that is solid where the foam is thick and
+                // breaks into patches as it thins, drifting a little so a wake is never still.
+                if (_PWFoamParams.x > 0.5)
+                {
+                    // Five taps: the lace below turns small steps between texels into hard edges,
+                    // and one bilinear tap drew the wake as a field of half-metre squares.
+                    float2 foamUV = ZoneUV(input.baseXZ);
+                    float2 tap = _WaterTexel.xy * 0.8;
+                    float hull = SAMPLE_TEXTURE2D_LOD(_PWFoamMap, sampler_linear_clamp_foam, foamUV, 0).r * 0.4
+                        + (SAMPLE_TEXTURE2D_LOD(_PWFoamMap, sampler_linear_clamp_foam, foamUV + float2(tap.x, tap.y), 0).r
+                         + SAMPLE_TEXTURE2D_LOD(_PWFoamMap, sampler_linear_clamp_foam, foamUV + float2(-tap.x, tap.y), 0).r
+                         + SAMPLE_TEXTURE2D_LOD(_PWFoamMap, sampler_linear_clamp_foam, foamUV + float2(tap.x, -tap.y), 0).r
+                         + SAMPLE_TEXTURE2D_LOD(_PWFoamMap, sampler_linear_clamp_foam, foamUV - tap, 0).r) * 0.15;
+                    if (hull > 0.001)
+                    {
+                        float2 xz = input.positionWS.xz;
+                        // High where foam gathers: round clumps with smaller bubbles through them.
+                        float lacy = (1.0 - CellNoise(xz * 1.1 + _Time.y * 0.12)) * 0.65 + (1.0 - CellNoise(xz * 2.9 + 3.0)) * 0.35;
+                        // Soft-edged: hard thresholds drew the lace as jagged pixel blocks.
+                        float lace = smoothstep(0.58 - hull * 0.45, 0.9 - hull * 0.35, lacy + 0.08);
+                        foam = max(foam, saturate(hull * lace * 1.1) * _HullFoam);
+                    }
+                }
 
                 // Refraction: the scene under the water, bent by the normal, tinted by depth.
                 float2 bent = screenUV + normal.xz * _Refraction * saturate(edgeDepth);

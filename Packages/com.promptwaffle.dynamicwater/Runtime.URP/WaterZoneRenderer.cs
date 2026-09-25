@@ -27,6 +27,8 @@ namespace PromptWaffle.DynamicWater.URP
         static readonly int ShoreDistanceId = Shader.PropertyToID("_PWShoreDistance");
         static readonly int ShoreTexelId = Shader.PropertyToID("_PWShoreTexel");
         static readonly int ShoreParamsId = Shader.PropertyToID("_PWShoreParams");
+        static readonly int FoamMapId = Shader.PropertyToID("_PWFoamMap");
+        static readonly int FoamParamsId = Shader.PropertyToID("_PWFoamParams");
 
         readonly Vector4[] _waveA = new Vector4[WaterWaves.MaxWaves];
         readonly Vector4[] _waveB = new Vector4[WaterWaves.MaxWaves];
@@ -56,12 +58,21 @@ namespace PromptWaffle.DynamicWater.URP
         [Tooltip("Seconds between rebuilds of the shore field: the shore moves only as fast as the water.")]
         [SerializeField, Min(0.05f)] float _shoreRefresh = 1f;
 
+        [Header("Foam round hulls")]
+        [Tooltip("Seconds for a wake to fade to about a third.")]
+        [SerializeField, Min(0.1f)] float _foamLifetime = 5f;
+
+        [Tooltip("Metres a second at which a bow wave and wake are full.")]
+        [SerializeField, Min(0.1f)] float _foamReferenceSpeed = 3f;
+
         readonly List<MeshRenderer> _chunks = new List<MeshRenderer>();
         WaterZone _zone;
         MaterialPropertyBlock _block;
         WaterSimulation _builtFor;
         WaterShoreDistance _shore;
         float _shoreAge;
+        WaterFoamMap _foam;
+        readonly WaterFoamEmitter[] _foamEmitters = new WaterFoamEmitter[WaterFoamMap.MaxEmitters];
 
         void OnEnable()
         {
@@ -72,7 +83,7 @@ namespace PromptWaffle.DynamicWater.URP
         void OnDisable()
         {
             Clear();
-            DisposeShore();
+            DisposeMaps();
         }
 
         void LateUpdate()
@@ -81,7 +92,7 @@ namespace PromptWaffle.DynamicWater.URP
             if (simulation == null || _material == null)
             {
                 Clear();
-                DisposeShore();
+                DisposeMaps();
                 return;
             }
 
@@ -102,6 +113,7 @@ namespace PromptWaffle.DynamicWater.URP
                 ? new Vector4(Mathf.Max(1f, settings.GustSize), settings.GustCalm, Mathf.Max(0.01f, settings.DampDepth), settings.Whitecaps)
                 : new Vector4(1f, 1f, 1f, 2f));
             UpdateShore(simulation);
+            UpdateFoam(simulation);
             foreach (var chunk in _chunks)
                 chunk.SetPropertyBlock(_block);
         }
@@ -110,7 +122,8 @@ namespace PromptWaffle.DynamicWater.URP
         {
             if (!_shoreDistance)
             {
-                DisposeShore();
+                _shore?.Dispose();
+                _shore = null;
                 _block.SetVector(ShoreParamsId, Vector4.zero);
                 return;
             }
@@ -132,16 +145,47 @@ namespace PromptWaffle.DynamicWater.URP
             _block.SetVector(ShoreParamsId, new Vector4(_shore.Reach, 1f, 0f, 0f));
         }
 
-        void DisposeShore()
+        void DisposeMaps()
         {
             _shore?.Dispose();
             _shore = null;
+            _foam?.Dispose();
+            _foam = null;
+        }
+
+        /// <summary>
+        /// Foam round every <see cref="WaterFoamEmitterComponent"/> over this zone. The map is made
+        /// the first time a hull is on the water and kept, so a wake outlives the boat that left it.
+        /// </summary>
+        void UpdateFoam(WaterSimulation simulation)
+        {
+            var desc = simulation.Desc;
+            var zone = new Rect(desc.Origin, new Vector2(desc.Width, desc.Height) * desc.CellSize);
+            var count = 0;
+            foreach (var emitter in WaterFoamEmitterComponent.All)
+            {
+                var hull = emitter.ToEmitter();
+                if (count < _foamEmitters.Length && zone.Contains(hull.Position))
+                    _foamEmitters[count++] = hull;
+            }
+
+            if (_foam == null && count > 0)
+                _foam = new WaterFoamMap(simulation, _foamLifetime, _foamReferenceSpeed);
+            if (_foam == null)
+            {
+                _block.SetVector(FoamParamsId, Vector4.zero);
+                return;
+            }
+
+            _foam.Step(Time.deltaTime, new System.ReadOnlySpan<WaterFoamEmitter>(_foamEmitters, 0, count));
+            _block.SetTexture(FoamMapId, _foam.Foam);
+            _block.SetVector(FoamParamsId, new Vector4(1f, 0f, 0f, 0f));
         }
 
         void Build(WaterSimulation simulation)
         {
             Clear();
-            DisposeShore();
+            DisposeMaps();
             _builtFor = simulation;
             var desc = simulation.Desc;
             var step = desc.CellSize * _cellsPerVertex;

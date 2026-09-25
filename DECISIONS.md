@@ -7034,3 +7034,36 @@ multi-UV. Ronan: "ok go".
 - `_MacroMix` is now an overall strength (1). The near/far shares, far distance, rotation, third
   scale and its share are all on the material.
 - Still open: the lush/dry variant patches sample only the fine scale.
+
+## Water round the landing craft: lapping, bow wave, wake (2026-09-24)
+
+This is the second half of *"foam waves effects against boats"*. The plan was a foam map in the water
+package plus an emitter on the boat. Ronan: "go".
+
+- **Package:** `WaterFoamMap` (plain C#) keeps one foam texel per simulation cell.
+  - Each frame the old foam drifts with the flow, spreads toward its neighbours (4/s) and fades
+    (5 s lifetime).
+  - Every `WaterFoamEmitter` then raises the foam round its hull. It adds a lapping line at the
+    waterline, a bow band ahead and churn behind the stern; bow and churn grow with speed up to 3 m/s.
+  - Foam is a floor the emitters set, not something they pour in, so a boat at rest does not pile it
+    up. What a moving boat leaves behind is its wake.
+  - Only the area emitters have been near in the last 4.5 lifetimes is worked on. With no boats,
+    nothing runs.
+- **Component:** `WaterFoamEmitterComponent` measures its own speed from the transform.
+  `WaterZoneRenderer` gathers the emitters, steps the map and hands it to the water shader, which tears
+  the foam into lace.
+- **Game side:** the landing craft gets an emitter sized from its renderers' own bounds (4.4 × 2.4 m).
+  The world bounds are boxes square to the world and overstate a hull at a slant.
+- **Measured along the way:**
+  - The first "metres outside the hull" measure scaled a unit shape by the half width. Ahead of the
+    bow it read half the real distance, and the bow wave reached twice as far as asked. It is now a
+    true rounded-box distance.
+  - A 1.2 m ring band plus a 2.8 m bow band laid a white mat three hulls wide. The ring is now a
+    0.7 m line and the bow band 0.5 to 1.5 m.
+  - The wake drew as half-metre squares. Showing the raw foam value proved the foam map smooth. The
+    squares came from thresholding value noise, which shows its lattice, made worse by a float hash
+    losing precision about 700 m from the origin. The hull lace is now cell (Worley) noise on an
+    integer hash, so it reads as round clumps. `ValueNoise` stays as it is, because the swell damping
+    must match `WaterWaves` on the CPU.
+- **Tests:** 3 foam map tests. At rest foam laps the waterline only. A moving hull leaves a wake
+  astern and nothing 3.5 m ahead. Foam fades to nothing, and the map then does no work. 704 pass.
