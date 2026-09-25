@@ -1,6 +1,7 @@
+using PromptWaffle.Terrain;
 using System;
 
-namespace PromptWaffle.Terrain
+namespace PromptWaffle.Terrain.Generation
 {
     /// <summary>
     /// What ore lies under each cell, as the ore view shows it: the nearest ore to the surface

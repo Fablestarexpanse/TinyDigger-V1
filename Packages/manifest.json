@@ -52,6 +52,7 @@
   },
   "testables": [
     "com.promptwaffle.dynamicwater",
-    "com.promptwaffle.terrain"
+    "com.promptwaffle.terrain",
+    "com.promptwaffle.terrain.generation"
   ]
 }

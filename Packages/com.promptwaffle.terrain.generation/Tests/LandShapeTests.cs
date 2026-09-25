@@ -1,8 +1,9 @@
+using PromptWaffle.Terrain;
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain.Tests
+namespace PromptWaffle.Terrain.Generation.Tests
 {
     /// <summary>
     /// What the land mask has to produce whatever the seed: a coast with bays in it, land worth

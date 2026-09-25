@@ -1,7 +1,8 @@
+using PromptWaffle.Terrain;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain.Tests
+namespace PromptWaffle.Terrain.Generation.Tests
 {
     /// <summary>The scorecard the natural-terrain work is tuned against: each number means what it says.</summary>
     public class TerrainScorecardTests

@@ -1,0 +1,13 @@
+{
+  "name": "com.promptwaffle.terrain.generation",
+  "version": "0.1.0",
+  "displayName": "PromptWaffle Terrain Generation",
+  "description": "Optional world generation for PromptWaffle Terrain: islands with land types, rivers cut to the sea, beaches and a shaped seabed, surface materials and ore deposits, plus a scorecard that measures how natural a generated landscape is.",
+  "unity": "6000.0",
+  "author": {
+    "name": "PromptWaffle"
+  },
+  "dependencies": {
+    "com.promptwaffle.terrain": "0.1.0"
+  }
+}

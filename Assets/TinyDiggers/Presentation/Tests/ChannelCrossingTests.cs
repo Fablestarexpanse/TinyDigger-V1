@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 using PromptWaffle.Terrain;
+using PromptWaffle.Terrain.Generation;
 using TinyDiggers.Units;
 using UnityEngine;
 

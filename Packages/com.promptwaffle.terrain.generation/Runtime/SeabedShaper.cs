@@ -1,7 +1,8 @@
+using PromptWaffle.Terrain;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain
+namespace PromptWaffle.Terrain.Generation
 {
     /// <summary>
     /// Gives the open sea floor a shape, where the coast pass leaves it flat at ChannelDepth:

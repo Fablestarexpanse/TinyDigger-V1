@@ -12,6 +12,14 @@
       "source": "embedded",
       "dependencies": {}
     },
+    "com.promptwaffle.terrain.generation": {
+      "version": "file:com.promptwaffle.terrain.generation",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.promptwaffle.terrain": "0.1.0"
+      }
+    },
     "com.unity.2d.sprite": {
       "version": "1.0.0",
       "depth": 1,

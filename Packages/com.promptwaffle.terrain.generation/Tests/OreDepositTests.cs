@@ -1,8 +1,9 @@
+using PromptWaffle.Terrain;
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain.Tests
+namespace PromptWaffle.Terrain.Generation.Tests
 {
     /// <summary>
     /// Ore underground (slice 10): every ore is laid down, only ever in place of stone, never

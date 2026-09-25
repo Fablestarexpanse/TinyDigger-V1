@@ -1,7 +1,8 @@
+using PromptWaffle.Terrain;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain.Tests
+namespace PromptWaffle.Terrain.Generation.Tests
 {
     /// <summary>
     /// Cliffs: rock is allowed to stand in a step taller than the crew can climb, soil is not, and

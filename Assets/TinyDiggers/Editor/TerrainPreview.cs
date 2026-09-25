@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text;
 using TinyDiggers.Presentation;
 using PromptWaffle.Terrain;
+using PromptWaffle.Terrain.Generation;
 using UnityEditor;
 using UnityEngine;
 

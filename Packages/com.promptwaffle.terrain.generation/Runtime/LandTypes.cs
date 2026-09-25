@@ -1,7 +1,8 @@
+using PromptWaffle.Terrain;
 using System;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain
+namespace PromptWaffle.Terrain.Generation
 {
     /// <summary>How much of an island is plains, rolling hills and mountains. The three add up to 1.</summary>
     [Serializable]

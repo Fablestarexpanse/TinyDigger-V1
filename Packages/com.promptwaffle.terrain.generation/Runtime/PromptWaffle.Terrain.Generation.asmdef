@@ -1,9 +1,8 @@
 {
-    "name": "TinyDiggers.Units",
-    "rootNamespace": "TinyDiggers.Units",
+    "name": "PromptWaffle.Terrain.Generation",
+    "rootNamespace": "PromptWaffle.Terrain.Generation",
     "references": [
-        "PromptWaffle.Terrain",
-        "PromptWaffle.Terrain.Generation"
+        "PromptWaffle.Terrain"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using PromptWaffle.Terrain;
+using PromptWaffle.Terrain.Generation;
 using UnityEngine;
 
 namespace TinyDiggers.Presentation.Tests

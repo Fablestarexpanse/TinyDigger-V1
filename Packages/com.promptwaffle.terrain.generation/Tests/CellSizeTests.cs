@@ -1,7 +1,8 @@
+using PromptWaffle.Terrain;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain.Tests
+namespace PromptWaffle.Terrain.Generation.Tests
 {
     /// <summary>
     /// Half-metre cells (slice 11): the same rules in metres at a finer grain. A slope is rise over

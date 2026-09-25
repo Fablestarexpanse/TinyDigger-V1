@@ -1,7 +1,8 @@
+using PromptWaffle.Terrain;
 using System;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain
+namespace PromptWaffle.Terrain.Generation
 {
     /// <summary>How one ore is laid down. Depths are metres below the surface; sizes are metres.</summary>
     [Serializable]

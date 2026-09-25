@@ -1,8 +1,9 @@
+using PromptWaffle.Terrain;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain
+namespace PromptWaffle.Terrain.Generation
 {
     public enum ChannelKind
     {

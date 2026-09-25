@@ -1,8 +1,9 @@
+using PromptWaffle.Terrain;
 using System;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain.Tests
+namespace PromptWaffle.Terrain.Generation.Tests
 {
     /// <summary>
     /// What shape a mountain actually is (Ronan, 2026-09-24: *"there is no hills or buildup to

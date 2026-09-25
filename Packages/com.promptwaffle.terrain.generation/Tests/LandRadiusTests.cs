@@ -1,7 +1,8 @@
+using PromptWaffle.Terrain;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain.Tests
+namespace PromptWaffle.Terrain.Generation.Tests
 {
     /// <summary>
     /// LandRadius: the island is laid out in a frame of its own, so a bigger disc with the same

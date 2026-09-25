@@ -5,6 +5,7 @@
         "TinyDiggers.Interaction",
         "TinyDiggers.Units",
         "PromptWaffle.Terrain",
+        "PromptWaffle.Terrain.Generation",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

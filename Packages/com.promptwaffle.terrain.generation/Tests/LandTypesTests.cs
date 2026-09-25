@@ -1,8 +1,9 @@
+using PromptWaffle.Terrain;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain.Tests
+namespace PromptWaffle.Terrain.Generation.Tests
 {
     /// <summary>Natural terrain, phase 2: each seed's mix of plains, hills and mountains, and where they lie.</summary>
     public class LandTypesTests

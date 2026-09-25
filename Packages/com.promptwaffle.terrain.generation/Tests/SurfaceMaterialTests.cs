@@ -1,8 +1,9 @@
+using PromptWaffle.Terrain;
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain.Tests
+namespace PromptWaffle.Terrain.Generation.Tests
 {
     /// <summary>
     /// What the surface pass has to guarantee: one material across a uniform hillside rather than

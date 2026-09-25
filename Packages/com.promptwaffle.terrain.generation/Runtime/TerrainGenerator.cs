@@ -1,7 +1,8 @@
+using PromptWaffle.Terrain;
 using System;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain
+namespace PromptWaffle.Terrain.Generation
 {
     /// <summary>
     /// Temporary test terrain: broad plateaus from large, low-frequency noise, plus a few wide

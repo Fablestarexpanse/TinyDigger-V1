@@ -1,8 +1,9 @@
+using PromptWaffle.Terrain;
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain.Tests
+namespace PromptWaffle.Terrain.Generation.Tests
 {
     /// <summary>
     /// Rivers and creeks (Ronan, 2026-09-21): one to three rivers and four to ten creeks per seed,

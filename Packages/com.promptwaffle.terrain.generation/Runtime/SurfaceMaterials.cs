@@ -1,8 +1,9 @@
+using PromptWaffle.Terrain;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain
+namespace PromptWaffle.Terrain.Generation
 {
     /// <summary>
     /// What the ground is made of at the surface, decided as its own pass over the finished

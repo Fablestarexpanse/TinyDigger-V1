@@ -1,7 +1,8 @@
+using PromptWaffle.Terrain;
 using System.Collections.Generic;
 using NUnit.Framework;
 
-namespace PromptWaffle.Terrain.Tests
+namespace PromptWaffle.Terrain.Generation.Tests
 {
     /// <summary>The ore view's data: the nearest ore within reach, gone once it is dug out.</summary>
     public class OreSurveyTests

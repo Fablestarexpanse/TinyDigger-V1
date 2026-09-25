@@ -7152,3 +7152,11 @@ water settle (31.4 m³ off 1,940 cells), the same moorings for all five craft, a
 and 17 stamps load as `PromptWaffle.Terrain` types. 712 tests pass, the same count, so the package's
 tests run. Still inside the package and moving out in later steps: the TinyDiggers material list
 (ores, road) and the island generator.
+
+**Step 2a done: generation split out (2026-09-25).** The island generator, land types, rivers,
+seabed, surface materials, ore deposits and survey, the generator settings, the test-terrain
+generator and the scorecard, with their 15 test files, are now
+`Packages/com.promptwaffle.terrain.generation` (`PromptWaffle.Terrain.Generation`, depends on the
+core). Erosion stays in the core: the game's water pathfinding uses its distance transform. The
+core uses no generation type, so a game can leave generation out. The game's assemblies reference
+both. Play is unchanged: a 3,104² island, the same 31.4 m³ settle and the same moorings. 712 tests pass.

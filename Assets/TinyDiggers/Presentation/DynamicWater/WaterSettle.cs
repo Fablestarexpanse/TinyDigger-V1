@@ -1,5 +1,6 @@
 using System;
 using PromptWaffle.Terrain;
+using PromptWaffle.Terrain.Generation;
 using UnityEngine;
 
 namespace TinyDiggers.Presentation

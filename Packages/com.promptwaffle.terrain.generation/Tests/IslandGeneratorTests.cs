@@ -1,7 +1,8 @@
+using PromptWaffle.Terrain;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain.Tests
+namespace PromptWaffle.Terrain.Generation.Tests
 {
     public class IslandGeneratorTests
     {

@@ -1,9 +1,10 @@
+using PromptWaffle.Terrain;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain
+namespace PromptWaffle.Terrain.Generation
 {
     /// <summary>
     /// What a generated island came out as, besides the grid itself: the shape it was asked for,

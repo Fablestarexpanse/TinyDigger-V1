@@ -3,6 +3,7 @@
     "rootNamespace": "TinyDiggers.Interaction",
     "references": [
         "PromptWaffle.Terrain",
+        "PromptWaffle.Terrain.Generation",
         "TinyDiggers.Presentation",
         "TinyDiggers.Units",
         "PromptWaffle.DynamicWater",

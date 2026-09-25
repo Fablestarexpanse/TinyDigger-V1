@@ -1,6 +1,7 @@
+using PromptWaffle.Terrain;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain
+namespace PromptWaffle.Terrain.Generation
 {
     /// <summary>The shape of land a seed is asked for.</summary>
     public enum LandShape

@@ -1,8 +1,9 @@
+using PromptWaffle.Terrain;
 using System;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace PromptWaffle.Terrain
+namespace PromptWaffle.Terrain.Generation
 {
     /// <summary>
     /// How natural a generated landscape is, in numbers, so the terrain can be tuned against

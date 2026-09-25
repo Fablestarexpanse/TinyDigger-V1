@@ -1,12 +1,9 @@
 {
-    "name": "TinyDiggers.Presentation.Tests",
-    "rootNamespace": "TinyDiggers.Presentation.Tests",
+    "name": "PromptWaffle.Terrain.Generation.Tests",
+    "rootNamespace": "PromptWaffle.Terrain.Generation.Tests",
     "references": [
         "PromptWaffle.Terrain",
         "PromptWaffle.Terrain.Generation",
-        "TinyDiggers.Presentation",
-        "TinyDiggers.Units",
-        "PromptWaffle.DynamicWater",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
