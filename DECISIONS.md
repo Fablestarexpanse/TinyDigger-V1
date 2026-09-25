@@ -6731,3 +6731,22 @@ Starter set, seeds 9100 + 100·n, prompts in the workflow and the commit: crater
 40 × 6, hill 40 × 5, ridge 50 × 6, butte 24 × 8, terraces 40 × 6. All read as their shape
 (`Screenshots/stamps-starter-sheet.png`: photo, stamp, middle profile). The ridge runs corner to
 corner, so the round mask clips its ends; a ridge wants prompting across the middle, not the diagonal.
+
+**Stamps slice B: the Stamp tool (2026-09-24).** `LandformKind.Stamp` is a landform with no outline:
+a library stamp by name (`StampName`, found again through `StampLibrary`, the asset itself not
+serialised) and a `StampPlacement`. The plan rasterises it with `StampRaster` over the plan surface as
+it stands, so a stamp dropped on a pad sits on the pad, and from there it is every other landform:
+ghost, cut/fill tally with batters, commit as Dig/Fill for the crew, removal by right-click, re-commit
+moves its orders. In hand it is Terrain ▸ Stamp (or 9 then T): the stamp rides the cursor, snapped
+to cells so the plan is only redone when it crosses one, and a click places and commits it. T steps
+through the library (Shift back), [ ] size ×1.15, comma and full stop turn 15°, PgUp/PgDn height,
+I upside down (a mound becomes a hollow to dig). The tool panel shows the library as a row of buttons
+and the tally; the ring on the ground carries a tick for which way it faces. The choice, size, turn
+and height carry over to the next placement.
+
+Real run, seed island: a crater (40 m × 8 m) 70 cells from the crew at (1550, 1697) ghosts as its
+rim and bowl over the lie of the land, tallies 3,447 m³ of fill and warns it needs a quarry, and
+commits 3,899 cells of Fill (a rim cell to 10 m on 5.5 m ground). Not yet seen: the crew building
+one, which needs a worksite and far more quarry than a first island has. Known rough edges: the
+ghost's flat tiles let the ground show through in stripes on a steep stamp, and the Stamp button
+borrows the Terraform glyph until it has its own.

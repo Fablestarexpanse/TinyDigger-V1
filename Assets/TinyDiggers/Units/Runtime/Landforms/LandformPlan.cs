@@ -124,6 +124,12 @@ namespace TinyDiggers.Units
                     continue;
                 }
 
+                if (form.Kind == LandformKind.Stamp)
+                {
+                    StampShape(grid, form, into, owners);
+                    continue;
+                }
+
                 if (form.Kind != LandformKind.Area)
                     continue;
 
@@ -238,6 +244,29 @@ namespace TinyDiggers.Units
                         owners[key] = form.Id;
                 }
             }
+        }
+
+        /// <summary>
+        /// A library stamp, over the plan surface as it stands (the ground where nothing earlier has
+        /// claimed a cell), so a stamp dropped on a pad sits on the pad. The stamp's own blend says how
+        /// it meets that surface; <see cref="LandformBlend"/> does not come into it, because a stamp
+        /// only ever lands on what is already there. Off the island it does nothing.
+        /// </summary>
+        void StampShape(TerrainGrid grid, Landform form, Dictionary<int, float> into, Dictionary<int, int> owners)
+        {
+            var stamp = form.ResolveStamp();
+            if (stamp == null)
+                return;
+            StampRaster.Apply(stamp, form.Placement, grid.CellSize, grid.HeightStep,
+                grid.IsGround,
+                (x, z) => into.TryGetValue(z * grid.Width + x, out var already) ? already : grid.GetSurfaceHeight(x, z),
+                (x, z, target) =>
+                {
+                    var key = z * grid.Width + x;
+                    into[key] = target;
+                    if (owners != null)
+                        owners[key] = form.Id;
+                });
         }
 
         /// <summary>The average of the cells round one, as the plan had them before this press.</summary>

@@ -21,6 +21,12 @@ namespace TinyDiggers.Units
 
         /// <summary>A freehand stroke over the plan surface.</summary>
         Brush,
+
+        /// <summary>
+        /// A height stamp from the library, placed, sized and turned (Ronan, 2026-09-24: one library
+        /// for the generator and this tool). It has no outline: the stamp is the shape.
+        /// </summary>
+        Stamp,
     }
 
     /// <summary>What one press of the freehand brush does to the plan under it.</summary>
@@ -143,13 +149,40 @@ namespace TinyDiggers.Units
         /// <summary>The presses that make up a freehand stroke, in the order they were laid.</summary>
         public List<BrushDab> Dabs = new List<BrushDab>();
 
+        /// <summary>Which library stamp a <see cref="LandformKind.Stamp"/> is, by asset name.</summary>
+        public string StampName = "";
+
+        /// <summary>Where the stamp sits, how big and tall, turned and flipped.</summary>
+        public StampPlacement Placement;
+
+        /// <summary>
+        /// The stamp itself, once looked up. Not serialised: the name is the record, and the asset is
+        /// found again in the <see cref="StampLibrary"/>. Tests set it directly.
+        /// </summary>
+        [NonSerialized] public HeightStamp StampAsset;
+
+        /// <summary>The stamp, from <see cref="StampAsset"/> or the library by name; null if neither has it.</summary>
+        public HeightStamp ResolveStamp()
+        {
+            if (StampAsset != null || string.IsNullOrEmpty(StampName))
+                return StampAsset;
+            var library = StampLibrary.Load();
+            if (library == null)
+                return null;
+            foreach (var stamp in library.Stamps)
+                if (stamp != null && stamp.name == StampName)
+                    return StampAsset = stamp;
+            return null;
+        }
+
         /// <summary>Changes on every edit. What the host watches to know when to replan.</summary>
         public int Version;
 
-        public bool Closed => Kind != LandformKind.Ribbon && Kind != LandformKind.Brush;
+        public bool Closed => Kind != LandformKind.Ribbon && Kind != LandformKind.Brush && Kind != LandformKind.Stamp;
 
         /// <summary>Whether it has enough to it to mean anything.</summary>
         public bool IsDrawn => Kind == LandformKind.Brush ? Dabs.Count > 0
+            : Kind == LandformKind.Stamp ? Placement.Size > 0f && ResolveStamp() != null
             : Closed ? Nodes.Count >= 3
             : Nodes.Count >= 2;
 

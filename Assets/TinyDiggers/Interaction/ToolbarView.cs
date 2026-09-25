@@ -43,6 +43,9 @@ namespace TinyDiggers.Interaction
             public string Name;
             public string Key;
             public string Help;
+
+            /// <summary>The terraform tool with a stamp in hand, rather than an outline.</summary>
+            public bool Stamp;
         }
 
         /// <summary>A slot on the bar: one tool, or a group whose tools open in a flyout.</summary>
@@ -66,6 +69,9 @@ namespace TinyDiggers.Interaction
                     new ToolButton { Mode = ToolMode.Level, Icon = ToolIcon.Level, Name = "Level", Key = "5", Help = "drag a pad to be levelled to H" },
                     new ToolButton { Mode = ToolMode.Terraform, Icon = ToolIcon.Terraform, Name = "Terraform", Key = "9",
                         Help = "draw the shape you want the ground to be; the crew build it" },
+                    // The terraform glyph until stamps have one of their own.
+                    new ToolButton { Mode = ToolMode.Terraform, Icon = ToolIcon.Terraform, Name = "Stamp", Key = "9 T", Stamp = true,
+                        Help = "a crater, mesa, hill or ridge from the stamp library, placed where you click; the crew build it" },
                 },
             },
             new Slot
@@ -95,7 +101,7 @@ namespace TinyDiggers.Interaction
             public Image Background;
             public Image Icon;
             public RectTransform Flyout;
-            public readonly List<(ToolMode Mode, Image Background, Image Icon, Text Label)> Rows = new List<(ToolMode, Image, Image, Text)>();
+            public readonly List<(ToolButton Tool, Image Background, Image Icon, Text Label)> Rows = new List<(ToolButton, Image, Image, Text)>();
         }
 
         readonly List<SlotView> _slots = new List<SlotView>();
@@ -192,7 +198,7 @@ namespace TinyDiggers.Interaction
             {
                 CloseFlyouts();
                 _menu.gameObject.SetActive(false);
-                _tools.SetMode(view.Slot.Tools[0].Mode);
+                Choose(view.Slot.Tools[0]);
                 return;
             }
 
@@ -201,6 +207,24 @@ namespace TinyDiggers.Interaction
             _menu.gameObject.SetActive(false);
             view.Flyout.gameObject.SetActive(open);
         }
+
+        void Choose(ToolButton tool)
+        {
+            _tools.SetMode(tool.Mode);
+            if (tool.Mode != ToolMode.Terraform || _tools.Terraform == null)
+                return;
+            var holding = _tools.Terraform.Draft.Form.Kind == LandformKind.Stamp;
+            if (tool.Stamp)
+                _tools.Terraform.Pick(LandformKind.Stamp);
+            else if (holding)
+                _tools.Terraform.Pick(LandformKind.Area);
+        }
+
+        /// <summary>Whether this tool is the one in hand: the mode, and for Terraform, stamp or outline.</summary>
+        bool InHand(ToolButton tool) =>
+            tool.Mode == _tools.Mode
+            && (tool.Mode != ToolMode.Terraform || _tools.Terraform == null
+                || tool.Stamp == (_tools.Terraform.Draft.Form.Kind == LandformKind.Stamp));
 
         /// <summary>A group's tools in a column above its button: icon, name and hotkey each.</summary>
         void BuildFlyout(SlotView view)
@@ -221,7 +245,7 @@ namespace TinyDiggers.Interaction
                 var button = UiKit.NewButton(view.Flyout, "", () =>
                 {
                     view.Current = index;
-                    _tools.SetMode(tool.Mode);
+                    Choose(tool);
                     view.Flyout.gameObject.SetActive(false);
                 });
                 var rect = (RectTransform)button.transform;
@@ -234,7 +258,7 @@ namespace TinyDiggers.Interaction
                 key.alignment = TextAnchor.MiddleRight;
                 key.color = new Color(0.7f, 0.72f, 0.75f);
                 UiKit.AddTooltip(button, () => $"{tool.Name}  ({tool.Key}): {tool.Help}");
-                view.Rows.Add((tool.Mode, button.GetComponent<Image>(), icon, label));
+                view.Rows.Add((tool, button.GetComponent<Image>(), icon, label));
             }
 
             view.Flyout.gameObject.SetActive(false);
@@ -421,7 +445,7 @@ namespace TinyDiggers.Interaction
             {
                 var active = false;
                 for (var i = 0; i < view.Slot.Tools.Length; i++)
-                    if (view.Slot.Tools[i].Mode == _tools.Mode)
+                    if (InHand(view.Slot.Tools[i]))
                     {
                         // A hotkey picks from the group too, so the button follows it.
                         view.Current = i;
@@ -431,10 +455,11 @@ namespace TinyDiggers.Interaction
                 view.Icon.sprite = ToolIcons.Get(view.Slot.Tools[view.Current].Icon);
                 view.Background.color = active ? UiKit.Accent : UiKit.ButtonColor;
                 view.Icon.color = active ? dark : Color.white;
-                foreach (var (mode, background, icon, label) in view.Rows)
+                foreach (var (tool, background, icon, label) in view.Rows)
                 {
-                    background.color = mode == _tools.Mode ? UiKit.Accent : UiKit.ButtonColor;
-                    icon.color = label.color = mode == _tools.Mode ? dark : Color.white;
+                    var lit = InHand(tool);
+                    background.color = lit ? UiKit.Accent : UiKit.ButtonColor;
+                    icon.color = label.color = lit ? dark : Color.white;
                 }
             }
 

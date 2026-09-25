@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TinyDiggers.Terrain;
 using TinyDiggers.Units;
 using UnityEngine;
 
@@ -27,7 +28,7 @@ namespace TinyDiggers.Interaction
         /// <summary>Changes on every edit, so the host knows when to replan.</summary>
         public int Version { get; private set; }
 
-        public bool Any => Form.Nodes.Count > 0;
+        public bool Any => Form.Nodes.Count > 0 || Form.Kind == LandformKind.Stamp && Form.IsDrawn;
 
         public bool CanCommit => Form.IsDrawn;
 
@@ -63,6 +64,9 @@ namespace TinyDiggers.Interaction
                 Blend = form.Blend,
                 Spoil = form.Spoil,
                 Dabs = new List<BrushDab>(form.Dabs),
+                StampName = form.StampName,
+                StampAsset = form.StampAsset,
+                Placement = form.Placement,
             };
             EditingId = id;
             Touch();
@@ -70,7 +74,13 @@ namespace TinyDiggers.Interaction
 
         public void Clear()
         {
-            Form = new Landform { Kind = Form.Kind, Height = Form.Height, Curved = Form.Curved };
+            // A stamp's choice, size, turn and height carry over to the next one: placing a row of
+            // the same mound should not mean setting it up again each time.
+            Form = new Landform
+            {
+                Kind = Form.Kind, Height = Form.Height, Curved = Form.Curved,
+                StampName = Form.StampName, StampAsset = Form.StampAsset, Placement = Form.Placement,
+            };
             EditingId = 0;
             Touch();
         }
@@ -168,6 +178,60 @@ namespace TinyDiggers.Interaction
             Touch();
         }
 
+        // --- a stamp: which one, and where and how it sits ----------------------------------------
+
+        /// <summary>Picks the stamp, at its own size and height; the turn and flip are kept.</summary>
+        public void SetStamp(HeightStamp stamp)
+        {
+            if (stamp == null)
+                return;
+            Form.StampAsset = stamp;
+            Form.StampName = stamp.name;
+            Form.Placement.Size = stamp.NativeSize;
+            Form.Placement.Height = stamp.NativeHeight;
+            Touch();
+        }
+
+        /// <summary>
+        /// Puts the stamp's middle at <paramref name="centre"/> (cells), standing on the ground
+        /// there. Snapped to the cell middle, so the plan changes only when the cursor crosses a cell.
+        /// </summary>
+        public void MoveStamp(Vector2 centre, Func<Vector2, float> groundAt)
+        {
+            var snapped = new Vector2(Mathf.Floor(centre.x) + 0.5f, Mathf.Floor(centre.y) + 0.5f);
+            if (snapped == Form.Placement.Centre)
+                return;
+            Form.Placement.Centre = snapped;
+            Form.Placement.Base = groundAt(snapped);
+            Touch();
+        }
+
+        /// <summary>Scales it by <paramref name="factor"/>, between 4 m and 400 m across.</summary>
+        public void ScaleStamp(float factor)
+        {
+            Form.Placement.Size = Mathf.Clamp(Form.Placement.Size * factor, 4f, 400f);
+            Touch();
+        }
+
+        public void TurnStamp(float degrees)
+        {
+            Form.Placement.Rotation = Mathf.Repeat(Form.Placement.Rotation + degrees, 360f);
+            Touch();
+        }
+
+        /// <summary>Makes it taller or shorter by <paramref name="metres"/>, never under half a metre.</summary>
+        public void RaiseStamp(float metres)
+        {
+            Form.Placement.Height = Mathf.Max(0.5f, Form.Placement.Height + metres);
+            Touch();
+        }
+
+        public void FlipStamp()
+        {
+            Form.Placement.Invert = !Form.Placement.Invert;
+            Touch();
+        }
+
         public void SetCurved(bool curved)
         {
             if (Form.Curved == curved)
@@ -201,6 +265,9 @@ namespace TinyDiggers.Interaction
                     already.RampTo = Form.RampTo;
                     already.Curved = Form.Curved;
                     already.Blend = Form.Blend;
+                    already.StampName = Form.StampName;
+                    already.StampAsset = Form.StampAsset;
+                    already.Placement = Form.Placement;
                     already.Touch();
                     Clear();
                     return already;
@@ -223,6 +290,9 @@ namespace TinyDiggers.Interaction
                 Blend = Form.Blend,
                 Spoil = Form.Spoil,
                 Dabs = new List<BrushDab>(Form.Dabs),
+                StampName = Form.StampName,
+                StampAsset = Form.StampAsset,
+                Placement = Form.Placement,
             });
             Clear();
             return added;

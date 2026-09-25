@@ -92,7 +92,53 @@ namespace TinyDiggers.Interaction
 
         public float BrushAmount = 0.5f;
 
-        public bool IsDrawing => Draft.Any;
+        public bool IsDrawing => Draft.Any && Draft.Form.Kind != LandformKind.Stamp;
+
+        /// <summary>The stamps the tool offers, in library order; empty before any are imported.</summary>
+        public List<HeightStamp> Stamps { get; } = new List<HeightStamp>();
+
+        /// <summary>
+        /// Takes up a kind of shape — the toolbar's Terraform and Stamp entries both land here. A stamp
+        /// with none chosen yet starts on the first in the library.
+        /// </summary>
+        public void Pick(LandformKind kind)
+        {
+            Draft.SetKind(kind);
+            if (kind == LandformKind.Stamp && Draft.Form.ResolveStamp() == null)
+                NextStamp(0);
+        }
+
+        /// <summary>Moves <paramref name="by"/> along the library from the stamp in hand.</summary>
+        public void NextStamp(int by)
+        {
+            LoadStamps();
+            if (Stamps.Count == 0)
+            {
+                _tools.Say("No stamps yet: run TinyDiggers/Import Stamps");
+                return;
+            }
+
+            var at = Stamps.IndexOf(Draft.Form.ResolveStamp());
+            var next = Stamps[(int)Mathf.Repeat(at < 0 ? 0 : at + by, Stamps.Count)];
+            Draft.SetStamp(next);
+            _tools.Say($"Stamp — {next.DisplayName}");
+        }
+
+        /// <summary>Chooses one stamp outright, from the panel.</summary>
+        public void ChooseStamp(HeightStamp stamp)
+        {
+            Draft.SetKind(LandformKind.Stamp);
+            Draft.SetStamp(stamp);
+        }
+
+        void LoadStamps()
+        {
+            if (Stamps.Count > 0)
+                return;
+            var library = StampLibrary.Load();
+            if (library != null)
+                Stamps.AddRange(library.For(StampUse.Game));
+        }
 
         public void Init(PlayerTools tools, TerrainView terrain, Material material)
         {
@@ -151,6 +197,16 @@ namespace TinyDiggers.Interaction
         {
             if (Grid == null)
                 return;
+
+            // A stamp rides on the cursor, and a click puts it down and hands it to the crew.
+            if (Draft.Form.Kind == LandformKind.Stamp)
+            {
+                if (hasHover)
+                    Draft.MoveStamp(at, GroundAt);
+                if (mouse.leftButton.wasPressedThisFrame && hasHover && Draft.CanCommit)
+                    Commit();
+                return;
+            }
 
             // The freehand brush paints while the button is held, rather than dropping corners.
             if (Draft.Form.Kind == LandformKind.Brush)
@@ -216,6 +272,19 @@ namespace TinyDiggers.Interaction
                 return true;
             }
 
+            // T takes up the stamp, and again steps through the library (Shift back).
+            if (keyboard.tKey.wasPressedThisFrame && !keyboard.ctrlKey.isPressed)
+            {
+                if (Draft.Form.Kind != LandformKind.Stamp)
+                    Pick(LandformKind.Stamp);
+                else
+                    NextStamp(keyboard.shiftKey.isPressed ? -1 : 1);
+                return true;
+            }
+
+            if (Draft.Form.Kind == LandformKind.Stamp && StampKeys(keyboard))
+                return true;
+
             if (keyboard.backspaceKey.wasPressedThisFrame && Draft.Any)
             {
                 Draft.RemoveLast();
@@ -259,6 +328,36 @@ namespace TinyDiggers.Interaction
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Sizing a stamp in hand: [ and ] scale it, comma and full stop turn it 15°, PageUp and
+        /// PageDown make it taller or shorter by a height step, I turns it upside down. The same keys
+        /// as the brush and H elsewhere, so a hand that knows those knows these.
+        /// </summary>
+        bool StampKeys(Keyboard keyboard)
+        {
+            var step = Grid != null ? Mathf.Max(Grid.HeightStep, 0.25f) : 0.5f;
+            if (keyboard.leftBracketKey.wasPressedThisFrame)
+                Draft.ScaleStamp(1f / 1.15f);
+            else if (keyboard.rightBracketKey.wasPressedThisFrame)
+                Draft.ScaleStamp(1.15f);
+            else if (keyboard.commaKey.wasPressedThisFrame)
+                Draft.TurnStamp(-15f);
+            else if (keyboard.periodKey.wasPressedThisFrame)
+                Draft.TurnStamp(15f);
+            else if (keyboard.pageUpKey.wasPressedThisFrame)
+                Draft.RaiseStamp(step * 2f);
+            else if (keyboard.pageDownKey.wasPressedThisFrame)
+                Draft.RaiseStamp(-step * 2f);
+            else if (keyboard.iKey.wasPressedThisFrame)
+            {
+                Draft.FlipStamp();
+                _tools.Say(Draft.Form.Placement.Invert ? "Stamp upside down: a hollow" : "Stamp the right way up");
+            }
+            else
+                return false;
+            return true;
         }
 
         bool SetKind(LandformKind kind, string says)
@@ -489,9 +588,13 @@ namespace TinyDiggers.Interaction
                         heap ? HeapColor : PitColor, _vertices, _colors, _triangles, cell);
                 }
 
+                // A stamp's reach, a ring on the ground, so a flat stretch of it still shows its edge.
+                if (Draft.Form.Kind == LandformKind.Stamp && Draft.CanCommit)
+                    StampRing(Draft.Form.Placement, OutlineColor, cell);
+
                 // The outline itself, on the ground it is drawn round, and its corners. A stroke has
                 // neither: the tiles above are the whole of what it is.
-                if (Draft.Any && Draft.Form.Kind != LandformKind.Brush)
+                if (Draft.Any && Draft.Form.Kind != LandformKind.Brush && Draft.Form.Kind != LandformKind.Stamp)
                 {
                     Edge(Draft.Form, Draft.Form.Height + 0.15f, 0.12f, OutlineColor, cell);
                     var nodes = Draft.Form.Nodes;
@@ -506,6 +609,12 @@ namespace TinyDiggers.Interaction
                 {
                     if (!form.IsDrawn || form.Kind == LandformKind.Brush)
                         continue;
+                    if (form.Kind == LandformKind.Stamp)
+                    {
+                        StampRing(form.Placement, BuiltColor, cell);
+                        continue;
+                    }
+
                     Edge(form, form.Height + 0.1f, 0.08f, BuiltColor, cell);
                 }
             }
@@ -536,6 +645,25 @@ namespace TinyDiggers.Interaction
             // other, and stop reading as the edge of the thing it belongs to.
             GhostMesh.LoopOnGround(_outline, at => GroundAt(at) + 0.15f, half, colour,
                 _vertices, _colors, _triangles, cell);
+        }
+
+        /// <summary>The circle a stamp reaches, on the ground, with a tick showing which way it faces.</summary>
+        void StampRing(StampPlacement placement, Color32 colour, float cell)
+        {
+            const int Segments = 48;
+            var radius = placement.Size * 0.5f / cell;
+            _outline.Clear();
+            for (var i = 0; i < Segments; i++)
+            {
+                var angle = i * Mathf.PI * 2f / Segments;
+                _outline.Add(placement.Centre + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius);
+            }
+
+            GhostMesh.LoopOnGround(_outline, at => GroundAt(at) + 0.15f, 0.1f, colour, _vertices, _colors, _triangles, cell);
+            // The stamp's own east, turned clockwise as the placement is.
+            var radians = placement.Rotation * Mathf.Deg2Rad;
+            var facing = placement.Centre + new Vector2(Mathf.Cos(radians), -Mathf.Sin(radians)) * radius;
+            GhostMesh.Disc(facing, GroundAt(facing) + 0.2f, 0.6f, ActiveNodeColor, _vertices, _colors, _triangles, cell);
         }
 
         GUIStyle _label;
@@ -570,9 +698,19 @@ namespace TinyDiggers.Interaction
                          : $"needs {-balance:0.#} m³")
                      + $"   area {area:0.#} m²",
             };
-            GUI.Label(new Rect(12f, Screen.height - 76f, 700f, 26f), says, _label);
-            GUI.Label(new Rect(12f, Screen.height - 48f, 700f, 26f),
-                Draft.Form.Kind == LandformKind.Brush
+            if (Draft.Form.Kind == LandformKind.Stamp)
+            {
+                var placement = Draft.Form.Placement;
+                var stamp = Draft.Form.ResolveStamp();
+                says = $"{(stamp != null ? stamp.DisplayName : "?")}  {placement.Size:0} m across, {placement.Height:0.#} m"
+                       + (placement.Invert ? " deep" : " tall") + $", turned {placement.Rotation:0}°   " + says;
+            }
+
+            GUI.Label(new Rect(12f, Screen.height - 76f, 900f, 26f), says, _label);
+            GUI.Label(new Rect(12f, Screen.height - 48f, 900f, 26f),
+                Draft.Form.Kind == LandformKind.Stamp
+                    ? "Click to place   •   T next stamp   •   [ ] size   •   , . turn   •   PgUp/PgDn height   •   I upside down"
+                    : Draft.Form.Kind == LandformKind.Brush
                     ? $"Hold the button and paint   •   B changes what it does ({BrushMode.ToString().ToLowerInvariant()})"
                       + "   •   [ and ] resize it   •   Enter commits"
                     : Draft.CanCommit

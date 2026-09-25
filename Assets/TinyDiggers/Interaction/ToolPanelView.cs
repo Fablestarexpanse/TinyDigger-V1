@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
+using TinyDiggers.Terrain;
+using TinyDiggers.Units;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -26,6 +28,11 @@ namespace TinyDiggers.Interaction
         RectTransform _panel;
         Text _title;
         ToolMode _builtFor = (ToolMode)(-1);
+        bool _builtStamp;
+
+        // The stamp picker: one button a stamp in the library, made the first time it is shown.
+        RectTransform _stampRow;
+        readonly List<(HeightStamp Stamp, Image Background, Text Label)> _stampButtons = new List<(HeightStamp, Image, Text)>();
 
         RectTransform _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow;
         RectTransform _roadBendRow;
@@ -58,6 +65,8 @@ namespace TinyDiggers.Interaction
             _tools = tools;
             _panel = UiKit.NewPanel(canvas.transform, "Tool Panel", new Vector2(0.5f, 0f), position, new Vector2(Width, 100f));
             _title = UiKit.NewLabel(_panel, "", Pad, 4f, Width - 2 * Pad, 24f, 16);
+
+            _stampRow = Row("Stamps");
 
             _brushRow = Row("Brush");
             UiKit.NewLabel(_brushRow, "Brush radius", 0f, 0f, 120f, RowHeight);
@@ -245,6 +254,26 @@ namespace TinyDiggers.Interaction
             return _quarryStock;
         }
 
+        /// <summary>The library's stamps as a row of buttons, the one in hand lit.</summary>
+        void BuildStampButtons()
+        {
+            var host = _tools.Terraform;
+            if (host == null || _stampButtons.Count > 0)
+                return;
+            host.NextStamp(0);
+            var count = Mathf.Max(1, host.Stamps.Count);
+            var width = (Width - 2 * Pad - 70f) / count - 3f;
+            UiKit.NewLabel(_stampRow, "Stamp", 0f, 0f, 66f, RowHeight);
+            for (var i = 0; i < host.Stamps.Count; i++)
+            {
+                var stamp = host.Stamps[i];
+                var button = UiKit.NewButton(_stampRow, stamp.DisplayName, () => host.ChooseStamp(stamp), null, 13);
+                UiKit.Place((RectTransform)button.transform, 70f + i * (width + 3f), 2f, width, RowHeight - 4f);
+                UiKit.AddTooltip(button, () => $"{stamp.DisplayName}: {stamp.NativeSize:0} m across, {stamp.NativeHeight:0.#} m high as it comes   (T steps through them)");
+                _stampButtons.Add((stamp, button.GetComponent<Image>(), button.GetComponentInChildren<Text>()));
+            }
+        }
+
         RectTransform Row(string name)
         {
             var row = UiKit.NewRect(_panel, name);
@@ -254,7 +283,7 @@ namespace TinyDiggers.Interaction
 
         void Show(params RectTransform[] rows)
         {
-            foreach (var row in new[] { _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow, _rampRow, _roadGradeRow, _roadBendRow, _roadOptionsRow, _roadShapeRow, _roadNodeRow, _roadHintRow, _quarryRow, _worksiteRow, _worksiteButtons, _worksiteHint })
+            foreach (var row in new[] { _stampRow, _brushRow, _heightRow, _followRow, _pickRow, _volumeRow, _capRow, _widthRow, _clearRow, _rampRow, _roadGradeRow, _roadBendRow, _roadOptionsRow, _roadShapeRow, _roadNodeRow, _roadHintRow, _quarryRow, _worksiteRow, _worksiteButtons, _worksiteHint })
                 row.gameObject.SetActive(false);
             _shown.Clear();
             var y = 30f;
@@ -276,9 +305,12 @@ namespace TinyDiggers.Interaction
                 return;
 
             var mode = _tools.Mode;
-            if (mode != _builtFor)
+            var stampInHand = mode == ToolMode.Terraform && _tools.Terraform != null
+                                                         && _tools.Terraform.Draft.Form.Kind == LandformKind.Stamp;
+            if (mode != _builtFor || stampInHand != _builtStamp)
             {
                 _builtFor = mode;
+                _builtStamp = stampInHand;
                 switch (mode)
                 {
                     case ToolMode.Dig:
@@ -296,6 +328,10 @@ namespace TinyDiggers.Interaction
                         break;
                     case ToolMode.Quarry:
                         Show(_heightRow, _followRow, _pickRow, _quarryRow);
+                        break;
+                    case ToolMode.Terraform when stampInHand:
+                        BuildStampButtons();
+                        Show(_stampRow, _volumeRow);
                         break;
                     case ToolMode.Terraform:
                         Show(_heightRow, _followRow, _pickRow, _volumeRow);
@@ -319,6 +355,7 @@ namespace TinyDiggers.Interaction
                     ToolMode.DumpZone => "Dump Zone  —  drag where spoil may be tipped",
                     ToolMode.Road => "Road  —  a spline the crew builds; click a road to edit it",
                     ToolMode.Quarry => "Quarry  —  drag where the crew may dig for fill material, down to H",
+                    ToolMode.Terraform when stampInHand => "Stamp  —  click to place it; the crew build it",
                     ToolMode.Terraform => "Terraform  —  click corners, Enter to commit; the crew build it to H",
                     ToolMode.Clear => "Clear  —  drag over designations to take them off",
                     ToolMode.Worksite => "Worksite  —  outline a work area, any shape; vehicles assigned to it work there",
@@ -328,6 +365,16 @@ namespace TinyDiggers.Interaction
 
             if (!_panel.gameObject.activeSelf)
                 return;
+
+            if (_stampRow.gameObject.activeSelf)
+            {
+                var inHand = _tools.Terraform.Draft.Form.ResolveStamp();
+                foreach (var (stamp, background, label) in _stampButtons)
+                {
+                    background.color = stamp == inHand ? UiKit.Accent : UiKit.ButtonColor;
+                    label.color = stamp == inHand ? new Color(0.1f, 0.1f, 0.12f) : Color.white;
+                }
+            }
 
             if (_brushRow.gameObject.activeSelf)
             {
@@ -348,7 +395,8 @@ namespace TinyDiggers.Interaction
             {
                 var cut = _tools.PlannedCut;
                 var fill = _tools.PlannedFill;
-                var what = mode == ToolMode.Dig || mode == ToolMode.Fill ? "Under the brush" : mode == ToolMode.Road ? "Road with its faces" : "This pad";
+                var what = mode == ToolMode.Dig || mode == ToolMode.Fill ? "Under the brush" : mode == ToolMode.Road ? "Road with its faces"
+                    : _builtStamp ? "This stamp with its faces" : "This pad";
                 _volume.text = cut < 0.05f && fill < 0.05f
                     ? $"{what}: nothing to move at H"
                     : $"{what}:  cut {cut:0.#} m³   fill {fill:0.#} m³   net {cut - fill:+0.#;-0.#;0} m³";
